@@ -184,8 +184,8 @@ export async function startBacktest(concurrency: number = 3): Promise<void> {
         await Promise.allSettled(
           batch.map(async (ticker) => {
             try {
-              const history = await fetchHistoricalPrices(ticker, "6mo", "1d");
-              if (history.length < 90) {
+              const history = await fetchHistoricalPrices(ticker, "2y", "1d");
+              if (history.length < 280) {
                 progress.processed++;
                 return;
               }
@@ -195,7 +195,7 @@ export async function startBacktest(concurrency: number = 3): Promise<void> {
               const opens = history.map(p => p.open);
               const highs = history.map(p => p.high);
 
-              const simDays = 10;
+              const simDays = 200;
               const startIdx = Math.max(79, closes.length - simDays - 1);
 
               for (let d = startIdx; d < closes.length - 1; d++) {

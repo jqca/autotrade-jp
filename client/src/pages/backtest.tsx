@@ -110,7 +110,7 @@ export default function Backtest() {
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">バックテスト</h1>
-          <p className="text-muted-foreground">強い買いシグナル → 翌営業日始値で購入、高値が始値+1%以上で勝ち（過去10日分）</p>
+          <p className="text-muted-foreground">強い買いシグナル → 翌営業日始値で購入、高値が始値+1%以上で勝ち（過去200日分）</p>
         </div>
         <Button
           onClick={() => runMutation.mutate()}
