@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { insertStrategySchema } from "@shared/schema";
 import { z } from "zod";
 import { fetchHistoricalPrices } from "./yahoo-finance";
+import { fetchJQuantsHistorical, fetchJQuantsLatestPrices, isJQuantsConfigured } from "./jquants";
 import { importJPXStocks, fetchBatchPrices, startFetchAllPrices, getFetchAllProgress } from "./import-stocks";
 import { startScheduler, getSchedulerStatus, setSchedulerEnabled } from "./scheduler";
 import { startIndicatorBatch, getIndicatorBatchProgress } from "./technical-batch";
@@ -215,7 +216,16 @@ export async function registerRoutes(
     }
 
     try {
-      const prices = await fetchHistoricalPrices(ticker, range, interval);
+      let prices;
+      if (isJQuantsConfigured() && interval === "1d") {
+        try {
+          prices = await fetchJQuantsHistorical(ticker, range);
+        } catch {
+          prices = await fetchHistoricalPrices(ticker, range, interval);
+        }
+      } else {
+        prices = await fetchHistoricalPrices(ticker, range, interval);
+      }
       res.json(prices);
     } catch (error: any) {
       res.status(500).json({ message: error.message || "Failed to fetch historical prices" });
@@ -375,6 +385,34 @@ export async function registerRoutes(
   app.delete("/api/backtest/runs/:runId", async (req, res) => {
     await storage.deleteBacktestRun(req.params.runId);
     res.json({ success: true });
+  });
+
+  app.get("/api/jquants/status", async (_req, res) => {
+    res.json({ configured: isJQuantsConfigured() });
+  });
+
+  app.post("/api/jquants/fetch-prices", async (req, res) => {
+    if (!isJQuantsConfigured()) {
+      return res.status(400).json({ message: "J-Quants APIキーが設定されていません" });
+    }
+    try {
+      const schema = z.object({ tickers: z.array(z.string()).min(1).max(50) });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "tickers配列（1〜50件）を指定してください" });
+      }
+      const batch = parsed.data.tickers;
+      const priceMap = await fetchJQuantsLatestPrices(batch);
+      let updated = 0;
+      for (const [ticker, data] of priceMap) {
+        await storage.updateStockPrice(ticker, data.price, data.high, data.low, data.volume);
+        await storage.updatePreviousClose(ticker, data.previousClose);
+        updated++;
+      }
+      res.json({ updated, total: batch.length });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   startScheduler();

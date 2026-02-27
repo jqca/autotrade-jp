@@ -76,9 +76,21 @@ shared/
 - GET /api/backtest/results?runId= - Get backtest results (optionally by run)
 - DELETE /api/backtest/runs/:runId - Delete a backtest run
 
-## Historical Price Data
+## Data Sources
+### J-Quants API (Primary - JPX公式データ)
+- JPX公式のJ-Quants V2 APIで株価データを取得
+- 認証: APIキー (`x-api-key` ヘッダー)
+- エンドポイント: `https://api.jquants.com/v2/equities/bars/daily`
+- 銘柄コード: 5桁（4桁コード + 末尾0、例: 72030 = トヨタ）
+- 日付形式: YYYYMMDD（リクエスト時）、YYYY-MM-DD（レスポンス）
+- 株式分割調整済みデータ（AdjO/AdjH/AdjL/AdjC/AdjVo）を使用
+- Yahoo Financeをフォールバックとして使用
+
+### Yahoo Finance (Fallback)
 - Real historical stock prices fetched from Yahoo Finance API (no API key needed)
 - Ticker format: `{code}.T` (e.g., 7203.T for Toyota on TSE)
+
+## Historical Price Data
 - Supported ranges: 1mo, 3mo, 6mo, 1y, 2y, 5y
 - Stock detail page with interactive area chart, period summary, and price statistics
 - Technical indicators computed on frontend from historical data:

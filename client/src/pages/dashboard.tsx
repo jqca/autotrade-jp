@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { TrendingUp, TrendingDown, Activity, Wallet, BarChart3, Zap, Clock, Timer } from "lucide-react";
+import { TrendingUp, TrendingDown, Activity, Wallet, BarChart3, Zap, Clock, Timer, Database } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Stock, Strategy, Trade, PortfolioPosition } from "@shared/schema";
 
@@ -62,6 +62,7 @@ export default function Dashboard() {
   const { data: trades, isLoading: tradesLoading } = useQuery<Trade[]>({ queryKey: ["/api/trades"] });
   const { data: positions, isLoading: positionsLoading } = useQuery<PortfolioPosition[]>({ queryKey: ["/api/portfolio"] });
   const { data: scheduler } = useQuery<SchedulerStatus>({ queryKey: ["/api/scheduler"] });
+  const { data: jquantsStatus } = useQuery<{ configured: boolean }>({ queryKey: ["/api/jquants/status"] });
 
   const toggleScheduler = useMutation({
     mutationFn: async (enabled: boolean) => {
@@ -213,6 +214,27 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {jquantsStatus && (
+        <Card data-testid="card-jquants-status">
+          <CardContent className="py-3 px-4">
+            <div className="flex items-center gap-3">
+              <Database className="h-5 w-5 text-primary" />
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-medium">J-Quants API</span>
+                {jquantsStatus.configured ? (
+                  <Badge className="text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300" data-testid="badge-jquants-status">接続済み</Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-xs" data-testid="badge-jquants-status">未設定</Badge>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  {jquantsStatus.configured ? "JPX公式データで株価を取得中" : "APIキーを設定すると公式データが利用可能になります"}
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {scheduler && (
         <Card data-testid="card-scheduler">
