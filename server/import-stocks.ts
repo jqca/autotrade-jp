@@ -167,7 +167,7 @@ export function getFetchAllProgress(): FetchAllProgress {
   return { ...progress };
 }
 
-export async function startFetchAllPrices(concurrency: number = 3): Promise<void> {
+export async function startFetchAllPrices(concurrency: number = 3, onComplete?: () => void): Promise<void> {
   if (progress.status === "running") {
     throw new Error("Already running");
   }
@@ -220,11 +220,19 @@ export async function startFetchAllPrices(concurrency: number = 3): Promise<void
       const elapsed = Math.round((progress.completedAt - progress.startedAt!) / 1000);
       progress.message = `完了: ${progress.updated}/${progress.total}件の株価を取得 (${elapsed}秒)`;
       console.log(progress.message);
+
+      if (onComplete) {
+        onComplete();
+      }
     } catch (err: any) {
       progress.status = "error";
       progress.completedAt = Date.now();
       progress.message = `エラー: ${err.message}`;
       console.error("Fetch all prices error:", err);
+
+      if (onComplete && progress.updated > 0) {
+        onComplete();
+      }
     }
   })();
 }

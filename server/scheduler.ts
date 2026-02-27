@@ -1,5 +1,6 @@
 import cron from "node-cron";
 import { startFetchAllPrices, getFetchAllProgress } from "./import-stocks";
+import { startIndicatorBatch, getIndicatorBatchProgress } from "./technical-batch";
 
 let scheduledTask: cron.ScheduledTask | null = null;
 let lastRunAt: string | null = null;
@@ -41,12 +42,22 @@ export function startScheduler() {
     lastRunAt = new Date().toISOString();
 
     try {
-      const progress = getFetchAllProgress();
-      if (progress.status === "running") {
+      const fetchProgress = getFetchAllProgress();
+      if (fetchProgress.status === "running") {
         console.log("[Scheduler] 既に株価取得が実行中です。スキップします。");
         return;
       }
-      await startFetchAllPrices(3);
+      const indicatorProgress = getIndicatorBatchProgress();
+      if (indicatorProgress.status === "running") {
+        console.log("[Scheduler] 既にテクニカル指標計算が実行中です。スキップします。");
+        return;
+      }
+      await startFetchAllPrices(3, () => {
+        console.log("[Scheduler] 株価取得完了。テクニカル指標の自動計算を開始します...");
+        startIndicatorBatch(3).catch((err: any) => {
+          console.error("[Scheduler] テクニカル指標バッチエラー:", err.message);
+        });
+      });
       console.log("[Scheduler] 株価取得バッチを開始しました");
     } catch (err: any) {
       console.error("[Scheduler] バッチ処理エラー:", err.message);
@@ -69,15 +80,18 @@ export function stopScheduler() {
 }
 
 export function getSchedulerStatus() {
-  const progress = getFetchAllProgress();
+  const fetchProg = getFetchAllProgress();
+  const indicatorProg = getIndicatorBatchProgress();
   return {
     enabled: isEnabled,
     schedule: "月〜金 16:00 JST (取引終了後)",
     cronExpression: "0 16 * * 1-5 (Asia/Tokyo)",
     lastRunAt,
     nextRunAt: nextRunAt || getNextRunTime(),
-    fetchStatus: progress.status,
-    fetchProgress: progress.status !== "idle" ? progress : null,
+    fetchStatus: fetchProg.status,
+    fetchProgress: fetchProg.status !== "idle" ? fetchProg : null,
+    indicatorStatus: indicatorProg.status,
+    indicatorProgress: indicatorProg.status !== "idle" ? indicatorProg : null,
   };
 }
 

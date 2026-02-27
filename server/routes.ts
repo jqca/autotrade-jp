@@ -6,6 +6,7 @@ import { z } from "zod";
 import { fetchHistoricalPrices } from "./yahoo-finance";
 import { importJPXStocks, fetchBatchPrices, startFetchAllPrices, getFetchAllProgress } from "./import-stocks";
 import { startScheduler, getSchedulerStatus, setSchedulerEnabled } from "./scheduler";
+import { startIndicatorBatch, getIndicatorBatchProgress } from "./technical-batch";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -248,7 +249,12 @@ export async function registerRoutes(
 
   app.post("/api/fetch-all-prices", async (_req, res) => {
     try {
-      await startFetchAllPrices(3);
+      await startFetchAllPrices(3, () => {
+        console.log("[Manual] 株価取得完了。テクニカル指標の自動計算を開始します...");
+        startIndicatorBatch(3).catch((err: any) => {
+          console.error("[Manual] テクニカル指標バッチエラー:", err.message);
+        });
+      });
       res.json({ message: "株価取得を開始しました" });
     } catch (error: any) {
       res.status(409).json({ message: error.message });
@@ -271,6 +277,36 @@ export async function registerRoutes(
     }
     setSchedulerEnabled(parsed.data.enabled);
     res.json(getSchedulerStatus());
+  });
+
+  app.get("/api/indicators/:ticker", async (req, res) => {
+    const indicator = await storage.getTechnicalIndicator(req.params.ticker);
+    if (!indicator) {
+      return res.status(404).json({ message: "テクニカル指標が見つかりません" });
+    }
+    res.json(indicator);
+  });
+
+  app.get("/api/indicators", async (_req, res) => {
+    const indicators = await storage.getAllTechnicalIndicators();
+    res.json(indicators);
+  });
+
+  app.post("/api/indicators/batch", async (_req, res) => {
+    try {
+      const indicatorProgress = getIndicatorBatchProgress();
+      if (indicatorProgress.status === "running") {
+        return res.status(409).json({ message: "既に実行中です" });
+      }
+      await startIndicatorBatch(3);
+      res.json({ message: "テクニカル指標の計算を開始しました" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/indicators/batch/progress", async (_req, res) => {
+    res.json(getIndicatorBatchProgress());
   });
 
   startScheduler();

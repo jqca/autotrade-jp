@@ -8,12 +8,24 @@ import { TrendingUp, TrendingDown, Activity, Wallet, BarChart3, Zap, Clock, Time
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Stock, Strategy, Trade, PortfolioPosition } from "@shared/schema";
 
+interface BatchProgress {
+  status: string;
+  total: number;
+  processed: number;
+  calculated?: number;
+  updated?: number;
+  errors: number;
+  message: string;
+}
+
 interface SchedulerStatus {
   enabled: boolean;
   schedule: string;
   lastRunAt: string | null;
   nextRunAt: string;
   fetchStatus: string;
+  indicatorStatus: string;
+  indicatorProgress: BatchProgress | null;
 }
 
 function StatCard({ title, value, change, icon: Icon, trend }: {
@@ -242,15 +254,48 @@ export default function Dashboard() {
                 </p>
               </div>
             </div>
-            <div className="mt-3 pt-3 border-t">
-              <div className="flex items-center gap-2">
+            <div className="mt-3 pt-3 border-t space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant={scheduler.enabled ? "default" : "secondary"}>
                   {scheduler.enabled ? "自動実行ON" : "自動実行OFF"}
                 </Badge>
                 <span className="text-xs text-muted-foreground">
-                  取引終了後に全銘柄の終値を自動取得します
+                  取引終了後に全銘柄の終値を自動取得 → テクニカル指標を自動計算
                 </span>
               </div>
+              <div className="flex items-center gap-3 flex-wrap text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">株価取得:</span>
+                  <Badge variant={scheduler.fetchStatus === "running" ? "default" : scheduler.fetchStatus === "completed" ? "secondary" : "outline"} className="text-xs">
+                    {scheduler.fetchStatus === "idle" ? "待機中" : scheduler.fetchStatus === "running" ? "実行中" : scheduler.fetchStatus === "completed" ? "完了" : "エラー"}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">指標計算:</span>
+                  <Badge variant={scheduler.indicatorStatus === "running" ? "default" : scheduler.indicatorStatus === "completed" ? "secondary" : "outline"} className="text-xs" data-testid="badge-indicator-status">
+                    {scheduler.indicatorStatus === "idle" ? "待機中" : scheduler.indicatorStatus === "running" ? "実行中" : scheduler.indicatorStatus === "completed" ? "完了" : "エラー"}
+                  </Badge>
+                </div>
+              </div>
+              {scheduler.indicatorProgress && scheduler.indicatorProgress.status === "running" && (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>テクニカル指標計算中...</span>
+                    <span>{scheduler.indicatorProgress.processed}/{scheduler.indicatorProgress.total}</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-1.5">
+                    <div
+                      className="bg-primary h-1.5 rounded-full transition-all"
+                      style={{ width: `${scheduler.indicatorProgress.total > 0 ? (scheduler.indicatorProgress.processed / scheduler.indicatorProgress.total) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              {scheduler.indicatorProgress && scheduler.indicatorProgress.status === "completed" && (
+                <p className="text-xs text-muted-foreground" data-testid="text-indicator-result">
+                  {scheduler.indicatorProgress.message}
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>

@@ -61,6 +61,32 @@ export type InsertTrade = z.infer<typeof insertTradeSchema>;
 export type PortfolioPosition = typeof portfolioPositions.$inferSelect;
 export type InsertPortfolioPosition = z.infer<typeof insertPortfolioPositionSchema>;
 
+export const technicalIndicators = pgTable("technical_indicators", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ticker: text("ticker").notNull().unique(),
+  macdValue: real("macd_value"),
+  macdSignal: real("macd_signal_value"),
+  macdHistogram: real("macd_histogram"),
+  macdTrend: text("macd_trend"),
+  rsiValue: real("rsi_value"),
+  rsiTrend: text("rsi_trend"),
+  ma5: real("ma5"),
+  ma25: real("ma25"),
+  ma75: real("ma75"),
+  maTrend: text("ma_trend"),
+  bbUpper: real("bb_upper"),
+  bbMiddle: real("bb_middle"),
+  bbLower: real("bb_lower"),
+  bbTrend: text("bb_trend"),
+  overallSignal: text("overall_signal"),
+  overallLabel: text("overall_label"),
+  calculatedAt: timestamp("calculated_at").defaultNow(),
+});
+
+export const insertTechnicalIndicatorSchema = createInsertSchema(technicalIndicators).omit({ id: true, calculatedAt: true });
+export type TechnicalIndicator = typeof technicalIndicators.$inferSelect;
+export type InsertTechnicalIndicator = z.infer<typeof insertTechnicalIndicatorSchema>;
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),

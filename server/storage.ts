@@ -4,7 +4,8 @@ import {
   type Strategy, type InsertStrategy,
   type Trade, type InsertTrade,
   type PortfolioPosition, type InsertPortfolioPosition,
-  users, stocks, strategies, trades, portfolioPositions,
+  type TechnicalIndicator, type InsertTechnicalIndicator,
+  users, stocks, strategies, trades, portfolioPositions, technicalIndicators,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, sql, like, or, ilike, count } from "drizzle-orm";
@@ -37,6 +38,9 @@ export interface IStorage {
   getWatchedStocks(): Promise<Stock[]>;
   getStocksWithPrices(): Promise<Stock[]>;
   getAllStockTickers(): Promise<string[]>;
+  upsertTechnicalIndicator(indicator: InsertTechnicalIndicator): Promise<void>;
+  getTechnicalIndicator(ticker: string): Promise<TechnicalIndicator | undefined>;
+  getAllTechnicalIndicators(): Promise<TechnicalIndicator[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -217,6 +221,43 @@ export class DatabaseStorage implements IStorage {
   async getAllStockTickers(): Promise<string[]> {
     const rows = await db.select({ ticker: stocks.ticker }).from(stocks);
     return rows.map(r => r.ticker);
+  }
+
+  async upsertTechnicalIndicator(indicator: InsertTechnicalIndicator): Promise<void> {
+    await db
+      .insert(technicalIndicators)
+      .values(indicator)
+      .onConflictDoUpdate({
+        target: technicalIndicators.ticker,
+        set: {
+          macdValue: indicator.macdValue,
+          macdSignal: indicator.macdSignal,
+          macdHistogram: indicator.macdHistogram,
+          macdTrend: indicator.macdTrend,
+          rsiValue: indicator.rsiValue,
+          rsiTrend: indicator.rsiTrend,
+          ma5: indicator.ma5,
+          ma25: indicator.ma25,
+          ma75: indicator.ma75,
+          maTrend: indicator.maTrend,
+          bbUpper: indicator.bbUpper,
+          bbMiddle: indicator.bbMiddle,
+          bbLower: indicator.bbLower,
+          bbTrend: indicator.bbTrend,
+          overallSignal: indicator.overallSignal,
+          overallLabel: indicator.overallLabel,
+          calculatedAt: sql`now()`,
+        },
+      });
+  }
+
+  async getTechnicalIndicator(ticker: string): Promise<TechnicalIndicator | undefined> {
+    const [row] = await db.select().from(technicalIndicators).where(eq(technicalIndicators.ticker, ticker));
+    return row;
+  }
+
+  async getAllTechnicalIndicators(): Promise<TechnicalIndicator[]> {
+    return db.select().from(technicalIndicators);
   }
 }
 

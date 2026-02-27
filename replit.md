@@ -38,6 +38,8 @@ server/
   db.ts          - PostgreSQL connection
   yahoo-finance.ts - Yahoo Finance historical data fetcher
   import-stocks.ts - JPX stock list import and batch price fetch
+  scheduler.ts   - Nightly batch scheduler (cron, price fetch → indicator calc)
+  technical-batch.ts - Server-side technical indicator batch calculation
 shared/
   schema.ts      - Drizzle schemas and TypeScript types
 ```
@@ -49,8 +51,12 @@ shared/
 - GET /api/stocks/:ticker/history?range=6mo - Historical price data from Yahoo Finance
 - POST /api/import-stocks - Import all TSE domestic stocks from JPX
 - POST /api/fetch-prices - Fetch real prices for batch of tickers (max 50)
-- POST /api/fetch-all-prices - Start background fetch of all stock prices (concurrent, ~7-8 min)
+- POST /api/fetch-all-prices - Start background fetch of all stock prices → auto-triggers indicator batch
 - GET /api/fetch-all-prices/progress - Check progress of background price fetch
+- GET /api/indicators/:ticker - Get pre-computed technical indicators for a stock
+- GET /api/indicators - Get all pre-computed technical indicators
+- POST /api/indicators/batch - Manually start indicator batch calculation
+- GET /api/indicators/batch/progress - Check progress of indicator batch
 - GET /api/stocks?watched - Get only watched stocks
 - GET/POST /api/strategies - List/create strategies
 - PATCH /api/strategies/:id - Toggle active status
@@ -70,6 +76,8 @@ shared/
   - **Moving Averages** (5/25/75 day SMA) - trend direction and crossovers
   - **Bollinger Bands** (20-day, ±2σ) - volatility and price extremes
   - **Signal Summary** - composite buy/sell/neutral signal from all 4 indicators
+- Server-side batch calculation: after nightly price fetch completes, all indicators are auto-computed and stored in `technical_indicators` table
+- Manual trigger also available via POST /api/indicators/batch
 
 ## Dependencies
 - xlsx - For parsing JPX's XLS stock listing file
