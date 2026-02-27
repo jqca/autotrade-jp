@@ -9,6 +9,7 @@ import { importJPXStocks, fetchBatchPrices, startFetchAllPrices, getFetchAllProg
 import { startScheduler, getSchedulerStatus, setSchedulerEnabled } from "./scheduler";
 import { startIndicatorBatch, getIndicatorBatchProgress } from "./technical-batch";
 import { startBacktest, getBacktestProgress, DEFAULT_PARAMS, type BacktestParams } from "./backtest";
+import { startIntradayFetch, getIntradayFetchProgress } from "./intraday-batch";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -417,6 +418,29 @@ export async function registerRoutes(
         updated++;
       }
       res.json({ updated, total: batch.length });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/intraday/status", async (_req, res) => {
+    const stats = await storage.getIntradayDataStats();
+    res.json(stats);
+  });
+
+  app.get("/api/intraday/progress", async (_req, res) => {
+    res.json(getIntradayFetchProgress());
+  });
+
+  app.post("/api/intraday/fetch", async (req, res) => {
+    try {
+      const intradayProgress = getIntradayFetchProgress();
+      if (intradayProgress.status === "running") {
+        return res.status(409).json({ message: "既に5分足データ取得が実行中です" });
+      }
+      const mode = req.body.mode === "seed" ? "seed" : "daily";
+      await startIntradayFetch(mode, 3);
+      res.json({ message: `5分足データ取得を開始しました (${mode === "seed" ? "初回シード60日分" : "当日分"})` });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

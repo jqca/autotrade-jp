@@ -170,7 +170,7 @@ function computeIndicators(prices: HistoricalPrice[]): InsertTechnicalIndicator 
   };
 }
 
-export async function startIndicatorBatch(concurrency: number = 3): Promise<void> {
+export async function startIndicatorBatch(concurrency: number = 3, onComplete?: () => void): Promise<void> {
   if (progress.status === "running") {
     throw new Error("Already running");
   }
@@ -225,6 +225,7 @@ export async function startIndicatorBatch(concurrency: number = 3): Promise<void
       const elapsed = Math.round((progress.completedAt - progress.startedAt!) / 1000);
       progress.message = `完了: ${progress.calculated}/${progress.total}件の指標を計算 (${elapsed}秒)`;
       console.log(`[Indicators] ${progress.message}`);
+      if (onComplete) onComplete();
     } catch (err: any) {
       progress.status = "error";
       progress.completedAt = Date.now();

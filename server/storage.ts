@@ -7,10 +7,11 @@ import {
   type TechnicalIndicator, type InsertTechnicalIndicator,
   type BacktestResult, type InsertBacktestResult,
   type BacktestRun, type InsertBacktestRun,
-  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults, backtestRuns,
+  type IntradayPrice, type InsertIntradayPrice,
+  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults, backtestRuns, intradayPrices,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, sql, like, or, ilike, count } from "drizzle-orm";
+import { eq, sql, like, or, ilike, count, and, gte, lte } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -50,6 +51,10 @@ export interface IStorage {
   insertBacktestRun(run: InsertBacktestRun): Promise<void>;
   getBacktestRunConfig(runId: string): Promise<BacktestRun | undefined>;
   getAllBacktestRunConfigs(): Promise<BacktestRun[]>;
+  bulkInsertIntradayPrices(bars: InsertIntradayPrice[]): Promise<number>;
+  getIntradayPrices(ticker: string, fromDate?: string, toDate?: string): Promise<IntradayPrice[]>;
+  getIntradayDataStats(): Promise<{ totalBars: number; distinctTickers: number; earliestDate: string | null; latestDate: string | null }>;
+  cleanupOldIntradayData(retentionDays: number): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -311,6 +316,49 @@ export class DatabaseStorage implements IStorage {
 
   async getAllBacktestRunConfigs(): Promise<BacktestRun[]> {
     return db.select().from(backtestRuns).orderBy(sql`${backtestRuns.createdAt} desc`);
+  }
+
+  async bulkInsertIntradayPrices(bars: InsertIntradayPrice[]): Promise<number> {
+    if (bars.length === 0) return 0;
+    let inserted = 0;
+    const batchSize = 500;
+    for (let i = 0; i < bars.length; i += batchSize) {
+      const batch = bars.slice(i, i + batchSize);
+      const result = await db.insert(intradayPrices).values(batch).onConflictDoNothing();
+      inserted += Number(result.rowCount ?? 0);
+    }
+    return inserted;
+  }
+
+  async getIntradayPrices(ticker: string, fromDate?: string, toDate?: string): Promise<IntradayPrice[]> {
+    const conditions = [eq(intradayPrices.ticker, ticker)];
+    if (fromDate) conditions.push(gte(intradayPrices.datetime, fromDate));
+    if (toDate) conditions.push(lte(intradayPrices.datetime, toDate));
+    return db.select().from(intradayPrices)
+      .where(and(...conditions))
+      .orderBy(intradayPrices.datetime);
+  }
+
+  async getIntradayDataStats(): Promise<{ totalBars: number; distinctTickers: number; earliestDate: string | null; latestDate: string | null }> {
+    const [result] = await db.select({
+      totalBars: count(),
+      distinctTickers: sql<number>`count(distinct ${intradayPrices.ticker})`,
+      earliestDate: sql<string | null>`min(${intradayPrices.datetime})`,
+      latestDate: sql<string | null>`max(${intradayPrices.datetime})`,
+    }).from(intradayPrices);
+    return {
+      totalBars: Number(result.totalBars),
+      distinctTickers: Number(result.distinctTickers),
+      earliestDate: result.earliestDate,
+      latestDate: result.latestDate,
+    };
+  }
+
+  async cleanupOldIntradayData(retentionDays: number): Promise<number> {
+    const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+    const cutoffStr = cutoffDate.toISOString().split("T")[0];
+    const result = await db.delete(intradayPrices).where(sql`${intradayPrices.datetime} < ${cutoffStr}`);
+    return Number(result.rowCount ?? 0);
   }
 }
 

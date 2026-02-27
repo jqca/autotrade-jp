@@ -276,6 +276,23 @@ async function runDailyBacktest(params: BacktestParams, runId: string, tickers: 
   }
 }
 
+async function loadIntradayBars(ticker: string, simDays: number): Promise<HistoricalPrice[]> {
+  const fromDate = new Date(Date.now() - (simDays + 10) * 24 * 60 * 60 * 1000);
+  const fromStr = fromDate.toISOString().split("T")[0];
+  const stored = await storage.getIntradayPrices(ticker, fromStr);
+  if (stored.length >= 200) {
+    return stored.map(b => ({
+      date: b.datetime,
+      open: b.open,
+      high: b.high,
+      low: b.low,
+      close: b.close,
+      volume: b.volume,
+    }));
+  }
+  return await fetchHistoricalPrices(ticker, "60d", "5m");
+}
+
 async function runIntradayBacktest(params: BacktestParams, runId: string, tickers: string[], concurrency: number): Promise<void> {
   for (let i = 0; i < tickers.length; i += concurrency) {
     const batch = tickers.slice(i, i + concurrency);
@@ -283,7 +300,7 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
     await Promise.allSettled(
       batch.map(async (ticker) => {
         try {
-          const bars = await fetchHistoricalPrices(ticker, "60d", "5m");
+          const bars = await loadIntradayBars(ticker, params.simDays);
           if (bars.length < 200) {
             progress.processed++;
             return;

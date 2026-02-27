@@ -18,6 +18,23 @@ interface BatchProgress {
   message: string;
 }
 
+interface IntradayFetchProgress {
+  status: string;
+  mode: string | null;
+  total: number;
+  processed: number;
+  stored: number;
+  errors: number;
+  message: string;
+}
+
+interface IntradayStats {
+  totalBars: number;
+  distinctTickers: number;
+  earliestDate: string | null;
+  latestDate: string | null;
+}
+
 interface SchedulerStatus {
   enabled: boolean;
   schedule: string;
@@ -26,6 +43,8 @@ interface SchedulerStatus {
   fetchStatus: string;
   indicatorStatus: string;
   indicatorProgress: BatchProgress | null;
+  intradayStatus: string;
+  intradayProgress: IntradayFetchProgress | null;
 }
 
 function StatCard({ title, value, change, icon: Icon, trend }: {
@@ -63,6 +82,11 @@ export default function Dashboard() {
   const { data: positions, isLoading: positionsLoading } = useQuery<PortfolioPosition[]>({ queryKey: ["/api/portfolio"] });
   const { data: scheduler } = useQuery<SchedulerStatus>({ queryKey: ["/api/scheduler"] });
   const { data: jquantsStatus } = useQuery<{ configured: boolean }>({ queryKey: ["/api/jquants/status"] });
+  const { data: intradayStats } = useQuery<IntradayStats>({ queryKey: ["/api/intraday/status"] });
+  const { data: intradayProgress } = useQuery<IntradayFetchProgress>({
+    queryKey: ["/api/intraday/progress"],
+    refetchInterval: (query) => query.state.data?.status === "running" ? 2000 : false,
+  });
 
   const toggleScheduler = useMutation({
     mutationFn: async (enabled: boolean) => {
@@ -70,6 +94,16 @@ export default function Dashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/scheduler"] });
+    },
+  });
+
+  const startIntradayFetch = useMutation({
+    mutationFn: async (mode: "daily" | "seed") => {
+      await apiRequest("POST", "/api/intraday/fetch", { mode });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/intraday/progress"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/intraday/status"] });
     },
   });
 
@@ -282,7 +316,7 @@ export default function Dashboard() {
                   {scheduler.enabled ? "自動実行ON" : "自動実行OFF"}
                 </Badge>
                 <span className="text-xs text-muted-foreground">
-                  取引終了後に全銘柄の終値を自動取得 → テクニカル指標を自動計算
+                  取引終了後に全銘柄の終値を自動取得 → テクニカル指標計算 → 5分足データ蓄積
                 </span>
               </div>
               <div className="flex items-center gap-3 flex-wrap text-xs">
@@ -296,6 +330,12 @@ export default function Dashboard() {
                   <span className="text-muted-foreground">指標計算:</span>
                   <Badge variant={scheduler.indicatorStatus === "running" ? "default" : scheduler.indicatorStatus === "completed" ? "secondary" : "outline"} className="text-xs" data-testid="badge-indicator-status">
                     {scheduler.indicatorStatus === "idle" ? "待機中" : scheduler.indicatorStatus === "running" ? "実行中" : scheduler.indicatorStatus === "completed" ? "完了" : "エラー"}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">5分足:</span>
+                  <Badge variant={scheduler.intradayStatus === "running" ? "default" : scheduler.intradayStatus === "completed" ? "secondary" : "outline"} className="text-xs" data-testid="badge-intraday-status">
+                    {scheduler.intradayStatus === "idle" ? "待機中" : scheduler.intradayStatus === "running" ? "実行中" : scheduler.intradayStatus === "completed" ? "完了" : "エラー"}
                   </Badge>
                 </div>
               </div>
@@ -322,6 +362,89 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       )}
+
+      <Card data-testid="card-intraday-data">
+        <CardHeader>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              5分足データ蓄積
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={intradayProgress?.status === "running" || startIntradayFetch.isPending}
+                onClick={() => startIntradayFetch.mutate("daily")}
+                data-testid="button-intraday-daily"
+              >
+                当日分取得
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={intradayProgress?.status === "running" || startIntradayFetch.isPending}
+                onClick={() => startIntradayFetch.mutate("seed")}
+                data-testid="button-intraday-seed"
+              >
+                初回シード(60日)
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">保存済みバー数</p>
+              <p className="text-sm font-medium" data-testid="text-intraday-bars">{intradayStats?.totalBars?.toLocaleString("ja-JP") ?? "0"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">対象銘柄数</p>
+              <p className="text-sm font-medium" data-testid="text-intraday-tickers">{intradayStats?.distinctTickers?.toLocaleString("ja-JP") ?? "0"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">最古データ</p>
+              <p className="text-sm font-medium" data-testid="text-intraday-earliest">
+                {intradayStats?.earliestDate ? intradayStats.earliestDate.split("T")[0] : "なし"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">最新データ</p>
+              <p className="text-sm font-medium" data-testid="text-intraday-latest">
+                {intradayStats?.latestDate ? intradayStats.latestDate.split("T")[0] : "なし"}
+              </p>
+            </div>
+          </div>
+          {intradayProgress && intradayProgress.status === "running" && (
+            <div className="mt-3 pt-3 border-t space-y-1">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>{intradayProgress.mode === "seed" ? "初回シード取得中..." : "当日分取得中..."}</span>
+                <span>{intradayProgress.processed}/{intradayProgress.total}</span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-1.5">
+                <div
+                  className="bg-primary h-1.5 rounded-full transition-all"
+                  style={{ width: `${intradayProgress.total > 0 ? (intradayProgress.processed / intradayProgress.total) * 100 : 0}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">{intradayProgress.message}</p>
+            </div>
+          )}
+          {intradayProgress && intradayProgress.status === "completed" && (
+            <div className="mt-3 pt-3 border-t">
+              <p className="text-xs text-muted-foreground" data-testid="text-intraday-result">{intradayProgress.message}</p>
+            </div>
+          )}
+          <div className="mt-3 pt-3 border-t">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="secondary" className="text-xs">自動蓄積</Badge>
+              <span className="text-xs text-muted-foreground">
+                夜間バッチで毎日自動取得 ・ 120日間保持 ・ バックテスト時にDB優先使用
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

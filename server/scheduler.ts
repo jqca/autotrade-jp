@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import { startFetchAllPrices, getFetchAllProgress } from "./import-stocks";
 import { startIndicatorBatch, getIndicatorBatchProgress } from "./technical-batch";
+import { startIntradayFetch, getIntradayFetchProgress } from "./intraday-batch";
 
 let scheduledTask: cron.ScheduledTask | null = null;
 let lastRunAt: string | null = null;
@@ -54,7 +55,12 @@ export function startScheduler() {
       }
       await startFetchAllPrices(3, () => {
         console.log("[Scheduler] 株価取得完了。テクニカル指標の自動計算を開始します...");
-        startIndicatorBatch(3).catch((err: any) => {
+        startIndicatorBatch(3, () => {
+          console.log("[Scheduler] テクニカル指標計算完了。5分足データ取得を開始します...");
+          startIntradayFetch("daily", 3).catch((err: any) => {
+            console.error("[Scheduler] 5分足データ取得エラー:", err.message);
+          });
+        }).catch((err: any) => {
           console.error("[Scheduler] テクニカル指標バッチエラー:", err.message);
         });
       });
@@ -82,6 +88,7 @@ export function stopScheduler() {
 export function getSchedulerStatus() {
   const fetchProg = getFetchAllProgress();
   const indicatorProg = getIndicatorBatchProgress();
+  const intradayProg = getIntradayFetchProgress();
   return {
     enabled: isEnabled,
     schedule: "月〜金 16:00 JST (取引終了後)",
@@ -92,6 +99,8 @@ export function getSchedulerStatus() {
     fetchProgress: fetchProg.status !== "idle" ? fetchProg : null,
     indicatorStatus: indicatorProg.status,
     indicatorProgress: indicatorProg.status !== "idle" ? indicatorProg : null,
+    intradayStatus: intradayProg.status,
+    intradayProgress: intradayProg.status !== "idle" ? intradayProg : null,
   };
 }
 

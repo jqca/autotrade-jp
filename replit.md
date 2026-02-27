@@ -31,6 +31,7 @@ A simulated Japanese stock automated trading platform with all 3,771 TSE-listed 
 - `technical_indicators` - Pre-computed technical indicators per stock
 - `backtest_runs` - Backtest run configurations (target %, min indicators, RSI range, MA filter, sim days)
 - `backtest_results` - Backtest simulation results (signal date, buy/sell prices, win/loss, indicator trends)
+- `intraday_prices` - Stored 5-minute bar data (ticker, datetime, OHLCV, interval) with unique index on (ticker, datetime, interval), 120-day retention
 
 ## Project Structure
 ```
@@ -43,9 +44,10 @@ server/
   db.ts          - PostgreSQL connection
   yahoo-finance.ts - Yahoo Finance historical data fetcher
   import-stocks.ts - JPX stock list import and batch price fetch
-  scheduler.ts   - Nightly batch scheduler (cron, price fetch → indicator calc)
+  scheduler.ts   - Nightly batch scheduler (cron, price fetch → indicator calc → intraday fetch)
   technical-batch.ts - Server-side technical indicator batch calculation
-  backtest.ts    - Backtest simulation engine (10-day signal simulation)
+  intraday-batch.ts - 5-minute bar data batch fetcher (daily/seed modes, 120-day retention)
+  backtest.ts    - Backtest simulation engine (daily/5-min, uses stored intraday data when available)
 shared/
   schema.ts      - Drizzle schemas and TypeScript types
 ```
@@ -75,6 +77,9 @@ shared/
 - GET /api/backtest/runs - List all backtest runs with win/loss summary
 - GET /api/backtest/results?runId= - Get backtest results (optionally by run)
 - DELETE /api/backtest/runs/:runId - Delete a backtest run
+- GET /api/intraday/status - Stats about stored 5-minute bar data (count, tickers, date range)
+- GET /api/intraday/progress - Progress of intraday data fetch operation
+- POST /api/intraday/fetch - Start intraday data fetch (body: {mode: "daily"|"seed"})
 
 ## Data Sources
 ### J-Quants API (Primary - JPX公式データ)

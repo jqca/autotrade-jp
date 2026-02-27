@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, real, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, real, timestamp, boolean, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -129,6 +129,24 @@ export const backtestResults = pgTable("backtest_results", {
 export const insertBacktestResultSchema = createInsertSchema(backtestResults).omit({ id: true, createdAt: true });
 export type BacktestResult = typeof backtestResults.$inferSelect;
 export type InsertBacktestResult = z.infer<typeof insertBacktestResultSchema>;
+
+export const intradayPrices = pgTable("intraday_prices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ticker: text("ticker").notNull(),
+  datetime: text("datetime").notNull(),
+  open: real("open").notNull(),
+  high: real("high").notNull(),
+  low: real("low").notNull(),
+  close: real("close").notNull(),
+  volume: integer("volume").notNull().default(0),
+  interval: text("interval").notNull().default("5m"),
+}, (table) => [
+  uniqueIndex("idx_intraday_ticker_datetime_interval").on(table.ticker, table.datetime, table.interval),
+]);
+
+export const insertIntradayPriceSchema = createInsertSchema(intradayPrices).omit({ id: true });
+export type IntradayPrice = typeof intradayPrices.$inferSelect;
+export type InsertIntradayPrice = z.infer<typeof insertIntradayPriceSchema>;
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
