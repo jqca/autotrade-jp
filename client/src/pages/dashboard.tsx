@@ -1,9 +1,20 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, TrendingDown, Activity, Wallet, BarChart3, Zap } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { TrendingUp, TrendingDown, Activity, Wallet, BarChart3, Zap, Clock, Timer } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Stock, Strategy, Trade, PortfolioPosition } from "@shared/schema";
+
+interface SchedulerStatus {
+  enabled: boolean;
+  schedule: string;
+  lastRunAt: string | null;
+  nextRunAt: string;
+  fetchStatus: string;
+}
 
 function StatCard({ title, value, change, icon: Icon, trend }: {
   title: string;
@@ -38,6 +49,16 @@ export default function Dashboard() {
   const { data: strategies, isLoading: strategiesLoading } = useQuery<Strategy[]>({ queryKey: ["/api/strategies"] });
   const { data: trades, isLoading: tradesLoading } = useQuery<Trade[]>({ queryKey: ["/api/trades"] });
   const { data: positions, isLoading: positionsLoading } = useQuery<PortfolioPosition[]>({ queryKey: ["/api/portfolio"] });
+  const { data: scheduler } = useQuery<SchedulerStatus>({ queryKey: ["/api/scheduler"] });
+
+  const toggleScheduler = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      await apiRequest("PATCH", "/api/scheduler", { enabled });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/scheduler"] });
+    },
+  });
 
   const isLoading = stocksLoading || strategiesLoading || tradesLoading || positionsLoading;
 
@@ -180,6 +201,60 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {scheduler && (
+        <Card data-testid="card-scheduler">
+          <CardHeader>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Timer className="h-5 w-5" />
+                夜間バッチ処理
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{scheduler.enabled ? "有効" : "無効"}</span>
+                <Switch
+                  checked={scheduler.enabled}
+                  onCheckedChange={(checked) => toggleScheduler.mutate(checked)}
+                  data-testid="switch-scheduler"
+                />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">スケジュール</p>
+                <p className="text-sm font-medium">{scheduler.schedule}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">次回実行予定</p>
+                <p className="text-sm font-medium">
+                  {new Date(scheduler.nextRunAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", month: "short", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" })}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">前回実行</p>
+                <p className="text-sm font-medium">
+                  {scheduler.lastRunAt
+                    ? new Date(scheduler.lastRunAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+                    : "未実行"
+                  }
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 pt-3 border-t">
+              <div className="flex items-center gap-2">
+                <Badge variant={scheduler.enabled ? "default" : "secondary"}>
+                  {scheduler.enabled ? "自動実行ON" : "自動実行OFF"}
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  取引終了後に全銘柄の終値を自動取得します
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

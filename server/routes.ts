@@ -5,6 +5,7 @@ import { insertStrategySchema } from "@shared/schema";
 import { z } from "zod";
 import { fetchHistoricalPrices } from "./yahoo-finance";
 import { importJPXStocks, fetchBatchPrices, startFetchAllPrices, getFetchAllProgress } from "./import-stocks";
+import { startScheduler, getSchedulerStatus, setSchedulerEnabled } from "./scheduler";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -257,6 +258,22 @@ export async function registerRoutes(
   app.get("/api/fetch-all-prices/progress", async (_req, res) => {
     res.json(getFetchAllProgress());
   });
+
+  app.get("/api/scheduler", async (_req, res) => {
+    res.json(getSchedulerStatus());
+  });
+
+  app.patch("/api/scheduler", async (req, res) => {
+    const schema = z.object({ enabled: z.boolean() });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+    setSchedulerEnabled(parsed.data.enabled);
+    res.json(getSchedulerStatus());
+  });
+
+  startScheduler();
 
   return httpServer;
 }
