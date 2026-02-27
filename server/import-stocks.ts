@@ -100,39 +100,131 @@ export async function fetchBatchPrices(tickers: string[]): Promise<number> {
 
   for (const ticker of tickers) {
     try {
-      const symbol = encodeURIComponent(`${ticker}.T`);
-      const url = `https://query2.finance.yahoo.com/v8/finance/chart/${symbol}?range=1d&interval=1d`;
-
-      const res = await fetch(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        },
-      });
-
-      if (!res.ok) continue;
-
-      const data = await res.json();
-      const meta = data.chart?.result?.[0]?.meta;
-      if (!meta) continue;
-
-      const currentPrice = meta.regularMarketPrice || 0;
-      const previousClose = meta.chartPreviousClose || meta.previousClose || 0;
-      const dayHigh = meta.regularMarketDayHigh || currentPrice;
-      const dayLow = meta.regularMarketDayLow || currentPrice;
-      const volume = meta.regularMarketVolume || 0;
-
-      if (currentPrice > 0) {
-        await storage.updateStockPrice(ticker, currentPrice, dayHigh, dayLow, volume);
-        if (previousClose > 0) {
-          await storage.updatePreviousClose(ticker, previousClose);
-        }
-        updated++;
-      }
-
-      await new Promise(r => setTimeout(r, 200));
+      updated += await fetchSinglePrice(ticker);
+      await new Promise(r => setTimeout(r, 150));
     } catch {
     }
   }
 
   return updated;
+}
+
+async function fetchSinglePrice(ticker: string): Promise<number> {
+  const symbol = encodeURIComponent(`${ticker}.T`);
+  const url = `https://query2.finance.yahoo.com/v8/finance/chart/${symbol}?range=1d&interval=1d`;
+
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    },
+  });
+
+  if (!res.ok) return 0;
+
+  const data = await res.json();
+  const meta = data.chart?.result?.[0]?.meta;
+  if (!meta) return 0;
+
+  const currentPrice = meta.regularMarketPrice || 0;
+  const previousClose = meta.chartPreviousClose || meta.previousClose || 0;
+  const dayHigh = meta.regularMarketDayHigh || currentPrice;
+  const dayLow = meta.regularMarketDayLow || currentPrice;
+  const volume = meta.regularMarketVolume || 0;
+
+  if (currentPrice > 0) {
+    await storage.updateStockPrice(ticker, currentPrice, dayHigh, dayLow, volume);
+    if (previousClose > 0) {
+      await storage.updatePreviousClose(ticker, previousClose);
+    }
+    return 1;
+  }
+  return 0;
+}
+
+export interface FetchAllProgress {
+  status: "idle" | "running" | "completed" | "error";
+  total: number;
+  processed: number;
+  updated: number;
+  errors: number;
+  startedAt: number | null;
+  completedAt: number | null;
+  message: string;
+}
+
+const progress: FetchAllProgress = {
+  status: "idle",
+  total: 0,
+  processed: 0,
+  updated: 0,
+  errors: 0,
+  startedAt: null,
+  completedAt: null,
+  message: "",
+};
+
+export function getFetchAllProgress(): FetchAllProgress {
+  return { ...progress };
+}
+
+export async function startFetchAllPrices(concurrency: number = 3): Promise<void> {
+  if (progress.status === "running") {
+    throw new Error("Already running");
+  }
+
+  const tickers = await storage.getAllStockTickers();
+
+  progress.status = "running";
+  progress.total = tickers.length;
+  progress.processed = 0;
+  progress.updated = 0;
+  progress.errors = 0;
+  progress.startedAt = Date.now();
+  progress.completedAt = null;
+  progress.message = "株価取得を開始しました...";
+
+  (async () => {
+    try {
+      for (let i = 0; i < tickers.length; i += concurrency) {
+        const batch = tickers.slice(i, i + concurrency);
+
+        const results = await Promise.allSettled(
+          batch.map(async (ticker) => {
+            try {
+              const result = await fetchSinglePrice(ticker);
+              return result;
+            } catch {
+              return 0;
+            }
+          })
+        );
+
+        for (const r of results) {
+          progress.processed++;
+          if (r.status === "fulfilled" && r.value > 0) {
+            progress.updated++;
+          } else if (r.status === "rejected") {
+            progress.errors++;
+          }
+        }
+
+        progress.message = `${progress.processed}/${progress.total} 処理済み (${progress.updated}件取得成功)`;
+
+        if (i + concurrency < tickers.length) {
+          await new Promise(r => setTimeout(r, 300));
+        }
+      }
+
+      progress.status = "completed";
+      progress.completedAt = Date.now();
+      const elapsed = Math.round((progress.completedAt - progress.startedAt!) / 1000);
+      progress.message = `完了: ${progress.updated}/${progress.total}件の株価を取得 (${elapsed}秒)`;
+      console.log(progress.message);
+    } catch (err: any) {
+      progress.status = "error";
+      progress.completedAt = Date.now();
+      progress.message = `エラー: ${err.message}`;
+      console.error("Fetch all prices error:", err);
+    }
+  })();
 }

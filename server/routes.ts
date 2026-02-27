@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { insertStrategySchema } from "@shared/schema";
 import { z } from "zod";
 import { fetchHistoricalPrices } from "./yahoo-finance";
-import { importJPXStocks, fetchBatchPrices } from "./import-stocks";
+import { importJPXStocks, fetchBatchPrices, startFetchAllPrices, getFetchAllProgress } from "./import-stocks";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -243,6 +243,19 @@ export async function registerRoutes(
     } catch (error: any) {
       res.status(500).json({ message: error.message || "Failed to fetch prices" });
     }
+  });
+
+  app.post("/api/fetch-all-prices", async (_req, res) => {
+    try {
+      await startFetchAllPrices(3);
+      res.json({ message: "株価取得を開始しました" });
+    } catch (error: any) {
+      res.status(409).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/fetch-all-prices/progress", async (_req, res) => {
+    res.json(getFetchAllProgress());
   });
 
   return httpServer;

@@ -4,12 +4,22 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { Star, StarOff, TrendingUp, TrendingDown, RefreshCw, LineChart, Search, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Star, StarOff, TrendingUp, TrendingDown, RefreshCw, LineChart, Search, Download, ChevronLeft, ChevronRight, Loader2, Zap } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { Stock } from "@shared/schema";
+
+interface FetchAllProgress {
+  status: "idle" | "running" | "completed" | "error";
+  total: number;
+  processed: number;
+  updated: number;
+  errors: number;
+  message: string;
+}
 
 const PAGE_SIZE = 30;
 
@@ -114,6 +124,39 @@ export default function Watchlist() {
     },
   });
 
+  const [fetchAllRunning, setFetchAllRunning] = useState(false);
+
+  const { data: fetchProgress } = useQuery<FetchAllProgress>({
+    queryKey: ["/api/fetch-all-prices/progress"],
+    refetchInterval: fetchAllRunning ? 2000 : false,
+  });
+
+  useEffect(() => {
+    if (fetchProgress?.status === "running") {
+      setFetchAllRunning(true);
+    } else if (fetchProgress?.status === "completed" || fetchProgress?.status === "error") {
+      if (fetchAllRunning) {
+        setFetchAllRunning(false);
+        queryClient.invalidateQueries({ queryKey: ["/api/stocks"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/stocks?watched"] });
+      }
+    }
+  }, [fetchProgress?.status]);
+
+  const startFetchAll = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/fetch-all-prices");
+    },
+    onSuccess: () => {
+      setFetchAllRunning(true);
+      queryClient.invalidateQueries({ queryKey: ["/api/fetch-all-prices/progress"] });
+      toast({ title: "全銘柄株価取得開始", description: "バックグラウンドで株価を取得しています..." });
+    },
+    onError: (error: any) => {
+      toast({ title: "エラー", description: error.message || "株価取得の開始に失敗しました", variant: "destructive" });
+    },
+  });
+
   const fetchCurrentPagePrices = () => {
     if (searchResult?.stocks) {
       const tickers = searchResult.stocks
@@ -147,8 +190,44 @@ export default function Watchlist() {
             )}
             全銘柄インポート
           </Button>
+          <Button
+            onClick={() => startFetchAll.mutate()}
+            disabled={startFetchAll.isPending || fetchAllRunning}
+            variant="default"
+            data-testid="button-fetch-all-prices"
+          >
+            {fetchAllRunning ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Zap className="h-4 w-4 mr-2" />
+            )}
+            全銘柄株価取得
+          </Button>
         </div>
       </div>
+
+      {fetchProgress && fetchProgress.status !== "idle" && (
+        <Card data-testid="card-fetch-progress">
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className="text-sm font-medium">
+                {fetchAllRunning ? "株価取得中..." : fetchProgress.status === "completed" ? "株価取得完了" : "エラー"}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {fetchProgress.processed.toLocaleString("ja-JP")} / {fetchProgress.total.toLocaleString("ja-JP")}
+              </span>
+            </div>
+            <Progress
+              value={fetchProgress.total > 0 ? (fetchProgress.processed / fetchProgress.total) * 100 : 0}
+              className="h-2 mb-2"
+            />
+            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>{fetchProgress.message}</span>
+              <span>成功: {fetchProgress.updated.toLocaleString("ja-JP")} / エラー: {fetchProgress.errors.toLocaleString("ja-JP")}</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {(watchedStocks?.length ?? 0) > 0 && (
         <div>

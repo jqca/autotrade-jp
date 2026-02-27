@@ -49,6 +49,9 @@ shared/
 - GET /api/stocks/:ticker/history?range=6mo - Historical price data from Yahoo Finance
 - POST /api/import-stocks - Import all TSE domestic stocks from JPX
 - POST /api/fetch-prices - Fetch real prices for batch of tickers (max 50)
+- POST /api/fetch-all-prices - Start background fetch of all stock prices (concurrent, ~7-8 min)
+- GET /api/fetch-all-prices/progress - Check progress of background price fetch
+- GET /api/stocks?watched - Get only watched stocks
 - GET/POST /api/strategies - List/create strategies
 - PATCH /api/strategies/:id - Toggle active status
 - DELETE /api/strategies/:id - Remove strategy

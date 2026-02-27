@@ -36,6 +36,7 @@ export interface IStorage {
   searchStocks(query: string, limit: number, offset: number): Promise<{ stocks: Stock[]; total: number }>;
   getWatchedStocks(): Promise<Stock[]>;
   getStocksWithPrices(): Promise<Stock[]>;
+  getAllStockTickers(): Promise<string[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -212,6 +213,10 @@ export class DatabaseStorage implements IStorage {
 
   async getStocksWithPrices(): Promise<Stock[]> {
     return db.select().from(stocks).where(sql`${stocks.currentPrice} > 0`);
+  }
+  async getAllStockTickers(): Promise<string[]> {
+    const rows = await db.select({ ticker: stocks.ticker }).from(stocks);
+    return rows.map(r => r.ticker);
   }
 }
 
