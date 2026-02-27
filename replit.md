@@ -16,7 +16,8 @@ A simulated Japanese stock automated trading platform with all 3,771 TSE-listed 
 2. **Watchlist** - Japanese stock monitoring with search/pagination (3,771 stocks), simulated price updates
 3. **Stock Detail** - Historical price chart, technical indicators (MACD, RSI, Moving Averages, Bollinger Bands), signal analysis
 4. **Signals** - Buy/sell signal overview filtered by technical indicators, search, count summary cards
-5. **Strategies** - Create/manage automated trading rules (price drop buy, price rise sell, threshold buy/sell)
+5. **Backtest** - Strong buy signal backtest simulation (past 10 trading days), win/loss tracking, run history
+6. **Strategies** - Create/manage automated trading rules (price drop buy, price rise sell, threshold buy/sell)
 6. **Trade History** - Complete trade log
 7. **Portfolio** - Current holdings with P&L tracking
 8. **JPX Import** - Import all TSE-listed domestic stocks from JPX official data
@@ -27,11 +28,13 @@ A simulated Japanese stock automated trading platform with all 3,771 TSE-listed 
 - `strategies` - Automated trading rules with conditions
 - `trades` - Trade execution history
 - `portfolio_positions` - Current holdings
+- `technical_indicators` - Pre-computed technical indicators per stock
+- `backtest_results` - Backtest simulation results (signal date, buy/sell prices, win/loss, indicator trends)
 
 ## Project Structure
 ```
 client/src/
-  pages/         - Dashboard, Watchlist, StockDetail, Signals, Strategies, Trades, Portfolio
+  pages/         - Dashboard, Watchlist, StockDetail, Signals, Backtest, Strategies, Trades, Portfolio
   components/    - AppSidebar, ThemeToggle, UI components
 server/
   routes.ts      - API endpoints and seed data
@@ -41,6 +44,7 @@ server/
   import-stocks.ts - JPX stock list import and batch price fetch
   scheduler.ts   - Nightly batch scheduler (cron, price fetch → indicator calc)
   technical-batch.ts - Server-side technical indicator batch calculation
+  backtest.ts    - Backtest simulation engine (10-day signal simulation)
 shared/
   schema.ts      - Drizzle schemas and TypeScript types
 ```
@@ -65,6 +69,11 @@ shared/
 - POST /api/strategies/:id/execute - Execute strategy
 - GET /api/trades - List all trades
 - GET /api/portfolio - List portfolio positions
+- POST /api/backtest/run - Start backtest simulation
+- GET /api/backtest/progress - Check backtest progress
+- GET /api/backtest/runs - List all backtest runs with win/loss summary
+- GET /api/backtest/results?runId= - Get backtest results (optionally by run)
+- DELETE /api/backtest/runs/:runId - Delete a backtest run
 
 ## Historical Price Data
 - Real historical stock prices fetched from Yahoo Finance API (no API key needed)

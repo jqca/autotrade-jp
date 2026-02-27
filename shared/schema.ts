@@ -87,6 +87,31 @@ export const insertTechnicalIndicatorSchema = createInsertSchema(technicalIndica
 export type TechnicalIndicator = typeof technicalIndicators.$inferSelect;
 export type InsertTechnicalIndicator = z.infer<typeof insertTechnicalIndicatorSchema>;
 
+export const backtestResults = pgTable("backtest_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ticker: text("ticker").notNull(),
+  signalDate: text("signal_date").notNull(),
+  signalLabel: text("signal_label").notNull(),
+  buyDate: text("buy_date").notNull(),
+  buyPrice: real("buy_price").notNull(),
+  sellDate: text("sell_date").notNull(),
+  sellPrice: real("sell_price").notNull(),
+  profitLoss: real("profit_loss").notNull(),
+  profitLossPercent: real("profit_loss_percent").notNull(),
+  isWin: boolean("is_win").notNull(),
+  macdTrend: text("macd_trend"),
+  rsiTrend: text("rsi_trend"),
+  maTrend: text("ma_trend"),
+  bbTrend: text("bb_trend"),
+  rsiValue: real("rsi_value"),
+  runId: text("run_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertBacktestResultSchema = createInsertSchema(backtestResults).omit({ id: true, createdAt: true });
+export type BacktestResult = typeof backtestResults.$inferSelect;
+export type InsertBacktestResult = z.infer<typeof insertBacktestResultSchema>;
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),

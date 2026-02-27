@@ -7,6 +7,7 @@ import { fetchHistoricalPrices } from "./yahoo-finance";
 import { importJPXStocks, fetchBatchPrices, startFetchAllPrices, getFetchAllProgress } from "./import-stocks";
 import { startScheduler, getSchedulerStatus, setSchedulerEnabled } from "./scheduler";
 import { startIndicatorBatch, getIndicatorBatchProgress } from "./technical-batch";
+import { startBacktest, getBacktestProgress } from "./backtest";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -307,6 +308,39 @@ export async function registerRoutes(
 
   app.get("/api/indicators/batch/progress", async (_req, res) => {
     res.json(getIndicatorBatchProgress());
+  });
+
+  app.post("/api/backtest/run", async (_req, res) => {
+    try {
+      const btProgress = getBacktestProgress();
+      if (btProgress.status === "running") {
+        return res.status(409).json({ message: "既にバックテストが実行中です" });
+      }
+      await startBacktest(3);
+      res.json({ message: "バックテストを開始しました" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/backtest/progress", async (_req, res) => {
+    res.json(getBacktestProgress());
+  });
+
+  app.get("/api/backtest/runs", async (_req, res) => {
+    const runs = await storage.getBacktestRuns();
+    res.json(runs);
+  });
+
+  app.get("/api/backtest/results", async (req, res) => {
+    const runId = req.query.runId as string | undefined;
+    const results = await storage.getBacktestResults(runId);
+    res.json(results);
+  });
+
+  app.delete("/api/backtest/runs/:runId", async (req, res) => {
+    await storage.deleteBacktestRun(req.params.runId);
+    res.json({ success: true });
   });
 
   startScheduler();

@@ -5,7 +5,8 @@ import {
   type Trade, type InsertTrade,
   type PortfolioPosition, type InsertPortfolioPosition,
   type TechnicalIndicator, type InsertTechnicalIndicator,
-  users, stocks, strategies, trades, portfolioPositions, technicalIndicators,
+  type BacktestResult, type InsertBacktestResult,
+  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, sql, like, or, ilike, count } from "drizzle-orm";
@@ -41,6 +42,10 @@ export interface IStorage {
   upsertTechnicalIndicator(indicator: InsertTechnicalIndicator): Promise<void>;
   getTechnicalIndicator(ticker: string): Promise<TechnicalIndicator | undefined>;
   getAllTechnicalIndicators(): Promise<TechnicalIndicator[]>;
+  insertBacktestResult(result: InsertBacktestResult): Promise<void>;
+  getBacktestResults(runId?: string): Promise<BacktestResult[]>;
+  getBacktestRuns(): Promise<{ runId: string; count: number; wins: number; losses: number; createdAt: Date | null }[]>;
+  deleteBacktestRun(runId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -258,6 +263,36 @@ export class DatabaseStorage implements IStorage {
 
   async getAllTechnicalIndicators(): Promise<TechnicalIndicator[]> {
     return db.select().from(technicalIndicators);
+  }
+
+  async insertBacktestResult(result: InsertBacktestResult): Promise<void> {
+    await db.insert(backtestResults).values(result);
+  }
+
+  async getBacktestResults(runId?: string): Promise<BacktestResult[]> {
+    if (runId) {
+      return db.select().from(backtestResults).where(eq(backtestResults.runId, runId));
+    }
+    return db.select().from(backtestResults);
+  }
+
+  async getBacktestRuns(): Promise<{ runId: string; count: number; wins: number; losses: number; createdAt: Date | null }[]> {
+    const rows = await db
+      .select({
+        runId: backtestResults.runId,
+        count: count(),
+        wins: sql<number>`count(*) filter (where ${backtestResults.isWin} = true)`,
+        losses: sql<number>`count(*) filter (where ${backtestResults.isWin} = false)`,
+        createdAt: sql<Date | null>`min(${backtestResults.createdAt})`,
+      })
+      .from(backtestResults)
+      .groupBy(backtestResults.runId)
+      .orderBy(sql`min(${backtestResults.createdAt}) desc`);
+    return rows.map(r => ({ ...r, count: Number(r.count), wins: Number(r.wins), losses: Number(r.losses) }));
+  }
+
+  async deleteBacktestRun(runId: string): Promise<void> {
+    await db.delete(backtestResults).where(eq(backtestResults.runId, runId));
   }
 }
 
