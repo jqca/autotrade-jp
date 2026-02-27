@@ -1,4 +1,4 @@
-import { LayoutDashboard, Eye, Zap, History, Wallet } from "lucide-react";
+import { LayoutDashboard, Eye, Zap, History, Wallet, Signal } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import {
   Sidebar,
@@ -15,6 +15,7 @@ import {
 const navItems = [
   { title: "ダッシュボード", url: "/", icon: LayoutDashboard, testId: "link-dashboard" },
   { title: "ウォッチリスト", url: "/watchlist", icon: Eye, testId: "link-watchlist" },
+  { title: "売買シグナル", url: "/signals", icon: Signal, testId: "link-signals" },
   { title: "取引戦略", url: "/strategies", icon: Zap, testId: "link-strategies" },
   { title: "取引履歴", url: "/trades", icon: History, testId: "link-trades" },
   { title: "ポートフォリオ", url: "/portfolio", icon: Wallet, testId: "link-portfolio" },

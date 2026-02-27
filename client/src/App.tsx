@@ -13,6 +13,7 @@ import Strategies from "@/pages/strategies";
 import Trades from "@/pages/trades";
 import Portfolio from "@/pages/portfolio";
 import StockDetail from "@/pages/stock-detail";
+import Signals from "@/pages/signals";
 
 function Router() {
   return (
@@ -20,6 +21,7 @@ function Router() {
       <Route path="/" component={Dashboard} />
       <Route path="/watchlist" component={Watchlist} />
       <Route path="/stocks/:ticker" component={StockDetail} />
+      <Route path="/signals" component={Signals} />
       <Route path="/strategies" component={Strategies} />
       <Route path="/trades" component={Trades} />
       <Route path="/portfolio" component={Portfolio} />

@@ -12,14 +12,15 @@ A simulated Japanese stock automated trading platform with all 3,771 TSE-listed 
 - **Charts**: recharts (price charts, technical indicators)
 
 ## Key Features
-1. **Dashboard** - Portfolio overview, recent trades, top movers
+1. **Dashboard** - Portfolio overview, recent trades, top movers, scheduler/batch status
 2. **Watchlist** - Japanese stock monitoring with search/pagination (3,771 stocks), simulated price updates
 3. **Stock Detail** - Historical price chart, technical indicators (MACD, RSI, Moving Averages, Bollinger Bands), signal analysis
-4. **Strategies** - Create/manage automated trading rules (price drop buy, price rise sell, threshold buy/sell)
-5. **Trade History** - Complete trade log
-6. **Portfolio** - Current holdings with P&L tracking
-7. **JPX Import** - Import all TSE-listed domestic stocks from JPX official data
-8. **Batch Price Fetch** - Fetch real prices from Yahoo Finance in batches
+4. **Signals** - Buy/sell signal overview filtered by technical indicators, search, count summary cards
+5. **Strategies** - Create/manage automated trading rules (price drop buy, price rise sell, threshold buy/sell)
+6. **Trade History** - Complete trade log
+7. **Portfolio** - Current holdings with P&L tracking
+8. **JPX Import** - Import all TSE-listed domestic stocks from JPX official data
+9. **Batch Price Fetch** - Fetch real prices from Yahoo Finance in batches
 
 ## Data Models
 - `stocks` - Japanese stock data (ticker, name, sector, prices, volume) - 3,771 stocks
@@ -30,7 +31,7 @@ A simulated Japanese stock automated trading platform with all 3,771 TSE-listed 
 ## Project Structure
 ```
 client/src/
-  pages/         - Dashboard, Watchlist, StockDetail, Strategies, Trades, Portfolio
+  pages/         - Dashboard, Watchlist, StockDetail, Signals, Strategies, Trades, Portfolio
   components/    - AppSidebar, ThemeToggle, UI components
 server/
   routes.ts      - API endpoints and seed data
