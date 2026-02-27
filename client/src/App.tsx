@@ -15,6 +15,7 @@ import Portfolio from "@/pages/portfolio";
 import StockDetail from "@/pages/stock-detail";
 import Signals from "@/pages/signals";
 import Backtest from "@/pages/backtest";
+import RiskAlert from "@/pages/risk-alert";
 
 function Router() {
   return (
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/stocks/:ticker" component={StockDetail} />
       <Route path="/signals" component={Signals} />
       <Route path="/backtest" component={Backtest} />
+      <Route path="/risk" component={RiskAlert} />
       <Route path="/strategies" component={Strategies} />
       <Route path="/trades" component={Trades} />
       <Route path="/portfolio" component={Portfolio} />

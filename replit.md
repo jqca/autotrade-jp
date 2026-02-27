@@ -17,6 +17,7 @@ A simulated Japanese stock automated trading platform with all 3,771 TSE-listed 
 3. **Stock Detail** - Historical price chart, technical indicators (MACD, RSI, Moving Averages, Bollinger Bands), signal analysis
 4. **Signals** - Buy/sell signal overview filtered by technical indicators, search, count summary cards
 5. **Backtest** - Configurable backtest simulation with adjustable parameters (target %, indicator count, RSI range, MA filter, sim days), multiple pattern comparison, run history with config metadata
+5b. **Risk Alert** - Market crash risk detection comparing classical anomaly detection vs QML (Quantum Machine Learning) with PennyLane
 6. **Strategies** - Create/manage automated trading rules (price drop buy, price rise sell, threshold buy/sell)
 6. **Trade History** - Complete trade log
 7. **Portfolio** - Current holdings with P&L tracking
@@ -32,11 +33,12 @@ A simulated Japanese stock automated trading platform with all 3,771 TSE-listed 
 - `backtest_runs` - Backtest run configurations (target %, min indicators, RSI range, MA filter, sim days)
 - `backtest_results` - Backtest simulation results (signal date, buy/sell prices, win/loss, indicator trends)
 - `intraday_prices` - Stored 5-minute bar data (ticker, datetime, OHLCV, interval) with unique index on (ticker, datetime, interval), 120-day retention
+- `market_risk_assessments` - Risk assessment results from classical and QML methods (risk score, level, sub-scores, details JSON)
 
 ## Project Structure
 ```
 client/src/
-  pages/         - Dashboard, Watchlist, StockDetail, Signals, Backtest, Strategies, Trades, Portfolio
+  pages/         - Dashboard, Watchlist, StockDetail, Signals, Backtest, RiskAlert, Strategies, Trades, Portfolio
   components/    - AppSidebar, ThemeToggle, UI components
 server/
   routes.ts      - API endpoints and seed data
@@ -48,6 +50,9 @@ server/
   technical-batch.ts - Server-side technical indicator batch calculation
   intraday-batch.ts - 5-minute bar data batch fetcher (daily/seed modes, 120-day retention)
   backtest.ts    - Backtest simulation engine (daily/5-min, uses stored intraday data when available)
+  risk-classical.ts - Classical market risk anomaly detection engine
+  risk-qml.ts    - QML risk detection wrapper (calls Python PennyLane script)
+  qml_risk.py    - PennyLane variational quantum circuit for anomaly detection
 shared/
   schema.ts      - Drizzle schemas and TypeScript types
 ```
@@ -80,6 +85,10 @@ shared/
 - GET /api/intraday/status - Stats about stored 5-minute bar data (count, tickers, date range)
 - GET /api/intraday/progress - Progress of intraday data fetch operation
 - POST /api/intraday/fetch - Start intraday data fetch (body: {mode: "daily"|"seed"})
+- GET /api/risk/latest - Latest risk assessments by both methods
+- GET /api/risk/history - Risk assessment history (with ?limit=)
+- POST /api/risk/assess - Run risk assessment (body: {method: "classical"|"qml"|"both"})
+- GET /api/risk/preview - Live risk preview (no DB save)
 
 ## Data Sources
 ### J-Quants API (Primary - JPX公式データ)
@@ -118,3 +127,5 @@ shared/
 ## Dependencies
 - xlsx - For parsing JPX's XLS stock listing file
 - recharts - For historical price charts
+- pennylane (Python) - Quantum machine learning framework for QML risk detection
+- numpy (Python) - Numerical computing for QML feature processing

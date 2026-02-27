@@ -10,6 +10,8 @@ import { startScheduler, getSchedulerStatus, setSchedulerEnabled } from "./sched
 import { startIndicatorBatch, getIndicatorBatchProgress, startIntradayIndicatorBatch, getIntradayIndicatorBatchProgress } from "./technical-batch";
 import { startBacktest, getBacktestProgress, DEFAULT_PARAMS, type BacktestParams } from "./backtest";
 import { startIntradayFetch, getIntradayFetchProgress } from "./intraday-batch";
+import { runClassicalRiskAssessment, computeClassicalRisk } from "./risk-classical";
+import { runQmlRiskAssessment, computeQmlRisk } from "./risk-qml";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -458,6 +460,59 @@ export async function registerRoutes(
       const mode = req.body.mode === "seed" ? "seed" : "daily";
       await startIntradayFetch(mode, 3);
       res.json({ message: `5分足データ取得を開始しました (${mode === "seed" ? "初回シード60日分" : "当日分"})` });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/risk/latest", async (_req, res) => {
+    try {
+      const [classical, qml] = await Promise.all([
+        storage.getLatestRiskByMethod("classical"),
+        storage.getLatestRiskByMethod("qml"),
+      ]);
+      res.json({ classical: classical || null, qml: qml || null });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/risk/history", async (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const history = await storage.getMarketRiskAssessments(limit);
+    res.json(history);
+  });
+
+  app.post("/api/risk/assess", async (req, res) => {
+    try {
+      const schema = z.object({ method: z.enum(["classical", "qml", "both"]).default("both") });
+      const parsed = schema.safeParse(req.body || {});
+      if (!parsed.success) {
+        return res.status(400).json({ message: "method は 'classical', 'qml', 'both' のいずれかを指定してください" });
+      }
+      const method = parsed.data.method;
+      const results: any = {};
+
+      if (method === "classical" || method === "both") {
+        results.classical = await runClassicalRiskAssessment();
+      }
+      if (method === "qml" || method === "both") {
+        results.qml = await runQmlRiskAssessment();
+      }
+
+      res.json(results);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/risk/preview", async (_req, res) => {
+    try {
+      const [classical, qml] = await Promise.all([
+        computeClassicalRisk(),
+        computeQmlRisk(),
+      ]);
+      res.json({ classical, qml });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

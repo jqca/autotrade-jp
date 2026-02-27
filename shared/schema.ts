@@ -151,6 +151,24 @@ export const insertIntradayPriceSchema = createInsertSchema(intradayPrices).omit
 export type IntradayPrice = typeof intradayPrices.$inferSelect;
 export type InsertIntradayPrice = z.infer<typeof insertIntradayPriceSchema>;
 
+export const marketRiskAssessments = pgTable("market_risk_assessments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  method: text("method").notNull(),
+  riskScore: real("risk_score").notNull(),
+  riskLevel: text("risk_level").notNull(),
+  volatilityScore: real("volatility_score"),
+  volumeScore: real("volume_score"),
+  breadthScore: real("breadth_score"),
+  rsiScore: real("rsi_score"),
+  correlationScore: real("correlation_score"),
+  details: text("details"),
+  calculatedAt: timestamp("calculated_at").defaultNow(),
+});
+
+export const insertMarketRiskAssessmentSchema = createInsertSchema(marketRiskAssessments).omit({ id: true, calculatedAt: true });
+export type MarketRiskAssessment = typeof marketRiskAssessments.$inferSelect;
+export type InsertMarketRiskAssessment = z.infer<typeof insertMarketRiskAssessmentSchema>;
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),

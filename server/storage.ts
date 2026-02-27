@@ -8,7 +8,8 @@ import {
   type BacktestResult, type InsertBacktestResult,
   type BacktestRun, type InsertBacktestRun,
   type IntradayPrice, type InsertIntradayPrice,
-  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults, backtestRuns, intradayPrices,
+  type MarketRiskAssessment, type InsertMarketRiskAssessment,
+  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults, backtestRuns, intradayPrices, marketRiskAssessments,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, sql, like, or, ilike, count, and, gte, lte } from "drizzle-orm";
@@ -55,6 +56,9 @@ export interface IStorage {
   getIntradayPrices(ticker: string, fromDate?: string, toDate?: string): Promise<IntradayPrice[]>;
   getIntradayDataStats(): Promise<{ totalBars: number; distinctTickers: number; earliestDate: string | null; latestDate: string | null }>;
   cleanupOldIntradayData(retentionDays: number): Promise<number>;
+  insertMarketRiskAssessment(assessment: InsertMarketRiskAssessment): Promise<void>;
+  getMarketRiskAssessments(limit?: number): Promise<MarketRiskAssessment[]>;
+  getLatestRiskByMethod(method: string): Promise<MarketRiskAssessment | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -363,6 +367,24 @@ export class DatabaseStorage implements IStorage {
     const cutoffStr = cutoffDate.toISOString().split("T")[0];
     const result = await db.delete(intradayPrices).where(sql`${intradayPrices.datetime} < ${cutoffStr}`);
     return Number(result.rowCount ?? 0);
+  }
+
+  async insertMarketRiskAssessment(assessment: InsertMarketRiskAssessment): Promise<void> {
+    await db.insert(marketRiskAssessments).values(assessment);
+  }
+
+  async getMarketRiskAssessments(limit: number = 50): Promise<MarketRiskAssessment[]> {
+    return db.select().from(marketRiskAssessments)
+      .orderBy(sql`${marketRiskAssessments.calculatedAt} desc`)
+      .limit(limit);
+  }
+
+  async getLatestRiskByMethod(method: string): Promise<MarketRiskAssessment | undefined> {
+    const [row] = await db.select().from(marketRiskAssessments)
+      .where(eq(marketRiskAssessments.method, method))
+      .orderBy(sql`${marketRiskAssessments.calculatedAt} desc`)
+      .limit(1);
+    return row;
   }
 }
 
