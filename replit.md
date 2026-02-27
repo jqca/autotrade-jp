@@ -16,7 +16,7 @@ A simulated Japanese stock automated trading platform with all 3,771 TSE-listed 
 2. **Watchlist** - Japanese stock monitoring with search/pagination (3,771 stocks), simulated price updates
 3. **Stock Detail** - Historical price chart, technical indicators (MACD, RSI, Moving Averages, Bollinger Bands), signal analysis
 4. **Signals** - Buy/sell signal overview filtered by technical indicators, search, count summary cards
-5. **Backtest** - Strong buy signal backtest simulation (past 10 trading days), win/loss tracking, run history
+5. **Backtest** - Configurable backtest simulation with adjustable parameters (target %, indicator count, RSI range, MA filter, sim days), multiple pattern comparison, run history with config metadata
 6. **Strategies** - Create/manage automated trading rules (price drop buy, price rise sell, threshold buy/sell)
 6. **Trade History** - Complete trade log
 7. **Portfolio** - Current holdings with P&L tracking
@@ -29,6 +29,7 @@ A simulated Japanese stock automated trading platform with all 3,771 TSE-listed 
 - `trades` - Trade execution history
 - `portfolio_positions` - Current holdings
 - `technical_indicators` - Pre-computed technical indicators per stock
+- `backtest_runs` - Backtest run configurations (target %, min indicators, RSI range, MA filter, sim days)
 - `backtest_results` - Backtest simulation results (signal date, buy/sell prices, win/loss, indicator trends)
 
 ## Project Structure

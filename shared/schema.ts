@@ -87,6 +87,22 @@ export const insertTechnicalIndicatorSchema = createInsertSchema(technicalIndica
 export type TechnicalIndicator = typeof technicalIndicators.$inferSelect;
 export type InsertTechnicalIndicator = z.infer<typeof insertTechnicalIndicatorSchema>;
 
+export const backtestRuns = pgTable("backtest_runs", {
+  runId: text("run_id").primaryKey(),
+  targetPercent: real("target_percent").notNull().default(1.0),
+  minBuyIndicators: integer("min_buy_indicators").notNull().default(3),
+  rsiMin: real("rsi_min").notNull().default(0),
+  rsiMax: real("rsi_max").notNull().default(30),
+  requireMaBuy: boolean("require_ma_buy").notNull().default(false),
+  simDays: integer("sim_days").notNull().default(200),
+  label: text("label").notNull().default(""),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertBacktestRunSchema = createInsertSchema(backtestRuns).omit({ createdAt: true });
+export type BacktestRun = typeof backtestRuns.$inferSelect;
+export type InsertBacktestRun = z.infer<typeof insertBacktestRunSchema>;
+
 export const backtestResults = pgTable("backtest_results", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   ticker: text("ticker").notNull(),

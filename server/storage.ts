@@ -6,7 +6,8 @@ import {
   type PortfolioPosition, type InsertPortfolioPosition,
   type TechnicalIndicator, type InsertTechnicalIndicator,
   type BacktestResult, type InsertBacktestResult,
-  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults,
+  type BacktestRun, type InsertBacktestRun,
+  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults, backtestRuns,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, sql, like, or, ilike, count } from "drizzle-orm";
@@ -46,6 +47,9 @@ export interface IStorage {
   getBacktestResults(runId?: string): Promise<BacktestResult[]>;
   getBacktestRuns(): Promise<{ runId: string; count: number; wins: number; losses: number; createdAt: Date | null }[]>;
   deleteBacktestRun(runId: string): Promise<void>;
+  insertBacktestRun(run: InsertBacktestRun): Promise<void>;
+  getBacktestRunConfig(runId: string): Promise<BacktestRun | undefined>;
+  getAllBacktestRunConfigs(): Promise<BacktestRun[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -293,6 +297,20 @@ export class DatabaseStorage implements IStorage {
 
   async deleteBacktestRun(runId: string): Promise<void> {
     await db.delete(backtestResults).where(eq(backtestResults.runId, runId));
+    await db.delete(backtestRuns).where(eq(backtestRuns.runId, runId));
+  }
+
+  async insertBacktestRun(run: InsertBacktestRun): Promise<void> {
+    await db.insert(backtestRuns).values(run);
+  }
+
+  async getBacktestRunConfig(runId: string): Promise<BacktestRun | undefined> {
+    const [row] = await db.select().from(backtestRuns).where(eq(backtestRuns.runId, runId));
+    return row;
+  }
+
+  async getAllBacktestRunConfigs(): Promise<BacktestRun[]> {
+    return db.select().from(backtestRuns).orderBy(sql`${backtestRuns.createdAt} desc`);
   }
 }
 

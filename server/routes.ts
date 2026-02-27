@@ -7,7 +7,7 @@ import { fetchHistoricalPrices } from "./yahoo-finance";
 import { importJPXStocks, fetchBatchPrices, startFetchAllPrices, getFetchAllProgress } from "./import-stocks";
 import { startScheduler, getSchedulerStatus, setSchedulerEnabled } from "./scheduler";
 import { startIndicatorBatch, getIndicatorBatchProgress } from "./technical-batch";
-import { startBacktest, getBacktestProgress } from "./backtest";
+import { startBacktest, getBacktestProgress, DEFAULT_PARAMS, type BacktestParams } from "./backtest";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -310,14 +310,42 @@ export async function registerRoutes(
     res.json(getIndicatorBatchProgress());
   });
 
-  app.post("/api/backtest/run", async (_req, res) => {
+  app.post("/api/backtest/run", async (req, res) => {
     try {
       const btProgress = getBacktestProgress();
       if (btProgress.status === "running") {
         return res.status(409).json({ message: "既にバックテストが実行中です" });
       }
-      await startBacktest(3);
-      res.json({ message: "バックテストを開始しました" });
+      const targetPercent = req.body.targetPercent != null ? Number(req.body.targetPercent) : DEFAULT_PARAMS.targetPercent;
+      const minBuyIndicators = req.body.minBuyIndicators != null ? Number(req.body.minBuyIndicators) : DEFAULT_PARAMS.minBuyIndicators;
+      const rsiMin = req.body.rsiMin != null ? Number(req.body.rsiMin) : DEFAULT_PARAMS.rsiMin;
+      const rsiMax = req.body.rsiMax != null ? Number(req.body.rsiMax) : DEFAULT_PARAMS.rsiMax;
+      const simDays = req.body.simDays != null ? Number(req.body.simDays) : DEFAULT_PARAMS.simDays;
+
+      if (targetPercent <= 0 || targetPercent > 10) {
+        return res.status(400).json({ message: "利確目標は0.1%〜10%の範囲で指定してください" });
+      }
+      if (minBuyIndicators < 2 || minBuyIndicators > 4) {
+        return res.status(400).json({ message: "最低買い指標数は2〜4の範囲で指定してください" });
+      }
+      if (rsiMin > rsiMax) {
+        return res.status(400).json({ message: "RSI下限は上限以下にしてください" });
+      }
+      if (simDays < 80 || simDays > 400) {
+        return res.status(400).json({ message: "シミュレーション日数は80〜400の範囲で指定してください" });
+      }
+
+      const params: BacktestParams = {
+        targetPercent,
+        minBuyIndicators,
+        rsiMin,
+        rsiMax,
+        requireMaBuy: Boolean(req.body.requireMaBuy),
+        simDays,
+        label: req.body.label || "",
+      };
+      await startBacktest(params, 3);
+      res.json({ message: "バックテストを開始しました", params });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -329,7 +357,13 @@ export async function registerRoutes(
 
   app.get("/api/backtest/runs", async (_req, res) => {
     const runs = await storage.getBacktestRuns();
-    res.json(runs);
+    const configs = await storage.getAllBacktestRunConfigs();
+    const configMap = new Map(configs.map(c => [c.runId, c]));
+    const enriched = runs.map(r => ({
+      ...r,
+      config: configMap.get(r.runId) || null,
+    }));
+    res.json(enriched);
   });
 
   app.get("/api/backtest/results", async (req, res) => {
