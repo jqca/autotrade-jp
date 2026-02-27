@@ -95,6 +95,7 @@ export const backtestRuns = pgTable("backtest_runs", {
   rsiMax: real("rsi_max").notNull().default(30),
   requireMaBuy: boolean("require_ma_buy").notNull().default(false),
   simDays: integer("sim_days").notNull().default(200),
+  timeframe: text("timeframe").notNull().default("1d"),
   label: text("label").notNull().default(""),
   createdAt: timestamp("created_at").defaultNow(),
 });

@@ -205,8 +205,8 @@ export async function registerRoutes(
     const range = (req.query.range as string) || "6mo";
     const interval = (req.query.interval as string) || "1d";
 
-    const validRanges = ["1mo", "3mo", "6mo", "1y", "2y", "5y"];
-    const validIntervals = ["1d", "1wk", "1mo"];
+    const validRanges = ["1d", "5d", "60d", "1mo", "3mo", "6mo", "1y", "2y", "5y"];
+    const validIntervals = ["1m", "5m", "15m", "1d", "1wk", "1mo"];
 
     if (!validRanges.includes(range)) {
       return res.status(400).json({ message: "Invalid range" });
@@ -341,10 +341,16 @@ export async function registerRoutes(
       if (rsiMin > rsiMax) {
         return res.status(400).json({ message: "RSI下限は上限以下にしてください" });
       }
-      if (simDays < 80 || simDays > 400) {
-        return res.status(400).json({ message: "シミュレーション日数は80〜400の範囲で指定してください" });
+      const timeframe = req.body.timeframe === "5m" ? "5m" : "1d";
+      if (timeframe === "5m") {
+        if (simDays < 10 || simDays > 60) {
+          return res.status(400).json({ message: "5分足のシミュレーション日数は10〜60の範囲で指定してください" });
+        }
+      } else {
+        if (simDays < 80 || simDays > 400) {
+          return res.status(400).json({ message: "シミュレーション日数は80〜400の範囲で指定してください" });
+        }
       }
-
       const params: BacktestParams = {
         targetPercent,
         minBuyIndicators,
@@ -352,6 +358,7 @@ export async function registerRoutes(
         rsiMax,
         requireMaBuy: Boolean(req.body.requireMaBuy),
         simDays,
+        timeframe,
         label: req.body.label || "",
       };
       await startBacktest(params, 3);

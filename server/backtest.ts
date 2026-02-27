@@ -9,6 +9,7 @@ export interface BacktestParams {
   rsiMax: number;
   requireMaBuy: boolean;
   simDays: number;
+  timeframe: string;
   label: string;
 }
 
@@ -19,6 +20,7 @@ export const DEFAULT_PARAMS: BacktestParams = {
   rsiMax: 30,
   requireMaBuy: false,
   simDays: 200,
+  timeframe: "1d",
   label: "",
 };
 
@@ -88,10 +90,10 @@ interface DayIndicators {
   overallLabel: string;
 }
 
-function computeIndicatorsAtDay(closes: number[], dayIndex: number): DayIndicators | null {
+function computeIndicatorsAtIndex(closes: number[], dayIndex: number, minBars: number = 80): DayIndicators | null {
   const slice = closes.slice(0, dayIndex + 1);
   const n = slice.length;
-  if (n < 80) return null;
+  if (n < minBars) return null;
 
   const ma5Arr = sma(slice, 5);
   const ma25Arr = sma(slice, 25);
@@ -177,6 +179,234 @@ function computeIndicatorsAtDay(closes: number[], dayIndex: number): DayIndicato
   return { macdTrend, rsiTrend, maTrend, bbTrend, rsiValue, overallSignal, overallLabel };
 }
 
+function extractDatePart(datetime: string): string {
+  return datetime.split("T")[0];
+}
+
+function groupBarsByDay(bars: HistoricalPrice[]): Map<string, HistoricalPrice[]> {
+  const dayMap = new Map<string, HistoricalPrice[]>();
+  for (const bar of bars) {
+    const day = extractDatePart(bar.date);
+    if (!dayMap.has(day)) dayMap.set(day, []);
+    dayMap.get(day)!.push(bar);
+  }
+  return dayMap;
+}
+
+async function runDailyBacktest(params: BacktestParams, runId: string, tickers: string[], concurrency: number): Promise<void> {
+  for (let i = 0; i < tickers.length; i += concurrency) {
+    const batch = tickers.slice(i, i + concurrency);
+
+    await Promise.allSettled(
+      batch.map(async (ticker) => {
+        try {
+          const history = await fetchHistoricalPrices(ticker, "2y", "1d");
+          if (history.length < 280) {
+            progress.processed++;
+            return;
+          }
+
+          const closes = history.map(p => p.close);
+          const dates = history.map(p => p.date);
+          const opens = history.map(p => p.open);
+          const highs = history.map(p => p.high);
+
+          const startIdx = Math.max(79, closes.length - params.simDays - 1);
+
+          for (let d = startIdx; d < closes.length - 1; d++) {
+            const indicators = computeIndicatorsAtIndex(closes, d);
+            if (!indicators) continue;
+
+            const buyIndicators = [indicators.macdTrend, indicators.rsiTrend, indicators.maTrend, indicators.bbTrend]
+              .filter(t => t === "buy").length;
+
+            if (indicators.overallSignal !== "buy" || buyIndicators < params.minBuyIndicators) continue;
+            if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
+            if (indicators.rsiValue != null) {
+              if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
+            }
+
+            const buyDayIdx = d + 1;
+            if (buyDayIdx >= closes.length) continue;
+
+            const buyPrice = opens[buyDayIdx];
+            const dayHigh = highs[buyDayIdx];
+            const targetMultiplier = 1 + params.targetPercent / 100;
+            const targetPrice = Math.round(buyPrice * targetMultiplier * 100) / 100;
+            const isWin = dayHigh >= targetPrice;
+            const sellPrice = isWin ? targetPrice : closes[buyDayIdx];
+            const profitLoss = Math.round((sellPrice - buyPrice) * 100) / 100;
+            const profitLossPercent = Math.round((profitLoss / buyPrice) * 10000) / 100;
+
+            const result: InsertBacktestResult = {
+              ticker,
+              signalDate: dates[d],
+              signalLabel: indicators.overallLabel,
+              buyDate: dates[buyDayIdx],
+              buyPrice,
+              dayHigh,
+              sellDate: dates[buyDayIdx],
+              sellPrice,
+              profitLoss,
+              profitLossPercent,
+              isWin,
+              macdTrend: indicators.macdTrend,
+              rsiTrend: indicators.rsiTrend,
+              maTrend: indicators.maTrend,
+              bbTrend: indicators.bbTrend,
+              rsiValue: indicators.rsiValue,
+              runId,
+            };
+
+            await storage.insertBacktestResult(result);
+            progress.signals++;
+          }
+        } catch {
+          progress.errors++;
+        }
+        progress.processed++;
+      })
+    );
+
+    progress.message = `${progress.processed}/${progress.total} 処理済み (${progress.signals}件シグナル検出)`;
+
+    if (i + concurrency < tickers.length) {
+      await new Promise(r => setTimeout(r, 300));
+    }
+  }
+}
+
+async function runIntradayBacktest(params: BacktestParams, runId: string, tickers: string[], concurrency: number): Promise<void> {
+  for (let i = 0; i < tickers.length; i += concurrency) {
+    const batch = tickers.slice(i, i + concurrency);
+
+    await Promise.allSettled(
+      batch.map(async (ticker) => {
+        try {
+          const bars = await fetchHistoricalPrices(ticker, "60d", "5m");
+          if (bars.length < 200) {
+            progress.processed++;
+            return;
+          }
+
+          bars.sort((a, b) => a.date.localeCompare(b.date));
+
+          const dayMap = groupBarsByDay(bars);
+          const tradingDays = Array.from(dayMap.keys()).sort();
+
+          const closes = bars.map(b => b.close);
+
+          let barOffset = 0;
+          const dayBarOffsets: { day: string; startIdx: number; endIdx: number }[] = [];
+          const dayOffsetMap = new Map<string, { startIdx: number; endIdx: number }>();
+          for (const day of tradingDays) {
+            const dayBars = dayMap.get(day)!;
+            const info = { startIdx: barOffset, endIdx: barOffset + dayBars.length - 1 };
+            dayBarOffsets.push({ day, ...info });
+            dayOffsetMap.set(day, info);
+            barOffset += dayBars.length;
+          }
+
+          const simDays = Math.min(params.simDays, tradingDays.length);
+          const startDayIdx = Math.max(0, tradingDays.length - simDays - 1);
+
+          for (let dayIdx = startDayIdx; dayIdx < tradingDays.length - 1; dayIdx++) {
+            const dayInfo = dayBarOffsets[dayIdx];
+            const dayBars = dayMap.get(dayInfo.day)!;
+
+            for (let barInDay = 0; barInDay < dayBars.length - 1; barInDay++) {
+              const globalIdx = dayInfo.startIdx + barInDay;
+              if (globalIdx < 50) continue;
+
+              const indicators = computeIndicatorsAtIndex(closes, globalIdx, 50);
+              if (!indicators) continue;
+
+              const buyIndicators = [indicators.macdTrend, indicators.rsiTrend, indicators.maTrend, indicators.bbTrend]
+                .filter(t => t === "buy").length;
+
+              if (indicators.overallSignal !== "buy" || buyIndicators < params.minBuyIndicators) continue;
+              if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
+              if (indicators.rsiValue != null) {
+                if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
+              }
+
+              const entryBarGlobal = globalIdx + 1;
+              if (entryBarGlobal >= bars.length) continue;
+
+              const entryBar = bars[entryBarGlobal];
+              const buyPrice = entryBar.open;
+              const entryDay = extractDatePart(entryBar.date);
+
+              const targetMultiplier = 1 + params.targetPercent / 100;
+              const targetPrice = Math.round(buyPrice * targetMultiplier * 100) / 100;
+
+              let isWin = false;
+              let sellPrice = 0;
+              let maxHigh = entryBar.high;
+              let sellDate = entryBar.date;
+
+              const entryDayInfo = dayOffsetMap.get(entryDay);
+              if (!entryDayInfo) continue;
+
+              for (let k = entryBarGlobal; k <= entryDayInfo.endIdx; k++) {
+                if (bars[k].high > maxHigh) maxHigh = bars[k].high;
+                if (bars[k].high >= targetPrice) {
+                  isWin = true;
+                  sellPrice = targetPrice;
+                  sellDate = bars[k].date;
+                  break;
+                }
+              }
+
+              if (!isWin) {
+                sellPrice = bars[entryDayInfo.endIdx].close;
+                sellDate = bars[entryDayInfo.endIdx].date;
+              }
+
+              const profitLoss = Math.round((sellPrice - buyPrice) * 100) / 100;
+              const profitLossPercent = Math.round((profitLoss / buyPrice) * 10000) / 100;
+
+              const result: InsertBacktestResult = {
+                ticker,
+                signalDate: bars[globalIdx].date,
+                signalLabel: indicators.overallLabel,
+                buyDate: entryBar.date,
+                buyPrice,
+                dayHigh: maxHigh,
+                sellDate,
+                sellPrice,
+                profitLoss,
+                profitLossPercent,
+                isWin,
+                macdTrend: indicators.macdTrend,
+                rsiTrend: indicators.rsiTrend,
+                maTrend: indicators.maTrend,
+                bbTrend: indicators.bbTrend,
+                rsiValue: indicators.rsiValue,
+                runId,
+              };
+
+              await storage.insertBacktestResult(result);
+              progress.signals++;
+
+              break;
+            }
+          }
+        } catch {
+          progress.errors++;
+        }
+        progress.processed++;
+      })
+    );
+
+    progress.message = `${progress.processed}/${progress.total} 処理済み (${progress.signals}件シグナル検出)`;
+
+    if (i + concurrency < tickers.length) {
+      await new Promise(r => setTimeout(r, 800));
+    }
+  }
+}
+
 export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, concurrency: number = 3): Promise<void> {
   if (progress.status === "running") {
     throw new Error("既にバックテストが実行中です");
@@ -185,6 +415,7 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
   const pricedStocks = await storage.getStocksWithPrices();
   const tickers = pricedStocks.map(s => s.ticker);
   const runId = `bt_${Date.now()}`;
+  const isIntraday = params.timeframe === "5m";
 
   const runConfig: InsertBacktestRun = {
     runId,
@@ -194,7 +425,8 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
     rsiMax: params.rsiMax,
     requireMaBuy: params.requireMaBuy,
     simDays: params.simDays,
-    label: params.label || `目標${params.targetPercent}% 指標${params.minBuyIndicators}+ RSI${params.rsiMin}-${params.rsiMax}${params.requireMaBuy ? " MA必須" : ""}`,
+    timeframe: params.timeframe,
+    label: params.label || `${isIntraday ? "5分足" : "日足"} 目標${params.targetPercent}% 指標${params.minBuyIndicators}+ RSI${params.rsiMin}-${params.rsiMax}${params.requireMaBuy ? " MA必須" : ""}`,
   };
   await storage.insertBacktestRun(runConfig);
 
@@ -205,95 +437,18 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
   progress.errors = 0;
   progress.startedAt = Date.now();
   progress.completedAt = null;
-  progress.message = "バックテストを開始しました...";
+  progress.message = `${isIntraday ? "5分足" : "日足"}バックテストを開始しました...`;
   progress.runId = runId;
   progress.params = params;
 
-  console.log(`[Backtest] ${tickers.length}銘柄のバックテストを開始 (runId: ${runId}, params: ${JSON.stringify(params)})`);
+  console.log(`[Backtest] ${tickers.length}銘柄の${isIntraday ? "5分足" : "日足"}バックテストを開始 (runId: ${runId}, params: ${JSON.stringify(params)})`);
 
   (async () => {
     try {
-      for (let i = 0; i < tickers.length; i += concurrency) {
-        const batch = tickers.slice(i, i + concurrency);
-
-        await Promise.allSettled(
-          batch.map(async (ticker) => {
-            try {
-              const history = await fetchHistoricalPrices(ticker, "2y", "1d");
-              if (history.length < 280) {
-                progress.processed++;
-                return;
-              }
-
-              const closes = history.map(p => p.close);
-              const dates = history.map(p => p.date);
-              const opens = history.map(p => p.open);
-              const highs = history.map(p => p.high);
-
-              const startIdx = Math.max(79, closes.length - params.simDays - 1);
-
-              for (let d = startIdx; d < closes.length - 1; d++) {
-                const indicators = computeIndicatorsAtDay(closes, d);
-                if (!indicators) continue;
-
-                const buyIndicators = [indicators.macdTrend, indicators.rsiTrend, indicators.maTrend, indicators.bbTrend]
-                  .filter(t => t === "buy").length;
-
-                if (indicators.overallSignal !== "buy" || buyIndicators < params.minBuyIndicators) continue;
-
-                if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
-
-                if (indicators.rsiValue != null) {
-                  if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
-                }
-
-                const buyDayIdx = d + 1;
-                if (buyDayIdx >= closes.length) continue;
-
-                const buyPrice = opens[buyDayIdx];
-                const dayHigh = highs[buyDayIdx];
-                const targetMultiplier = 1 + params.targetPercent / 100;
-                const targetPrice = Math.round(buyPrice * targetMultiplier * 100) / 100;
-                const isWin = dayHigh >= targetPrice;
-                const sellPrice = isWin ? targetPrice : closes[buyDayIdx];
-                const profitLoss = Math.round((sellPrice - buyPrice) * 100) / 100;
-                const profitLossPercent = Math.round((profitLoss / buyPrice) * 10000) / 100;
-
-                const result: InsertBacktestResult = {
-                  ticker,
-                  signalDate: dates[d],
-                  signalLabel: indicators.overallLabel,
-                  buyDate: dates[buyDayIdx],
-                  buyPrice,
-                  dayHigh,
-                  sellDate: dates[buyDayIdx],
-                  sellPrice,
-                  profitLoss,
-                  profitLossPercent,
-                  isWin,
-                  macdTrend: indicators.macdTrend,
-                  rsiTrend: indicators.rsiTrend,
-                  maTrend: indicators.maTrend,
-                  bbTrend: indicators.bbTrend,
-                  rsiValue: indicators.rsiValue,
-                  runId,
-                };
-
-                await storage.insertBacktestResult(result);
-                progress.signals++;
-              }
-            } catch {
-              progress.errors++;
-            }
-            progress.processed++;
-          })
-        );
-
-        progress.message = `${progress.processed}/${progress.total} 処理済み (${progress.signals}件シグナル検出)`;
-
-        if (i + concurrency < tickers.length) {
-          await new Promise(r => setTimeout(r, 300));
-        }
+      if (isIntraday) {
+        await runIntradayBacktest(params, runId, tickers, concurrency);
+      } else {
+        await runDailyBacktest(params, runId, tickers, concurrency);
       }
 
       progress.status = "completed";

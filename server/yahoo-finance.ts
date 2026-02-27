@@ -7,6 +7,19 @@ export interface HistoricalPrice {
   volume: number;
 }
 
+const INTRADAY_INTERVALS = ["1m", "2m", "5m", "15m", "30m", "60m", "90m"];
+
+function toJSTString(ts: number, intraday: boolean): string {
+  const jst = new Date(ts * 1000 + 9 * 60 * 60 * 1000);
+  const y = jst.getUTCFullYear();
+  const mo = String(jst.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(jst.getUTCDate()).padStart(2, "0");
+  if (!intraday) return `${y}-${mo}-${d}`;
+  const h = String(jst.getUTCHours()).padStart(2, "0");
+  const mi = String(jst.getUTCMinutes()).padStart(2, "0");
+  return `${y}-${mo}-${d}T${h}:${mi}`;
+}
+
 export async function fetchHistoricalPrices(
   ticker: string,
   range: string = "6mo",
@@ -42,6 +55,7 @@ export async function fetchHistoricalPrices(
     throw new Error("No quote data available");
   }
 
+  const isIntraday = INTRADAY_INTERVALS.includes(interval);
   const prices: HistoricalPrice[] = [];
 
   for (let i = 0; i < timestamps.length; i++) {
@@ -52,9 +66,8 @@ export async function fetchHistoricalPrices(
     const volume = quote.volume?.[i];
 
     if (open != null && high != null && low != null && close != null) {
-      const date = new Date(timestamps[i] * 1000);
       prices.push({
-        date: date.toISOString().split("T")[0],
+        date: toJSTString(timestamps[i], isIntraday),
         open: Math.round(open * 10) / 10,
         high: Math.round(high * 10) / 10,
         low: Math.round(low * 10) / 10,

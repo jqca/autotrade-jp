@@ -49,6 +49,7 @@ interface BacktestParams {
   rsiMax: number;
   requireMaBuy: boolean;
   simDays: number;
+  timeframe: string;
   label: string;
 }
 
@@ -62,8 +63,9 @@ function RunLabel({ run }: { run: BacktestRun }) {
     ? new Date(run.createdAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
     : "";
   const cfg = run.config;
+  const tfLabel = cfg?.timeframe === "5m" ? "5分足" : "日足";
   const paramStr = cfg
-    ? `目標${cfg.targetPercent}% 指標${cfg.minBuyIndicators}+ RSI${cfg.rsiMin}-${cfg.rsiMax}${cfg.requireMaBuy ? " MA必須" : ""}`
+    ? `${tfLabel} 目標${cfg.targetPercent}% 指標${cfg.minBuyIndicators}+ RSI${cfg.rsiMin}-${cfg.rsiMax}${cfg.requireMaBuy ? " MA必須" : ""}`
     : "";
   return <span>{dateStr} {paramStr} ({run.count}件)</span>;
 }
@@ -80,6 +82,7 @@ export default function Backtest() {
   const [rsiMax, setRsiMax] = useState(30);
   const [requireMaBuy, setRequireMaBuy] = useState(false);
   const [simDays, setSimDays] = useState(200);
+  const [timeframe, setTimeframe] = useState("1d");
 
   const { data: progressData } = useQuery<BacktestProgress>({
     queryKey: ["/api/backtest/progress"],
@@ -118,6 +121,7 @@ export default function Backtest() {
       rsiMax,
       requireMaBuy,
       simDays,
+      timeframe,
       label: "",
     }),
     onSuccess: () => {
@@ -181,6 +185,9 @@ export default function Backtest() {
             <Progress value={progressData.total > 0 ? (progressData.processed / progressData.total) * 100 : 0} />
             {progressData.params && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                <Badge variant={progressData.params.timeframe === "5m" ? "default" : "outline"}>
+                  {progressData.params.timeframe === "5m" ? "5分足" : "日足"}
+                </Badge>
                 <Badge variant="outline">目標 {progressData.params.targetPercent}%</Badge>
                 <Badge variant="outline">指標 {progressData.params.minBuyIndicators}+</Badge>
                 <Badge variant="outline">RSI {progressData.params.rsiMin}-{progressData.params.rsiMax}</Badge>
@@ -214,6 +221,33 @@ export default function Backtest() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
+              <div className="space-y-3 pb-2 border-b">
+                <Label className="text-sm font-medium">時間足</Label>
+                <div className="flex gap-2">
+                  <Button
+                    variant={timeframe === "1d" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => { setTimeframe("1d"); setSimDays(200); }}
+                    data-testid="button-timeframe-1d"
+                  >
+                    日足（過去2年）
+                  </Button>
+                  <Button
+                    variant={timeframe === "5m" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => { setTimeframe("5m"); setSimDays(60); }}
+                    data-testid="button-timeframe-5m"
+                  >
+                    5分足（過去60日）
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {timeframe === "5m"
+                    ? "Yahoo Financeから過去60日分の5分足データを取得してデイトレシミュレーションを行います"
+                    : "過去2年分の日足データでスイングトレードシミュレーションを行います"}
+                </p>
+              </div>
+
               <div className="grid gap-6 sm:grid-cols-2">
                 <div className="space-y-3">
                   <Label className="text-sm font-medium">利確目標 (%)</Label>
@@ -278,9 +312,9 @@ export default function Backtest() {
                     <Slider
                       value={[simDays]}
                       onValueChange={([v]) => setSimDays(v)}
-                      min={80}
-                      max={400}
-                      step={10}
+                      min={timeframe === "5m" ? 10 : 80}
+                      max={timeframe === "5m" ? 60 : 400}
+                      step={timeframe === "5m" ? 5 : 10}
                       className="flex-1"
                       data-testid="slider-sim-days"
                     />
@@ -288,6 +322,9 @@ export default function Backtest() {
                       {simDays}日
                     </Badge>
                   </div>
+                  {timeframe === "5m" && (
+                    <p className="text-xs text-muted-foreground">Yahoo Financeの5分足は最大60日分取得可能です</p>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-3 sm:col-span-2">
@@ -314,6 +351,7 @@ export default function Backtest() {
                     {isRunning ? "実行中..." : "この条件でバックテスト実行"}
                   </Button>
                   <div className="flex gap-2 text-xs text-muted-foreground flex-wrap">
+                    <Badge variant={timeframe === "5m" ? "default" : "outline"}>{timeframe === "5m" ? "5分足" : "日足"}</Badge>
                     <Badge variant="outline">目標 {targetPercent.toFixed(1)}%</Badge>
                     <Badge variant="outline">指標 {minBuyIndicators}+</Badge>
                     <Badge variant="outline">RSI {rsiMin}-{rsiMax}</Badge>
@@ -330,55 +368,85 @@ export default function Backtest() {
               <CardTitle className="text-sm text-muted-foreground">プリセット条件</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-2 sm:grid-cols-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { setTargetPercent(1.0); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); }}
-                  data-testid="button-preset-default"
-                >
-                  デフォルト（現行条件）
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { setTargetPercent(0.5); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); }}
-                  data-testid="button-preset-low-target"
-                >
-                  低い利確目標（0.5%）
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { setTargetPercent(1.0); setMinBuyIndicators(4); setRsiMin(20); setRsiMax(30); setRequireMaBuy(true); setSimDays(200); }}
-                  data-testid="button-preset-strict"
-                >
-                  厳格フィルター
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { setTargetPercent(0.5); setMinBuyIndicators(3); setRsiMin(20); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); }}
-                  data-testid="button-preset-conservative"
-                >
-                  保守的
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { setTargetPercent(0.7); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(true); setSimDays(200); }}
-                  data-testid="button-preset-trend-follow"
-                >
-                  トレンドフォロー
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { setTargetPercent(2.0); setMinBuyIndicators(4); setRsiMin(0); setRsiMax(25); setRequireMaBuy(true); setSimDays(200); }}
-                  data-testid="button-preset-aggressive"
-                >
-                  積極的（高目標）
-                </Button>
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground font-medium">日足プリセット</p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(1.0); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); }}
+                    data-testid="button-preset-default"
+                  >
+                    デフォルト（現行条件）
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(0.5); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); }}
+                    data-testid="button-preset-low-target"
+                  >
+                    低い利確目標（0.5%）
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(1.0); setMinBuyIndicators(4); setRsiMin(20); setRsiMax(30); setRequireMaBuy(true); setSimDays(200); }}
+                    data-testid="button-preset-strict"
+                  >
+                    厳格フィルター
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(0.5); setMinBuyIndicators(3); setRsiMin(20); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); }}
+                    data-testid="button-preset-conservative"
+                  >
+                    保守的
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(0.7); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(true); setSimDays(200); }}
+                    data-testid="button-preset-trend-follow"
+                  >
+                    トレンドフォロー
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(2.0); setMinBuyIndicators(4); setRsiMin(0); setRsiMax(25); setRequireMaBuy(true); setSimDays(200); }}
+                    data-testid="button-preset-aggressive"
+                  >
+                    積極的（高目標）
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground font-medium mt-4">5分足プリセット（デイトレ向け）</p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.3); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(60); }}
+                    data-testid="button-preset-5m-default"
+                  >
+                    5分足デフォルト
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.5); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(60); }}
+                    data-testid="button-preset-5m-medium"
+                  >
+                    5分足 中目標（0.5%）
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.3); setMinBuyIndicators(3); setRsiMin(20); setRsiMax(30); setRequireMaBuy(true); setSimDays(60); }}
+                    data-testid="button-preset-5m-strict"
+                  >
+                    5分足 厳格
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -398,6 +466,7 @@ export default function Backtest() {
                     <thead>
                       <tr className="border-b">
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">実行日時</th>
+                        <th className="text-center py-2 px-2 font-medium text-muted-foreground">時間足</th>
                         <th className="text-center py-2 px-2 font-medium text-muted-foreground">目標%</th>
                         <th className="text-center py-2 px-2 font-medium text-muted-foreground">指標数</th>
                         <th className="text-center py-2 px-2 font-medium text-muted-foreground">RSI範囲</th>
@@ -429,6 +498,11 @@ export default function Backtest() {
                                     : "-"}
                                 </span>
                               </div>
+                            </td>
+                            <td className="text-center py-2.5 px-2">
+                              <Badge variant={run.config?.timeframe === "5m" ? "default" : "outline"} className="text-xs">
+                                {run.config?.timeframe === "5m" ? "5分足" : "日足"}
+                              </Badge>
                             </td>
                             <td className="text-center py-2.5 px-2">
                               <Badge variant="outline" className="text-xs">{run.config?.targetPercent ?? "?"}%</Badge>
@@ -492,6 +566,9 @@ export default function Backtest() {
               <CardContent className="py-3 px-4">
                 <div className="flex items-center gap-2 text-sm flex-wrap">
                   <span className="text-muted-foreground">実行条件:</span>
+                  <Badge variant={activeRunConfig.timeframe === "5m" ? "default" : "outline"}>
+                    {activeRunConfig.timeframe === "5m" ? "5分足" : "日足"}
+                  </Badge>
                   <Badge variant="outline">目標 {activeRunConfig.targetPercent}%</Badge>
                   <Badge variant="outline">指標 {activeRunConfig.minBuyIndicators}+</Badge>
                   <Badge variant="outline">RSI {activeRunConfig.rsiMin}-{activeRunConfig.rsiMax}</Badge>

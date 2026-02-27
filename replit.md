@@ -90,8 +90,16 @@ shared/
 - Real historical stock prices fetched from Yahoo Finance API (no API key needed)
 - Ticker format: `{code}.T` (e.g., 7203.T for Toyota on TSE)
 
+## Backtest
+- Two timeframe modes: 日足 (daily, 2y data) and 5分足 (5-minute, 60d data)
+- 5-min backtest: Yahoo Finance 5m bars, groups by trading day, signal→entry at next bar open, exit at target or EOD close
+- `timeframe` field in `backtest_runs` table (default "1d" for backward compat)
+- Intraday indicators computed on 5-min closes with minimum 50 bars (vs 80 for daily)
+- simDays range: daily=80-400, 5min=10-60
+
 ## Historical Price Data
-- Supported ranges: 1mo, 3mo, 6mo, 1y, 2y, 5y
+- Supported ranges: 1d, 5d, 60d, 1mo, 3mo, 6mo, 1y, 2y, 5y
+- Supported intervals: 1m, 5m, 15m, 1d, 1wk, 1mo
 - Stock detail page with interactive area chart, period summary, and price statistics
 - Technical indicators computed on frontend from historical data:
   - **MACD** (12, 26, 9) - trend reversal detection with histogram
