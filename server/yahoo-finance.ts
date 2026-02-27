@@ -12,8 +12,8 @@ export async function fetchHistoricalPrices(
   range: string = "6mo",
   interval: string = "1d"
 ): Promise<HistoricalPrice[]> {
-  if (!/^\d{4}$/.test(ticker)) {
-    throw new Error("Invalid ticker format. Expected 4-digit TSE code.");
+  if (!/^[0-9A-Za-z]{4}$/.test(ticker)) {
+    throw new Error("Invalid ticker format. Expected 4-character TSE code.");
   }
   const symbol = encodeURIComponent(`${ticker}.T`);
   const url = `https://query2.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}`;

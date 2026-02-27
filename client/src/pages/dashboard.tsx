@@ -33,7 +33,8 @@ function StatCard({ title, value, change, icon: Icon, trend }: {
 }
 
 export default function Dashboard() {
-  const { data: stocks, isLoading: stocksLoading } = useQuery<Stock[]>({ queryKey: ["/api/stocks"] });
+  const { data: stocksRaw, isLoading: stocksLoading } = useQuery<Stock[]>({ queryKey: ["/api/stocks"] });
+  const stocks = stocksRaw?.filter(s => s.currentPrice > 0 && s.previousClose > 0);
   const { data: strategies, isLoading: strategiesLoading } = useQuery<Strategy[]>({ queryKey: ["/api/strategies"] });
   const { data: trades, isLoading: tradesLoading } = useQuery<Trade[]>({ queryKey: ["/api/trades"] });
   const { data: positions, isLoading: positionsLoading } = useQuery<PortfolioPosition[]>({ queryKey: ["/api/portfolio"] });

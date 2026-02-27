@@ -7,7 +7,7 @@ import {
   users, stocks, strategies, trades, portfolioPositions,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, sql, like, or, ilike, count } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -32,6 +32,10 @@ export interface IStorage {
   deletePosition(ticker: string): Promise<void>;
   getStockCount(): Promise<number>;
   updatePreviousClose(ticker: string, previousClose: number): Promise<void>;
+  bulkUpsertStocks(stockList: InsertStock[]): Promise<number>;
+  searchStocks(query: string, limit: number, offset: number): Promise<{ stocks: Stock[]; total: number }>;
+  getWatchedStocks(): Promise<Stock[]>;
+  getStocksWithPrices(): Promise<Stock[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -158,6 +162,56 @@ export class DatabaseStorage implements IStorage {
 
   async updatePreviousClose(ticker: string, previousClose: number): Promise<void> {
     await db.update(stocks).set({ previousClose }).where(eq(stocks.ticker, ticker));
+  }
+
+  async bulkUpsertStocks(stockList: InsertStock[]): Promise<number> {
+    let inserted = 0;
+    const batchSize = 100;
+    for (let i = 0; i < stockList.length; i += batchSize) {
+      const batch = stockList.slice(i, i + batchSize);
+      await db.insert(stocks).values(batch).onConflictDoUpdate({
+        target: stocks.ticker,
+        set: {
+          name: sql`excluded.name`,
+          sector: sql`excluded.sector`,
+        },
+      });
+      inserted += batch.length;
+    }
+    return inserted;
+  }
+
+  async searchStocks(query: string, limit: number, offset: number): Promise<{ stocks: Stock[]; total: number }> {
+    const pattern = `%${query}%`;
+    const whereClause = query
+      ? or(
+          ilike(stocks.ticker, pattern),
+          ilike(stocks.name, pattern),
+          ilike(stocks.sector, pattern)
+        )
+      : undefined;
+
+    const [totalResult] = await db
+      .select({ count: count() })
+      .from(stocks)
+      .where(whereClause);
+
+    const results = await db
+      .select()
+      .from(stocks)
+      .where(whereClause)
+      .orderBy(stocks.ticker)
+      .limit(limit)
+      .offset(offset);
+
+    return { stocks: results, total: Number(totalResult.count) };
+  }
+  async getWatchedStocks(): Promise<Stock[]> {
+    return db.select().from(stocks).where(eq(stocks.isWatched, true));
+  }
+
+  async getStocksWithPrices(): Promise<Stock[]> {
+    return db.select().from(stocks).where(sql`${stocks.currentPrice} > 0`);
   }
 }
 

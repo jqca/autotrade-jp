@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { insertStrategySchema } from "@shared/schema";
 import { z } from "zod";
 import { fetchHistoricalPrices } from "./yahoo-finance";
+import { importJPXStocks, fetchBatchPrices } from "./import-stocks";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -11,9 +12,22 @@ export async function registerRoutes(
 ): Promise<Server> {
   await seedData();
 
-  app.get("/api/stocks", async (_req, res) => {
-    const stocks = await storage.getAllStocks();
-    res.json(stocks);
+  app.get("/api/stocks", async (req, res) => {
+    const query = (req.query.q as string) || "";
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const offset = parseInt(req.query.offset as string) || 0;
+    const search = req.query.search as string;
+
+    if (search !== undefined || req.query.q !== undefined) {
+      const result = await storage.searchStocks(query, limit, offset);
+      res.json(result);
+    } else if (req.query.watched !== undefined) {
+      const watched = await storage.getWatchedStocks();
+      res.json(watched);
+    } else {
+      const stocks = await storage.getStocksWithPrices();
+      res.json(stocks);
+    }
   });
 
   app.patch("/api/stocks/:ticker/watch", async (req, res) => {
@@ -32,7 +46,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/simulate-prices", async (_req, res) => {
-    const stocks = await storage.getAllStocks();
+    const stocks = await storage.getStocksWithPrices();
     for (const stock of stocks) {
       const changePercent = (Math.random() - 0.5) * 6;
       const newPrice = Math.round(stock.currentPrice * (1 + changePercent / 100));
@@ -202,6 +216,32 @@ export async function registerRoutes(
       res.json(prices);
     } catch (error: any) {
       res.status(500).json({ message: error.message || "Failed to fetch historical prices" });
+    }
+  });
+
+  app.post("/api/import-stocks", async (_req, res) => {
+    try {
+      const result = await importJPXStocks();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message || "Failed to import stocks" });
+    }
+  });
+
+  app.post("/api/fetch-prices", async (req, res) => {
+    const schema = z.object({
+      tickers: z.array(z.string()).max(50),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid request. Provide array of tickers (max 50)." });
+    }
+
+    try {
+      const updated = await fetchBatchPrices(parsed.data.tickers);
+      res.json({ updated, total: parsed.data.tickers.length });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message || "Failed to fetch prices" });
     }
   });
 
