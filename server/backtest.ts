@@ -193,6 +193,7 @@ export async function startBacktest(concurrency: number = 3): Promise<void> {
               const closes = history.map(p => p.close);
               const dates = history.map(p => p.date);
               const opens = history.map(p => p.open);
+              const highs = history.map(p => p.high);
 
               const simDays = 10;
               const startIdx = Math.max(79, closes.length - simDays - 1);
@@ -209,7 +210,10 @@ export async function startBacktest(concurrency: number = 3): Promise<void> {
                   if (buyDayIdx >= closes.length) continue;
 
                   const buyPrice = opens[buyDayIdx];
-                  const sellPrice = closes[buyDayIdx];
+                  const dayHigh = highs[buyDayIdx];
+                  const targetPrice = Math.round(buyPrice * 1.01 * 100) / 100;
+                  const isWin = dayHigh >= targetPrice;
+                  const sellPrice = isWin ? targetPrice : closes[buyDayIdx];
                   const profitLoss = Math.round((sellPrice - buyPrice) * 100) / 100;
                   const profitLossPercent = Math.round((profitLoss / buyPrice) * 10000) / 100;
 
@@ -219,11 +223,12 @@ export async function startBacktest(concurrency: number = 3): Promise<void> {
                     signalLabel: indicators.overallLabel,
                     buyDate: dates[buyDayIdx],
                     buyPrice,
+                    dayHigh,
                     sellDate: dates[buyDayIdx],
                     sellPrice,
                     profitLoss,
                     profitLossPercent,
-                    isWin: sellPrice > buyPrice,
+                    isWin,
                     macdTrend: indicators.macdTrend,
                     rsiTrend: indicators.rsiTrend,
                     maTrend: indicators.maTrend,

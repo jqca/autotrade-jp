@@ -94,6 +94,7 @@ export const backtestResults = pgTable("backtest_results", {
   signalLabel: text("signal_label").notNull(),
   buyDate: text("buy_date").notNull(),
   buyPrice: real("buy_price").notNull(),
+  dayHigh: real("day_high").notNull(),
   sellDate: text("sell_date").notNull(),
   sellPrice: real("sell_price").notNull(),
   profitLoss: real("profit_loss").notNull(),
