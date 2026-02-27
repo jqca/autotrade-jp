@@ -70,35 +70,35 @@ export default function Dashboard() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Dashboard</h1>
-        <p className="text-muted-foreground">Portfolio overview and trading activity</p>
+        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">ダッシュボード</h1>
+        <p className="text-muted-foreground">ポートフォリオの概要と取引状況</p>
       </div>
 
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Total Portfolio Value"
-          value={`${totalValue.toLocaleString("ja-JP")} JPY`}
-          change={`${totalPnL >= 0 ? "+" : ""}${totalPnL.toLocaleString("ja-JP")} JPY (${pnlPercent}%)`}
+          title="ポートフォリオ総額"
+          value={`${totalValue.toLocaleString("ja-JP")} 円`}
+          change={`${totalPnL >= 0 ? "+" : ""}${totalPnL.toLocaleString("ja-JP")} 円 (${pnlPercent}%)`}
           icon={Wallet}
           trend={totalPnL >= 0 ? "up" : "down"}
         />
         <StatCard
-          title="Active Strategies"
+          title="稼働中の戦略"
           value={`${activeStrategies}`}
-          change={`${strategies?.length ?? 0} total strategies`}
+          change={`全${strategies?.length ?? 0}件の戦略`}
           icon={Zap}
           trend="neutral"
         />
         <StatCard
-          title="Today's Trades"
+          title="本日の取引"
           value={`${todayTrades}`}
-          change={`${trades?.length ?? 0} total trades`}
+          change={`全${trades?.length ?? 0}件の取引`}
           icon={Activity}
           trend="neutral"
         />
         <StatCard
-          title="Holdings"
-          value={`${positions?.length ?? 0} stocks`}
+          title="保有銘柄数"
+          value={`${positions?.length ?? 0} 銘柄`}
           icon={BarChart3}
           trend="neutral"
         />
@@ -107,7 +107,7 @@ export default function Dashboard() {
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Recent Trades</CardTitle>
+            <CardTitle className="text-lg">最近の取引</CardTitle>
           </CardHeader>
           <CardContent>
             {trades && trades.length > 0 ? (
@@ -116,15 +116,15 @@ export default function Dashboard() {
                   <div key={trade.id} className="flex items-center justify-between gap-2 py-2 border-b last:border-0" data-testid={`trade-row-${trade.id}`}>
                     <div className="flex items-center gap-3">
                       <Badge variant={trade.side === "buy" ? "default" : "destructive"}>
-                        {trade.side === "buy" ? "Buy" : "Sell"}
+                        {trade.side === "buy" ? "買い" : "売り"}
                       </Badge>
                       <div>
                         <p className="font-medium text-sm">{trade.stockTicker}</p>
-                        <p className="text-xs text-muted-foreground">{trade.quantity} shares @ {trade.price.toLocaleString("ja-JP")} JPY</p>
+                        <p className="text-xs text-muted-foreground">{trade.quantity}株 @ {trade.price.toLocaleString("ja-JP")} 円</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium text-sm">{trade.total.toLocaleString("ja-JP")} JPY</p>
+                      <p className="font-medium text-sm">{trade.total.toLocaleString("ja-JP")} 円</p>
                       <p className="text-xs text-muted-foreground">
                         {new Date(trade.executedAt!).toLocaleDateString("ja-JP")}
                       </p>
@@ -135,7 +135,7 @@ export default function Dashboard() {
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <Activity className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>No trades yet</p>
+                <p>取引履歴はありません</p>
               </div>
             )}
           </CardContent>
@@ -143,7 +143,7 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Top Movers</CardTitle>
+            <CardTitle className="text-lg">値動きランキング</CardTitle>
           </CardHeader>
           <CardContent>
             {stocks && stocks.length > 0 ? (
@@ -161,7 +161,7 @@ export default function Dashboard() {
                           <p className="text-xs text-muted-foreground">{stock.name}</p>
                         </div>
                         <div className="text-right flex items-center gap-2">
-                          <span className="font-medium text-sm">{stock.currentPrice.toLocaleString("ja-JP")} JPY</span>
+                          <span className="font-medium text-sm">{stock.currentPrice.toLocaleString("ja-JP")} 円</span>
                           <Badge variant={isUp ? "default" : "destructive"} className="min-w-[60px] justify-center">
                             {isUp ? "+" : ""}{change.toFixed(2)}%
                           </Badge>
@@ -173,7 +173,7 @@ export default function Dashboard() {
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <BarChart3 className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>No stock data</p>
+                <p>銘柄データがありません</p>
               </div>
             )}
           </CardContent>

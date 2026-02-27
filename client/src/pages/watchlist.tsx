@@ -20,7 +20,7 @@ export default function Watchlist() {
       queryClient.invalidateQueries({ queryKey: ["/api/stocks"] });
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to update watchlist", variant: "destructive" });
+      toast({ title: "エラー", description: "ウォッチリストの更新に失敗しました", variant: "destructive" });
     },
   });
 
@@ -31,7 +31,7 @@ export default function Watchlist() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/stocks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/portfolio"] });
-      toast({ title: "Price Updated", description: "Market prices have been simulated" });
+      toast({ title: "価格更新完了", description: "市場価格のシミュレーションが完了しました" });
     },
   });
 
@@ -55,12 +55,12 @@ export default function Watchlist() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Watchlist</h1>
-          <p className="text-muted-foreground">Monitor Japanese stock prices</p>
+          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">ウォッチリスト</h1>
+          <p className="text-muted-foreground">日本株の株価をモニタリング</p>
         </div>
         <Button onClick={() => simulatePrices.mutate()} disabled={simulatePrices.isPending} data-testid="button-simulate-prices">
           <RefreshCw className={`h-4 w-4 mr-2 ${simulatePrices.isPending ? "animate-spin" : ""}`} />
-          Simulate Price Update
+          価格シミュレーション
         </Button>
       </div>
 
@@ -68,7 +68,7 @@ export default function Watchlist() {
         <div>
           <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
             <Star className="h-4 w-4 text-amber-500" />
-            Watching
+            お気に入り
           </h2>
           <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
             {watchedStocks.map((stock) => (
@@ -79,7 +79,7 @@ export default function Watchlist() {
       )}
 
       <div>
-        <h2 className="text-lg font-semibold mb-3">All Stocks</h2>
+        <h2 className="text-lg font-semibold mb-3">全銘柄</h2>
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
           {otherStocks.map((stock) => (
             <StockCard key={stock.id} stock={stock} onToggleWatch={toggleWatch} />
@@ -125,7 +125,7 @@ function StockCard({ stock, onToggleWatch }: { stock: Stock; onToggleWatch: any 
             <p className="text-2xl font-bold" data-testid={`text-price-${stock.ticker}`}>
               {stock.currentPrice.toLocaleString("ja-JP")}
             </p>
-            <p className="text-xs text-muted-foreground">JPY</p>
+            <p className="text-xs text-muted-foreground">円</p>
           </div>
           <div className="text-right">
             <div className={`flex items-center gap-1 text-sm font-medium ${isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
@@ -139,9 +139,9 @@ function StockCard({ stock, onToggleWatch }: { stock: Stock; onToggleWatch: any 
         </div>
 
         <div className="mt-3 pt-3 border-t flex items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span>High: {stock.dayHigh.toLocaleString("ja-JP")}</span>
-          <span>Low: {stock.dayLow.toLocaleString("ja-JP")}</span>
-          <span>Vol: {stock.volume.toLocaleString("ja-JP")}</span>
+          <span>高値: {stock.dayHigh.toLocaleString("ja-JP")}</span>
+          <span>安値: {stock.dayLow.toLocaleString("ja-JP")}</span>
+          <span>出来高: {stock.volume.toLocaleString("ja-JP")}</span>
         </div>
       </CardContent>
     </Card>

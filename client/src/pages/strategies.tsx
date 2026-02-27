@@ -18,12 +18,12 @@ import type { Strategy, Stock } from "@shared/schema";
 import { useState } from "react";
 
 const createStrategySchema = z.object({
-  name: z.string().min(1, "Strategy name is required"),
-  stockTicker: z.string().min(1, "Stock is required"),
-  type: z.string().min(1, "Type is required"),
-  buyCondition: z.coerce.number().min(0.1, "Must be positive"),
-  sellCondition: z.coerce.number().min(0.1, "Must be positive"),
-  quantity: z.coerce.number().int().min(1, "Minimum 1 share"),
+  name: z.string().min(1, "戦略名を入力してください"),
+  stockTicker: z.string().min(1, "銘柄を選択してください"),
+  type: z.string().min(1, "タイプを選択してください"),
+  buyCondition: z.coerce.number().min(0.1, "正の数を入力してください"),
+  sellCondition: z.coerce.number().min(0.1, "正の数を入力してください"),
+  quantity: z.coerce.number().int().min(1, "1株以上を指定してください"),
 });
 
 type CreateStrategyForm = z.infer<typeof createStrategySchema>;
@@ -54,10 +54,10 @@ export default function Strategies() {
       queryClient.invalidateQueries({ queryKey: ["/api/strategies"] });
       form.reset();
       setDialogOpen(false);
-      toast({ title: "Strategy Created", description: "Your trading strategy is now active" });
+      toast({ title: "戦略を作成しました", description: "取引戦略が有効になりました" });
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to create strategy", variant: "destructive" });
+      toast({ title: "エラー", description: "戦略の作成に失敗しました", variant: "destructive" });
     },
   });
 
@@ -76,7 +76,7 @@ export default function Strategies() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/strategies"] });
-      toast({ title: "Deleted", description: "Strategy has been removed" });
+      toast({ title: "削除完了", description: "戦略を削除しました" });
     },
   });
 
@@ -89,11 +89,11 @@ export default function Strategies() {
       queryClient.invalidateQueries({ queryKey: ["/api/trades"] });
       queryClient.invalidateQueries({ queryKey: ["/api/portfolio"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stocks"] });
-      toast({ title: "Executed", description: "Strategy evaluation completed" });
+      toast({ title: "実行完了", description: "戦略の評価が完了しました" });
     },
     onError: (error: Error) => {
       const msg = error.message.replace(/^\d+:\s*/, "");
-      toast({ title: "Execution Result", description: msg });
+      toast({ title: "実行結果", description: msg });
     },
   });
 
@@ -111,29 +111,29 @@ export default function Strategies() {
   }
 
   const typeLabels: Record<string, string> = {
-    price_drop_buy: "Price Drop Buy",
-    price_rise_sell: "Price Rise Sell",
-    threshold_buy: "Threshold Buy",
-    threshold_sell: "Threshold Sell",
+    price_drop_buy: "下落時買い",
+    price_rise_sell: "上昇時売り",
+    threshold_buy: "指値買い",
+    threshold_sell: "指値売り",
   };
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Trading Strategies</h1>
-          <p className="text-muted-foreground">Create and manage automated trading rules</p>
+          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">取引戦略</h1>
+          <p className="text-muted-foreground">自動売買ルールの作成と管理</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button data-testid="button-create-strategy">
               <Plus className="h-4 w-4 mr-2" />
-              New Strategy
+              新規戦略
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create Trading Strategy</DialogTitle>
+              <DialogTitle>取引戦略の作成</DialogTitle>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit((data) => createStrategy.mutate(data))} className="space-y-4">
@@ -142,8 +142,8 @@ export default function Strategies() {
                   name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Strategy Name</FormLabel>
-                      <FormControl><Input placeholder="e.g. Toyota Dip Buy" {...field} data-testid="input-strategy-name" /></FormControl>
+                      <FormLabel>戦略名</FormLabel>
+                      <FormControl><Input placeholder="例: トヨタ押し目買い" {...field} data-testid="input-strategy-name" /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -153,11 +153,11 @@ export default function Strategies() {
                   name="stockTicker"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Stock</FormLabel>
+                      <FormLabel>対象銘柄</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-stock">
-                            <SelectValue placeholder="Select a stock" />
+                            <SelectValue placeholder="銘柄を選択" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -175,7 +175,7 @@ export default function Strategies() {
                   name="type"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Strategy Type</FormLabel>
+                      <FormLabel>戦略タイプ</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-type">
@@ -183,10 +183,10 @@ export default function Strategies() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="price_drop_buy">Price Drop Buy (buy on dip %)</SelectItem>
-                          <SelectItem value="price_rise_sell">Price Rise Sell (sell on rise %)</SelectItem>
-                          <SelectItem value="threshold_buy">Threshold Buy (buy below price)</SelectItem>
-                          <SelectItem value="threshold_sell">Threshold Sell (sell above price)</SelectItem>
+                          <SelectItem value="price_drop_buy">下落時買い (下落率%で買い)</SelectItem>
+                          <SelectItem value="price_rise_sell">上昇時売り (上昇率%で売り)</SelectItem>
+                          <SelectItem value="threshold_buy">指値買い (指定価格以下で買い)</SelectItem>
+                          <SelectItem value="threshold_sell">指値売り (指定価格以上で売り)</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -199,7 +199,7 @@ export default function Strategies() {
                     name="buyCondition"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Buy Condition</FormLabel>
+                        <FormLabel>買い条件</FormLabel>
                         <FormControl><Input type="number" step="0.1" {...field} data-testid="input-buy-condition" /></FormControl>
                         <FormMessage />
                       </FormItem>
@@ -210,7 +210,7 @@ export default function Strategies() {
                     name="sellCondition"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Sell Condition</FormLabel>
+                        <FormLabel>売り条件</FormLabel>
                         <FormControl><Input type="number" step="0.1" {...field} data-testid="input-sell-condition" /></FormControl>
                         <FormMessage />
                       </FormItem>
@@ -222,14 +222,14 @@ export default function Strategies() {
                   name="quantity"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Quantity (shares)</FormLabel>
+                      <FormLabel>数量 (株)</FormLabel>
                       <FormControl><Input type="number" {...field} data-testid="input-quantity" /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
                 <Button type="submit" className="w-full" disabled={createStrategy.isPending} data-testid="button-submit-strategy">
-                  {createStrategy.isPending ? "Creating..." : "Create Strategy"}
+                  {createStrategy.isPending ? "作成中..." : "戦略を作成"}
                 </Button>
               </form>
             </Form>
@@ -261,20 +261,20 @@ export default function Strategies() {
 
                 <div className="grid grid-cols-3 gap-3 text-sm mt-4">
                   <div>
-                    <p className="text-muted-foreground text-xs">Buy at</p>
+                    <p className="text-muted-foreground text-xs">買い条件</p>
                     <p className="font-medium">
-                      {strategy.type.includes("threshold") ? `${strategy.buyCondition.toLocaleString("ja-JP")} JPY` : `${strategy.buyCondition}%`}
+                      {strategy.type.includes("threshold") ? `${strategy.buyCondition.toLocaleString("ja-JP")} 円` : `${strategy.buyCondition}%`}
                     </p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground text-xs">Sell at</p>
+                    <p className="text-muted-foreground text-xs">売り条件</p>
                     <p className="font-medium">
-                      {strategy.type.includes("threshold") ? `${strategy.sellCondition.toLocaleString("ja-JP")} JPY` : `${strategy.sellCondition}%`}
+                      {strategy.type.includes("threshold") ? `${strategy.sellCondition.toLocaleString("ja-JP")} 円` : `${strategy.sellCondition}%`}
                     </p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground text-xs">Quantity</p>
-                    <p className="font-medium">{strategy.quantity} shares</p>
+                    <p className="text-muted-foreground text-xs">数量</p>
+                    <p className="font-medium">{strategy.quantity} 株</p>
                   </div>
                 </div>
 
@@ -287,7 +287,7 @@ export default function Strategies() {
                     data-testid={`button-execute-${strategy.id}`}
                   >
                     <Zap className="h-3.5 w-3.5 mr-1" />
-                    Execute
+                    実行
                   </Button>
                   <Button
                     size="icon"
@@ -306,8 +306,8 @@ export default function Strategies() {
         <Card>
           <CardContent className="py-12 text-center">
             <Zap className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-            <h3 className="font-semibold mb-1">No strategies yet</h3>
-            <p className="text-muted-foreground text-sm">Create your first automated trading strategy</p>
+            <h3 className="font-semibold mb-1">戦略がありません</h3>
+            <p className="text-muted-foreground text-sm">最初の自動取引戦略を作成しましょう</p>
           </CardContent>
         </Card>
       )}

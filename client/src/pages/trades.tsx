@@ -21,8 +21,8 @@ export default function Trades() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Trade History</h1>
-        <p className="text-muted-foreground">View all executed trades</p>
+        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">取引履歴</h1>
+        <p className="text-muted-foreground">全ての約定済み取引を表示</p>
       </div>
 
       <Card>
@@ -32,12 +32,12 @@ export default function Trades() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Stock</TableHead>
-                    <TableHead>Side</TableHead>
-                    <TableHead className="text-right">Price</TableHead>
-                    <TableHead className="text-right">Quantity</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead>日時</TableHead>
+                    <TableHead>銘柄</TableHead>
+                    <TableHead>売買</TableHead>
+                    <TableHead className="text-right">価格</TableHead>
+                    <TableHead className="text-right">数量</TableHead>
+                    <TableHead className="text-right">約定金額</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -55,17 +55,17 @@ export default function Trades() {
                       <TableCell className="font-medium">{trade.stockTicker}</TableCell>
                       <TableCell>
                         <Badge variant={trade.side === "buy" ? "default" : "destructive"}>
-                          {trade.side === "buy" ? "Buy" : "Sell"}
+                          {trade.side === "buy" ? "買い" : "売り"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {trade.price.toLocaleString("ja-JP")} JPY
+                        {trade.price.toLocaleString("ja-JP")} 円
                       </TableCell>
                       <TableCell className="text-right font-mono">
                         {trade.quantity.toLocaleString("ja-JP")}
                       </TableCell>
                       <TableCell className="text-right font-medium font-mono">
-                        {trade.total.toLocaleString("ja-JP")} JPY
+                        {trade.total.toLocaleString("ja-JP")} 円
                       </TableCell>
                     </TableRow>
                   ))}
@@ -75,9 +75,9 @@ export default function Trades() {
           ) : (
             <div className="text-center py-16">
               <Activity className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-              <h3 className="font-semibold mb-1">No trades yet</h3>
+              <h3 className="font-semibold mb-1">取引履歴がありません</h3>
               <p className="text-muted-foreground text-sm">
-                Trades will appear here when your strategies execute
+                戦略が実行されると、ここに取引が表示されます
               </p>
             </div>
           )}

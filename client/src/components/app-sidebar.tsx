@@ -13,11 +13,11 @@ import {
 } from "@/components/ui/sidebar";
 
 const navItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Watchlist", url: "/watchlist", icon: Eye },
-  { title: "Strategies", url: "/strategies", icon: Zap },
-  { title: "Trades", url: "/trades", icon: History },
-  { title: "Portfolio", url: "/portfolio", icon: Wallet },
+  { title: "ダッシュボード", url: "/", icon: LayoutDashboard, testId: "link-dashboard" },
+  { title: "ウォッチリスト", url: "/watchlist", icon: Eye, testId: "link-watchlist" },
+  { title: "取引戦略", url: "/strategies", icon: Zap, testId: "link-strategies" },
+  { title: "取引履歴", url: "/trades", icon: History, testId: "link-trades" },
+  { title: "ポートフォリオ", url: "/portfolio", icon: Wallet, testId: "link-portfolio" },
 ];
 
 export function AppSidebar() {
@@ -32,19 +32,19 @@ export function AppSidebar() {
           </div>
           <div>
             <h2 className="font-bold text-sm leading-tight">AutoTrade JP</h2>
-            <p className="text-xs text-muted-foreground leading-tight">Automated Trading</p>
+            <p className="text-xs text-muted-foreground leading-tight">自動株式取引</p>
           </div>
         </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel>メニュー</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild data-active={location === item.url} className="data-[active=true]:bg-sidebar-accent">
-                    <Link href={item.url} data-testid={`link-${item.title.toLowerCase()}`}>
+                    <Link href={item.url} data-testid={item.testId}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </Link>

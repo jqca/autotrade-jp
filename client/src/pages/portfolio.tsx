@@ -31,36 +31,36 @@ export default function Portfolio() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Portfolio</h1>
-        <p className="text-muted-foreground">Your current holdings and performance</p>
+        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">ポートフォリオ</h1>
+        <p className="text-muted-foreground">保有銘柄と運用パフォーマンス</p>
       </div>
 
       <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Value</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">評価額合計</CardTitle>
             <Wallet className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-total-value">{totalValue.toLocaleString("ja-JP")} JPY</div>
+            <div className="text-2xl font-bold" data-testid="text-total-value">{totalValue.toLocaleString("ja-JP")} 円</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Cost</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">取得原価合計</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-total-cost">{totalCost.toLocaleString("ja-JP")} JPY</div>
+            <div className="text-2xl font-bold" data-testid="text-total-cost">{totalCost.toLocaleString("ja-JP")} 円</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Unrealized P&L</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">含み損益</CardTitle>
             {totalPnL >= 0 ? <TrendingUp className="h-4 w-4 text-emerald-600" /> : <TrendingDown className="h-4 w-4 text-red-500" />}
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${totalPnL >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`} data-testid="text-total-pnl">
-              {totalPnL >= 0 ? "+" : ""}{totalPnL.toLocaleString("ja-JP")} JPY
+              {totalPnL >= 0 ? "+" : ""}{totalPnL.toLocaleString("ja-JP")} 円
             </div>
             <p className={`text-xs mt-1 ${totalPnL >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
               {totalPnL >= 0 ? "+" : ""}{pnlPercent.toFixed(2)}%
@@ -71,7 +71,7 @@ export default function Portfolio() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Holdings</CardTitle>
+          <CardTitle>保有銘柄</CardTitle>
         </CardHeader>
         <CardContent>
           {positions && positions.length > 0 ? (
@@ -79,13 +79,13 @@ export default function Portfolio() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Stock</TableHead>
-                    <TableHead className="text-right">Qty</TableHead>
-                    <TableHead className="text-right">Avg Price</TableHead>
-                    <TableHead className="text-right">Current</TableHead>
-                    <TableHead className="text-right">Value</TableHead>
-                    <TableHead className="text-right">P&L</TableHead>
-                    <TableHead className="w-[100px]">Weight</TableHead>
+                    <TableHead>銘柄</TableHead>
+                    <TableHead className="text-right">数量</TableHead>
+                    <TableHead className="text-right">平均取得価格</TableHead>
+                    <TableHead className="text-right">現在値</TableHead>
+                    <TableHead className="text-right">評価額</TableHead>
+                    <TableHead className="text-right">損益</TableHead>
+                    <TableHead className="w-[100px]">構成比</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -127,9 +127,9 @@ export default function Portfolio() {
           ) : (
             <div className="text-center py-16">
               <Wallet className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-              <h3 className="font-semibold mb-1">No holdings yet</h3>
+              <h3 className="font-semibold mb-1">保有銘柄がありません</h3>
               <p className="text-muted-foreground text-sm">
-                Your portfolio will populate when trades are executed
+                取引が実行されると、ここにポートフォリオが表示されます
               </p>
             </div>
           )}
