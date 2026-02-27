@@ -9,12 +9,12 @@ A simulated Japanese stock automated trading platform with all 3,771 TSE-listed 
 - **Database**: PostgreSQL with Drizzle ORM
 - **Routing**: wouter (frontend), Express (backend)
 - **State Management**: TanStack React Query
-- **Charts**: recharts (area chart for historical prices)
+- **Charts**: recharts (price charts, technical indicators)
 
 ## Key Features
 1. **Dashboard** - Portfolio overview, recent trades, top movers
 2. **Watchlist** - Japanese stock monitoring with search/pagination (3,771 stocks), simulated price updates
-3. **Stock Detail** - Historical price chart from Yahoo Finance, period statistics
+3. **Stock Detail** - Historical price chart, technical indicators (MACD, RSI, Moving Averages, Bollinger Bands), signal analysis
 4. **Strategies** - Create/manage automated trading rules (price drop buy, price rise sell, threshold buy/sell)
 5. **Trade History** - Complete trade log
 6. **Portfolio** - Current holdings with P&L tracking
@@ -64,6 +64,12 @@ shared/
 - Ticker format: `{code}.T` (e.g., 7203.T for Toyota on TSE)
 - Supported ranges: 1mo, 3mo, 6mo, 1y, 2y, 5y
 - Stock detail page with interactive area chart, period summary, and price statistics
+- Technical indicators computed on frontend from historical data:
+  - **MACD** (12, 26, 9) - trend reversal detection with histogram
+  - **RSI** (14-day, Wilder smoothing) - overbought/oversold levels (70/30)
+  - **Moving Averages** (5/25/75 day SMA) - trend direction and crossovers
+  - **Bollinger Bands** (20-day, ±2σ) - volatility and price extremes
+  - **Signal Summary** - composite buy/sell/neutral signal from all 4 indicators
 
 ## Dependencies
 - xlsx - For parsing JPX's XLS stock listing file

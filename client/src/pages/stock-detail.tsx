@@ -5,18 +5,31 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, TrendingUp, TrendingDown, BarChart3 } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, TrendingUp, TrendingDown, BarChart3, ArrowUpCircle, ArrowDownCircle, MinusCircle } from "lucide-react";
+import { useState, useMemo } from "react";
 import {
   ResponsiveContainer,
   AreaChart,
+  ComposedChart,
   Area,
+  Line,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
+  ReferenceLine,
+  Cell,
 } from "recharts";
 import type { Stock } from "@shared/schema";
+import {
+  calcMovingAverages,
+  calcBollingerBands,
+  calcRSI,
+  calcMACD,
+  calcSignals,
+  type SignalType,
+} from "@/lib/technical-indicators";
 
 interface HistoricalPrice {
   date: string;
@@ -44,17 +57,74 @@ function CustomTooltip({ active, payload, label }: any) {
       <p className="font-medium mb-1">{data.date}</p>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
         <span className="text-muted-foreground">始値:</span>
-        <span className="font-mono text-right">{data.open.toLocaleString("ja-JP")}</span>
+        <span className="font-mono text-right">{data.open?.toLocaleString("ja-JP")}</span>
         <span className="text-muted-foreground">高値:</span>
-        <span className="font-mono text-right">{data.high.toLocaleString("ja-JP")}</span>
+        <span className="font-mono text-right">{data.high?.toLocaleString("ja-JP")}</span>
         <span className="text-muted-foreground">安値:</span>
-        <span className="font-mono text-right">{data.low.toLocaleString("ja-JP")}</span>
+        <span className="font-mono text-right">{data.low?.toLocaleString("ja-JP")}</span>
         <span className="text-muted-foreground">終値:</span>
-        <span className="font-mono text-right font-medium">{data.close.toLocaleString("ja-JP")}</span>
+        <span className="font-mono text-right font-medium">{data.close?.toLocaleString("ja-JP")}</span>
         <span className="text-muted-foreground">出来高:</span>
-        <span className="font-mono text-right">{data.volume.toLocaleString("ja-JP")}</span>
+        <span className="font-mono text-right">{data.volume?.toLocaleString("ja-JP")}</span>
       </div>
     </div>
+  );
+}
+
+function MACDTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  const data = payload[0].payload;
+  return (
+    <div className="bg-popover border rounded-md p-2 text-xs shadow-md">
+      <p className="font-medium mb-1">{data.date}</p>
+      <div className="space-y-0.5">
+        {data.macd != null && <p>MACD: <span className="font-mono">{data.macd.toFixed(2)}</span></p>}
+        {data.signal != null && <p>シグナル: <span className="font-mono">{data.signal.toFixed(2)}</span></p>}
+        {data.histogram != null && <p>ヒストグラム: <span className="font-mono">{data.histogram.toFixed(2)}</span></p>}
+      </div>
+    </div>
+  );
+}
+
+function RSITooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  const data = payload[0].payload;
+  return (
+    <div className="bg-popover border rounded-md p-2 text-xs shadow-md">
+      <p className="font-medium mb-1">{data.date}</p>
+      {data.rsi != null && <p>RSI: <span className="font-mono">{data.rsi.toFixed(2)}</span></p>}
+    </div>
+  );
+}
+
+function BollingerTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  const data = payload[0].payload;
+  return (
+    <div className="bg-popover border rounded-md p-2 text-xs shadow-md">
+      <p className="font-medium mb-1">{data.date}</p>
+      <div className="space-y-0.5">
+        <p>終値: <span className="font-mono">{data.close?.toLocaleString("ja-JP")}</span></p>
+        {data.upper != null && <p>上限: <span className="font-mono">{data.upper.toLocaleString("ja-JP")}</span></p>}
+        {data.middle != null && <p>中央: <span className="font-mono">{data.middle.toLocaleString("ja-JP")}</span></p>}
+        {data.lower != null && <p>下限: <span className="font-mono">{data.lower.toLocaleString("ja-JP")}</span></p>}
+      </div>
+    </div>
+  );
+}
+
+function SignalBadge({ signal, label }: { signal: SignalType; label: string }) {
+  const variants: Record<SignalType, { variant: "default" | "destructive" | "secondary"; icon: typeof ArrowUpCircle }> = {
+    buy: { variant: "default", icon: ArrowUpCircle },
+    sell: { variant: "destructive", icon: ArrowDownCircle },
+    neutral: { variant: "secondary", icon: MinusCircle },
+  };
+  const { variant, icon: Icon } = variants[signal];
+  return (
+    <Badge variant={variant} className="gap-1" data-testid={`badge-signal-${signal}`}>
+      <Icon className="h-3 w-3" />
+      {label}
+    </Badge>
   );
 }
 
@@ -91,6 +161,35 @@ export default function StockDetail() {
   const yMin = Math.floor(minPrice - priceRange * 0.05);
   const yMax = Math.ceil(maxPrice + priceRange * 0.05);
 
+  const indicators = useMemo(() => {
+    if (!history || history.length < 2) return null;
+    const prices = history.map(p => ({ date: p.date, close: p.close, high: p.high, low: p.low }));
+    const ma = calcMovingAverages(prices);
+    const bb = calcBollingerBands(prices);
+    const rsi = calcRSI(prices);
+    const macd = calcMACD(prices);
+    const signals = calcSignals(prices);
+
+    const maChart = ma.map(d => ({
+      ...d,
+      dateLabel: new Date(d.date).toLocaleDateString("ja-JP", { month: "short", day: "numeric" }),
+    }));
+    const bbChart = bb.map(d => ({
+      ...d,
+      dateLabel: new Date(d.date).toLocaleDateString("ja-JP", { month: "short", day: "numeric" }),
+    }));
+    const rsiChart = rsi.map(d => ({
+      ...d,
+      dateLabel: new Date(d.date).toLocaleDateString("ja-JP", { month: "short", day: "numeric" }),
+    }));
+    const macdChart = macd.map(d => ({
+      ...d,
+      dateLabel: new Date(d.date).toLocaleDateString("ja-JP", { month: "short", day: "numeric" }),
+    }));
+
+    return { ma: maChart, bb: bbChart, rsi: rsiChart, macd: macdChart, signals };
+  }, [history]);
+
   if (stocksLoading) {
     return (
       <div className="p-6 space-y-4">
@@ -118,6 +217,16 @@ export default function StockDetail() {
       </div>
     );
   }
+
+  const bbYDomain = (() => {
+    if (!indicators?.bb) return [0, 0];
+    const valid = indicators.bb.filter(d => d.upper != null && d.lower != null);
+    if (valid.length === 0) return [yMin, yMax];
+    const lo = Math.min(...valid.map(d => d.lower!));
+    const hi = Math.max(...valid.map(d => d.upper!));
+    const r = hi - lo;
+    return [Math.floor(lo - r * 0.05), Math.ceil(hi + r * 0.05)];
+  })();
 
   return (
     <div className="p-6 space-y-6">
@@ -261,6 +370,163 @@ export default function StockDetail() {
           )}
         </CardContent>
       </Card>
+
+      {indicators && (
+        <>
+          <Card data-testid="card-signals">
+            <CardHeader>
+              <CardTitle className="text-lg">売買シグナル分析</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4 p-4 rounded-lg border bg-muted/30">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-sm font-medium text-muted-foreground">総合判断:</span>
+                  <SignalBadge signal={indicators.signals.overall.signal} label={indicators.signals.overall.label} />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="space-y-2 p-3 rounded-lg border">
+                  <p className="text-xs font-medium text-muted-foreground">MACD</p>
+                  <SignalBadge signal={indicators.signals.macd.signal} label={indicators.signals.macd.label} />
+                </div>
+                <div className="space-y-2 p-3 rounded-lg border">
+                  <p className="text-xs font-medium text-muted-foreground">RSI {indicators.signals.rsi.value != null && <span className="font-mono">({indicators.signals.rsi.value.toFixed(1)})</span>}</p>
+                  <SignalBadge signal={indicators.signals.rsi.signal} label={indicators.signals.rsi.label} />
+                </div>
+                <div className="space-y-2 p-3 rounded-lg border">
+                  <p className="text-xs font-medium text-muted-foreground">移動平均</p>
+                  <SignalBadge signal={indicators.signals.ma.signal} label={indicators.signals.ma.label} />
+                </div>
+                <div className="space-y-2 p-3 rounded-lg border">
+                  <p className="text-xs font-medium text-muted-foreground">ボリンジャーバンド</p>
+                  <SignalBadge signal={indicators.signals.bollinger.signal} label={indicators.signals.bollinger.label} />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card data-testid="card-ma">
+            <CardHeader>
+              <CardTitle className="text-lg">移動平均線（5日・25日・75日）</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={indicators.ma} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="dateLabel" tick={{ fontSize: 11 }} interval="preserveStartEnd" tickCount={8} />
+                    <YAxis domain={[yMin, yMax]} tick={{ fontSize: 11 }} tickFormatter={(v) => v.toLocaleString("ja-JP")} width={70} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Line type="monotone" dataKey="close" stroke="hsl(210, 60%, 50%)" strokeWidth={1.5} dot={false} name="終値" />
+                    <Line type="monotone" dataKey="ma5" stroke="hsl(30, 90%, 55%)" strokeWidth={1.5} dot={false} name="5日MA" connectNulls />
+                    <Line type="monotone" dataKey="ma25" stroke="hsl(280, 70%, 55%)" strokeWidth={1.5} dot={false} name="25日MA" connectNulls />
+                    <Line type="monotone" dataKey="ma75" stroke="hsl(150, 70%, 40%)" strokeWidth={1.5} dot={false} name="75日MA" connectNulls />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex items-center gap-4 mt-3 text-xs flex-wrap">
+                <span className="flex items-center gap-1"><span className="w-3 h-0.5 inline-block" style={{ backgroundColor: "hsl(210, 60%, 50%)" }}></span>終値</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-0.5 inline-block" style={{ backgroundColor: "hsl(30, 90%, 55%)" }}></span>5日</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-0.5 inline-block" style={{ backgroundColor: "hsl(280, 70%, 55%)" }}></span>25日</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-0.5 inline-block" style={{ backgroundColor: "hsl(150, 70%, 40%)" }}></span>75日</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card data-testid="card-bollinger">
+            <CardHeader>
+              <CardTitle className="text-lg">ボリンジャーバンド（20日・±2σ）</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={indicators.bb} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="dateLabel" tick={{ fontSize: 11 }} interval="preserveStartEnd" tickCount={8} />
+                    <YAxis domain={bbYDomain} tick={{ fontSize: 11 }} tickFormatter={(v) => v.toLocaleString("ja-JP")} width={70} />
+                    <Tooltip content={<BollingerTooltip />} />
+                    <Area type="monotone" dataKey="upper" stroke="none" fill="hsl(210, 60%, 50%)" fillOpacity={0.1} connectNulls />
+                    <Area type="monotone" dataKey="lower" stroke="none" fill="transparent" fillOpacity={0} connectNulls />
+                    <Line type="monotone" dataKey="upper" stroke="hsl(210, 60%, 60%)" strokeWidth={1} strokeDasharray="4 2" dot={false} name="+2σ" connectNulls />
+                    <Line type="monotone" dataKey="middle" stroke="hsl(210, 60%, 50%)" strokeWidth={1} dot={false} name="中央" connectNulls />
+                    <Line type="monotone" dataKey="lower" stroke="hsl(210, 60%, 60%)" strokeWidth={1} strokeDasharray="4 2" dot={false} name="-2σ" connectNulls />
+                    <Line type="monotone" dataKey="close" stroke="hsl(0, 70%, 50%)" strokeWidth={1.5} dot={false} name="終値" />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex items-center gap-4 mt-3 text-xs flex-wrap">
+                <span className="flex items-center gap-1"><span className="w-3 h-0.5 inline-block" style={{ backgroundColor: "hsl(0, 70%, 50%)" }}></span>終値</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-0.5 inline-block border-dashed border-t" style={{ borderColor: "hsl(210, 60%, 60%)" }}></span>±2σ</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-0.5 inline-block" style={{ backgroundColor: "hsl(210, 60%, 50%)" }}></span>中央線</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card data-testid="card-macd">
+            <CardHeader>
+              <CardTitle className="text-lg">MACD（12, 26, 9）</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[250px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={indicators.macd} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="dateLabel" tick={{ fontSize: 11 }} interval="preserveStartEnd" tickCount={8} />
+                    <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => v.toFixed(0)} width={60} />
+                    <Tooltip content={<MACDTooltip />} />
+                    <ReferenceLine y={0} stroke="hsl(0, 0%, 50%)" strokeDasharray="3 3" />
+                    <Bar dataKey="histogram" name="ヒストグラム" maxBarSize={4}>
+                      {indicators.macd.map((entry, i) => (
+                        <Cell key={i} fill={entry.histogram != null && entry.histogram >= 0 ? "hsl(150, 70%, 45%)" : "hsl(0, 70%, 50%)"} />
+                      ))}
+                    </Bar>
+                    <Line type="monotone" dataKey="macd" stroke="hsl(210, 80%, 55%)" strokeWidth={1.5} dot={false} name="MACD" connectNulls />
+                    <Line type="monotone" dataKey="signal" stroke="hsl(30, 90%, 55%)" strokeWidth={1.5} dot={false} name="シグナル" connectNulls />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex items-center gap-4 mt-3 text-xs flex-wrap">
+                <span className="flex items-center gap-1"><span className="w-3 h-0.5 inline-block" style={{ backgroundColor: "hsl(210, 80%, 55%)" }}></span>MACD</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-0.5 inline-block" style={{ backgroundColor: "hsl(30, 90%, 55%)" }}></span>シグナル</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-2 inline-block" style={{ backgroundColor: "hsl(150, 70%, 45%)" }}></span>ヒストグラム(+)</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-2 inline-block" style={{ backgroundColor: "hsl(0, 70%, 50%)" }}></span>ヒストグラム(-)</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card data-testid="card-rsi">
+            <CardHeader>
+              <CardTitle className="text-lg">RSI（14日）</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={indicators.rsi} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="dateLabel" tick={{ fontSize: 11 }} interval="preserveStartEnd" tickCount={8} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} ticks={[0, 30, 50, 70, 100]} width={40} />
+                    <Tooltip content={<RSITooltip />} />
+                    <ReferenceLine y={70} stroke="hsl(0, 70%, 50%)" strokeDasharray="4 2" label={{ value: "70", position: "right", fontSize: 10 }} />
+                    <ReferenceLine y={30} stroke="hsl(150, 70%, 40%)" strokeDasharray="4 2" label={{ value: "30", position: "right", fontSize: 10 }} />
+                    <defs>
+                      <linearGradient id="rsiGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(280, 70%, 55%)" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="hsl(280, 70%, 55%)" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="rsi" stroke="hsl(280, 70%, 55%)" fill="url(#rsiGradient)" strokeWidth={1.5} dot={false} connectNulls />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex items-center gap-4 mt-3 text-xs flex-wrap">
+                <span className="flex items-center gap-1"><span className="w-3 h-0.5 inline-block" style={{ backgroundColor: "hsl(280, 70%, 55%)" }}></span>RSI</span>
+                <span className="text-muted-foreground">70以上: 買われすぎ</span>
+                <span className="text-muted-foreground">30以下: 売られすぎ</span>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       {chartData.length > 0 && (
         <Card>
