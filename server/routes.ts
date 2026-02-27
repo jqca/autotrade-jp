@@ -1,16 +1,253 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { insertStrategySchema } from "@shared/schema";
+import { z } from "zod";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // put application routes here
-  // prefix all routes with /api
+  await seedData();
 
-  // use storage to perform CRUD operations on the storage interface
-  // e.g. storage.insertUser(user) or storage.getUserByUsername(username)
+  app.get("/api/stocks", async (_req, res) => {
+    const stocks = await storage.getAllStocks();
+    res.json(stocks);
+  });
+
+  app.patch("/api/stocks/:ticker/watch", async (req, res) => {
+    const { ticker } = req.params;
+    const schema = z.object({ isWatched: z.boolean() });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid request body" });
+    }
+    const stock = await storage.getStockByTicker(ticker);
+    if (!stock) {
+      return res.status(404).json({ message: "Stock not found" });
+    }
+    await storage.toggleWatchStock(ticker, parsed.data.isWatched);
+    res.json({ success: true });
+  });
+
+  app.post("/api/simulate-prices", async (_req, res) => {
+    const stocks = await storage.getAllStocks();
+    for (const stock of stocks) {
+      const changePercent = (Math.random() - 0.5) * 6;
+      const newPrice = Math.round(stock.currentPrice * (1 + changePercent / 100));
+      const high = Math.max(stock.currentPrice, newPrice);
+      const low = Math.min(stock.currentPrice, newPrice);
+      const volumeChange = Math.floor(Math.random() * 500000);
+      await storage.updateStockPrice(stock.ticker, newPrice, high, low, volumeChange);
+      await storage.updatePreviousClose(stock.ticker, stock.currentPrice);
+
+      const position = await storage.getPosition(stock.ticker);
+      if (position) {
+        await storage.updatePositionPrice(stock.ticker, newPrice);
+      }
+    }
+    res.json({ success: true });
+  });
+
+  app.get("/api/strategies", async (_req, res) => {
+    const strategies = await storage.getAllStrategies();
+    res.json(strategies);
+  });
+
+  app.post("/api/strategies", async (req, res) => {
+    try {
+      const data = insertStrategySchema.parse(req.body);
+      const strategy = await storage.createStrategy(data);
+      res.json(strategy);
+    } catch (e: any) {
+      res.status(400).json({ message: e.message });
+    }
+  });
+
+  app.patch("/api/strategies/:id", async (req, res) => {
+    const { id } = req.params;
+    const schema = z.object({ isActive: z.boolean() });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid request body" });
+    }
+    const existing = await storage.getStrategy(id);
+    if (!existing) {
+      return res.status(404).json({ message: "Strategy not found" });
+    }
+    await storage.updateStrategyActive(id, parsed.data.isActive);
+    res.json({ success: true });
+  });
+
+  app.delete("/api/strategies/:id", async (req, res) => {
+    const existing = await storage.getStrategy(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ message: "Strategy not found" });
+    }
+    await storage.deleteStrategy(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.post("/api/strategies/:id/execute", async (req, res) => {
+    const strategy = await storage.getStrategy(req.params.id);
+    if (!strategy) {
+      return res.status(404).json({ message: "Strategy not found" });
+    }
+    if (!strategy.isActive) {
+      return res.status(400).json({ message: "Strategy is inactive" });
+    }
+
+    const stock = await storage.getStockByTicker(strategy.stockTicker);
+    if (!stock) {
+      return res.status(404).json({ message: "Stock not found" });
+    }
+
+    const changePercent = ((stock.currentPrice - stock.previousClose) / stock.previousClose) * 100;
+
+    if (strategy.type === "price_drop_buy" && changePercent <= -strategy.buyCondition) {
+      const total = stock.currentPrice * strategy.quantity;
+      await storage.createTrade({
+        stockTicker: stock.ticker,
+        strategyId: strategy.id,
+        side: "buy",
+        price: stock.currentPrice,
+        quantity: strategy.quantity,
+        total,
+      });
+      await storage.upsertPosition(stock.ticker, strategy.quantity, stock.currentPrice, stock.currentPrice);
+      return res.json({ success: true, message: "Buy trade executed" });
+    }
+
+    if (strategy.type === "price_rise_sell" && changePercent >= strategy.sellCondition) {
+      const position = await storage.getPosition(stock.ticker);
+      if (!position || position.quantity < strategy.quantity) {
+        return res.status(400).json({ message: "Insufficient holdings to sell" });
+      }
+      const total = stock.currentPrice * strategy.quantity;
+      await storage.createTrade({
+        stockTicker: stock.ticker,
+        strategyId: strategy.id,
+        side: "sell",
+        price: stock.currentPrice,
+        quantity: strategy.quantity,
+        total,
+      });
+      await storage.upsertPosition(stock.ticker, -strategy.quantity, stock.currentPrice, stock.currentPrice);
+      return res.json({ success: true, message: "Sell trade executed" });
+    }
+
+    if (strategy.type === "threshold_buy" && stock.currentPrice <= strategy.buyCondition) {
+      const total = stock.currentPrice * strategy.quantity;
+      await storage.createTrade({
+        stockTicker: stock.ticker,
+        strategyId: strategy.id,
+        side: "buy",
+        price: stock.currentPrice,
+        quantity: strategy.quantity,
+        total,
+      });
+      await storage.upsertPosition(stock.ticker, strategy.quantity, stock.currentPrice, stock.currentPrice);
+      return res.json({ success: true, message: "Buy trade executed" });
+    }
+
+    if (strategy.type === "threshold_sell" && stock.currentPrice >= strategy.sellCondition) {
+      const position = await storage.getPosition(stock.ticker);
+      if (!position || position.quantity < strategy.quantity) {
+        return res.status(400).json({ message: "Insufficient holdings to sell" });
+      }
+      const total = stock.currentPrice * strategy.quantity;
+      await storage.createTrade({
+        stockTicker: stock.ticker,
+        strategyId: strategy.id,
+        side: "sell",
+        price: stock.currentPrice,
+        quantity: strategy.quantity,
+        total,
+      });
+      await storage.upsertPosition(stock.ticker, -strategy.quantity, stock.currentPrice, stock.currentPrice);
+      return res.json({ success: true, message: "Sell trade executed" });
+    }
+
+    res.status(400).json({ message: `Conditions not met. Current change: ${changePercent.toFixed(2)}%, price: ${stock.currentPrice} JPY` });
+  });
+
+  app.get("/api/trades", async (_req, res) => {
+    const trades = await storage.getAllTrades();
+    res.json(trades);
+  });
+
+  app.get("/api/portfolio", async (_req, res) => {
+    const positions = await storage.getAllPositions();
+    res.json(positions);
+  });
 
   return httpServer;
+}
+
+async function seedData() {
+  const count = await storage.getStockCount();
+  if (count > 0) return;
+
+  const seedStocks = [
+    { ticker: "7203", name: "Toyota Motor", sector: "Automotive", currentPrice: 2850, previousClose: 2820, dayHigh: 2870, dayLow: 2800, volume: 12500000, isWatched: true },
+    { ticker: "6758", name: "Sony Group", sector: "Electronics", currentPrice: 13200, previousClose: 13050, dayHigh: 13350, dayLow: 13000, volume: 4200000, isWatched: true },
+    { ticker: "9984", name: "SoftBank Group", sector: "IT/Telecom", currentPrice: 8950, previousClose: 9100, dayHigh: 9150, dayLow: 8900, volume: 8300000, isWatched: false },
+    { ticker: "6861", name: "Keyence", sector: "Electronics", currentPrice: 65800, previousClose: 65200, dayHigh: 66000, dayLow: 64800, volume: 980000, isWatched: true },
+    { ticker: "8306", name: "Mitsubishi UFJ Financial", sector: "Finance", currentPrice: 1680, previousClose: 1650, dayHigh: 1700, dayLow: 1640, volume: 25000000, isWatched: false },
+    { ticker: "9432", name: "NTT", sector: "IT/Telecom", currentPrice: 175, previousClose: 173, dayHigh: 177, dayLow: 172, volume: 35000000, isWatched: false },
+    { ticker: "6501", name: "Hitachi", sector: "Electronics", currentPrice: 3420, previousClose: 3380, dayHigh: 3450, dayLow: 3350, volume: 6800000, isWatched: false },
+    { ticker: "7741", name: "HOYA", sector: "Healthcare", currentPrice: 18500, previousClose: 18200, dayHigh: 18600, dayLow: 18100, volume: 1500000, isWatched: false },
+    { ticker: "4063", name: "Shin-Etsu Chemical", sector: "Chemicals", currentPrice: 5680, previousClose: 5720, dayHigh: 5750, dayLow: 5650, volume: 3200000, isWatched: false },
+    { ticker: "6902", name: "Denso", sector: "Automotive", currentPrice: 2150, previousClose: 2180, dayHigh: 2200, dayLow: 2120, volume: 4500000, isWatched: false },
+  ];
+
+  for (const stock of seedStocks) {
+    await storage.createStock(stock);
+  }
+
+  await storage.createStrategy({
+    name: "Toyota Dip Buyer",
+    stockTicker: "7203",
+    type: "price_drop_buy",
+    buyCondition: 2,
+    sellCondition: 3,
+    quantity: 100,
+    isActive: true,
+  });
+
+  await storage.createStrategy({
+    name: "Sony Profit Taker",
+    stockTicker: "6758",
+    type: "price_rise_sell",
+    buyCondition: 3,
+    sellCondition: 2,
+    quantity: 50,
+    isActive: true,
+  });
+
+  await storage.createStrategy({
+    name: "Keyence Value Buy",
+    stockTicker: "6861",
+    type: "threshold_buy",
+    buyCondition: 64000,
+    sellCondition: 68000,
+    quantity: 10,
+    isActive: false,
+  });
+
+  await storage.upsertPosition("7203", 200, 2800, 2850);
+  await storage.upsertPosition("6758", 100, 12800, 13200);
+  await storage.upsertPosition("8306", 500, 1620, 1680);
+
+  const tradeData = [
+    { stockTicker: "7203", side: "buy", price: 2780, quantity: 100, total: 278000 },
+    { stockTicker: "7203", side: "buy", price: 2820, quantity: 100, total: 282000 },
+    { stockTicker: "6758", side: "buy", price: 12800, quantity: 100, total: 1280000 },
+    { stockTicker: "8306", side: "buy", price: 1620, quantity: 500, total: 810000 },
+    { stockTicker: "6758", side: "sell", price: 13100, quantity: 50, total: 655000 },
+  ];
+
+  for (const trade of tradeData) {
+    await storage.createTrade(trade);
+  }
 }
