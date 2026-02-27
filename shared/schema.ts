@@ -63,7 +63,8 @@ export type InsertPortfolioPosition = z.infer<typeof insertPortfolioPositionSche
 
 export const technicalIndicators = pgTable("technical_indicators", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  ticker: text("ticker").notNull().unique(),
+  ticker: text("ticker").notNull(),
+  timeframe: text("timeframe").notNull().default("1d"),
   macdValue: real("macd_value"),
   macdSignal: real("macd_signal_value"),
   macdHistogram: real("macd_histogram"),
@@ -81,7 +82,9 @@ export const technicalIndicators = pgTable("technical_indicators", {
   overallSignal: text("overall_signal"),
   overallLabel: text("overall_label"),
   calculatedAt: timestamp("calculated_at").defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("idx_technical_ticker_timeframe").on(table.ticker, table.timeframe),
+]);
 
 export const insertTechnicalIndicatorSchema = createInsertSchema(technicalIndicators).omit({ id: true, calculatedAt: true });
 export type TechnicalIndicator = typeof technicalIndicators.$inferSelect;

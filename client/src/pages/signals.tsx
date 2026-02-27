@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,9 +8,11 @@ import { Input } from "@/components/ui/input";
 import { ArrowUpCircle, ArrowDownCircle, MinusCircle, TrendingUp, TrendingDown, Search, BarChart3 } from "lucide-react";
 import { Link } from "wouter";
 import { useState, useMemo } from "react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Stock, TechnicalIndicator } from "@shared/schema";
 
 type FilterType = "strong_buy" | "buy" | "strong_sell" | "sell" | "neutral" | "all";
+type TimeframeType = "1d" | "5m";
 
 const filterOptions: { value: FilterType; label: string }[] = [
   { value: "strong_buy", label: "強い買いシグナル" },
@@ -32,12 +34,37 @@ function TrendBadge({ trend, label }: { trend: string | null; label: string }) {
   return <Badge variant={variant} className="text-xs">{label}</Badge>;
 }
 
+interface BatchProgress {
+  status: string;
+  total: number;
+  processed: number;
+  calculated?: number;
+  errors: number;
+  message: string;
+}
+
 export default function Signals() {
   const [filter, setFilter] = useState<FilterType>("strong_buy");
   const [searchQuery, setSearchQuery] = useState("");
+  const [timeframe, setTimeframe] = useState<TimeframeType>("1d");
 
   const { data: indicators, isLoading: indicatorsLoading } = useQuery<TechnicalIndicator[]>({
-    queryKey: ["/api/indicators"],
+    queryKey: [`/api/indicators?timeframe=${timeframe}`],
+  });
+
+  const { data: batchProgress } = useQuery<BatchProgress>({
+    queryKey: [`/api/indicators/batch/progress?timeframe=${timeframe}`],
+    refetchInterval: (query) => query.state.data?.status === "running" ? 2000 : false,
+  });
+
+  const runBatch = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/indicators/batch", { timeframe });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/indicators/batch/progress?timeframe=${timeframe}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/indicators?timeframe=${timeframe}`] });
+    },
   });
 
   const { data: stocks } = useQuery<Stock[]>({
@@ -106,10 +133,58 @@ export default function Signals() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">売買シグナル</h1>
-        <p className="text-muted-foreground">テクニカル指標に基づく売買シグナル一覧</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">売買シグナル</h1>
+          <p className="text-muted-foreground">テクニカル指標に基づく売買シグナル一覧</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border overflow-hidden">
+            <Button
+              size="sm"
+              variant={timeframe === "1d" ? "default" : "ghost"}
+              className="rounded-none"
+              onClick={() => setTimeframe("1d")}
+              data-testid="button-timeframe-1d"
+            >
+              日足
+            </Button>
+            <Button
+              size="sm"
+              variant={timeframe === "5m" ? "default" : "ghost"}
+              className="rounded-none"
+              onClick={() => setTimeframe("5m")}
+              data-testid="button-timeframe-5m"
+            >
+              5分足
+            </Button>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={batchProgress?.status === "running" || runBatch.isPending}
+            onClick={() => runBatch.mutate()}
+            data-testid="button-calc-indicators"
+          >
+            {batchProgress?.status === "running" ? "計算中..." : `${timeframe === "5m" ? "5分足" : "日足"}指標計算`}
+          </Button>
+        </div>
       </div>
+
+      {batchProgress && batchProgress.status === "running" && (
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>{timeframe === "5m" ? "5分足" : "日足"}テクニカル指標計算中...</span>
+            <span>{batchProgress.processed}/{batchProgress.total}</span>
+          </div>
+          <div className="w-full bg-muted rounded-full h-1.5">
+            <div
+              className="bg-primary h-1.5 rounded-full transition-all"
+              style={{ width: `${batchProgress.total > 0 ? (batchProgress.processed / batchProgress.total) * 100 : 0}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
         <Card className="cursor-pointer" onClick={() => setFilter("strong_buy")} data-testid="card-strong-buy-count">
@@ -192,9 +267,12 @@ export default function Signals() {
         <Card>
           <CardContent className="py-16 text-center">
             <BarChart3 className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-            <h3 className="font-semibold mb-1">テクニカル指標データがありません</h3>
+            <h3 className="font-semibold mb-1">{timeframe === "5m" ? "5分足" : ""}テクニカル指標データがありません</h3>
             <p className="text-muted-foreground text-sm">
-              ダッシュボードから夜間バッチを実行するか、手動で指標計算を実行してください
+              {timeframe === "5m"
+                ? "5分足データを蓄積後、上の「5分足指標計算」ボタンで計算を開始してください"
+                : "ダッシュボードから夜間バッチを実行するか、手動で指標計算を実行してください"
+              }
             </p>
           </CardContent>
         </Card>
@@ -267,6 +345,7 @@ export default function Signals() {
 
       {indicators && indicators.length > 0 && (
         <p className="text-xs text-muted-foreground text-center">
+          <Badge variant="outline" className="text-xs mr-2">{timeframe === "5m" ? "5分足" : "日足"}</Badge>
           最終計算: {indicators[0]?.calculatedAt
             ? new Date(indicators[0].calculatedAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })
             : "不明"

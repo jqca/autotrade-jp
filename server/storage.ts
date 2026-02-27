@@ -42,8 +42,8 @@ export interface IStorage {
   getStocksWithPrices(): Promise<Stock[]>;
   getAllStockTickers(): Promise<string[]>;
   upsertTechnicalIndicator(indicator: InsertTechnicalIndicator): Promise<void>;
-  getTechnicalIndicator(ticker: string): Promise<TechnicalIndicator | undefined>;
-  getAllTechnicalIndicators(): Promise<TechnicalIndicator[]>;
+  getTechnicalIndicator(ticker: string, timeframe?: string): Promise<TechnicalIndicator | undefined>;
+  getAllTechnicalIndicators(timeframe?: string): Promise<TechnicalIndicator[]>;
   insertBacktestResult(result: InsertBacktestResult): Promise<void>;
   getBacktestResults(runId?: string): Promise<BacktestResult[]>;
   getBacktestRuns(): Promise<{ runId: string; count: number; wins: number; losses: number; createdAt: Date | null }[]>;
@@ -240,9 +240,9 @@ export class DatabaseStorage implements IStorage {
   async upsertTechnicalIndicator(indicator: InsertTechnicalIndicator): Promise<void> {
     await db
       .insert(technicalIndicators)
-      .values(indicator)
+      .values({ ...indicator, timeframe: indicator.timeframe || "1d" })
       .onConflictDoUpdate({
-        target: technicalIndicators.ticker,
+        target: [technicalIndicators.ticker, technicalIndicators.timeframe],
         set: {
           macdValue: indicator.macdValue,
           macdSignal: indicator.macdSignal,
@@ -265,12 +265,16 @@ export class DatabaseStorage implements IStorage {
       });
   }
 
-  async getTechnicalIndicator(ticker: string): Promise<TechnicalIndicator | undefined> {
-    const [row] = await db.select().from(technicalIndicators).where(eq(technicalIndicators.ticker, ticker));
+  async getTechnicalIndicator(ticker: string, timeframe: string = "1d"): Promise<TechnicalIndicator | undefined> {
+    const [row] = await db.select().from(technicalIndicators)
+      .where(and(eq(technicalIndicators.ticker, ticker), eq(technicalIndicators.timeframe, timeframe)));
     return row;
   }
 
-  async getAllTechnicalIndicators(): Promise<TechnicalIndicator[]> {
+  async getAllTechnicalIndicators(timeframe?: string): Promise<TechnicalIndicator[]> {
+    if (timeframe) {
+      return db.select().from(technicalIndicators).where(eq(technicalIndicators.timeframe, timeframe));
+    }
     return db.select().from(technicalIndicators);
   }
 

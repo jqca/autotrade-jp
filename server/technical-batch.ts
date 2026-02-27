@@ -1,6 +1,7 @@
 import { fetchHistoricalPrices, type HistoricalPrice } from "./yahoo-finance";
 import { storage } from "./storage";
 import type { InsertTechnicalIndicator } from "@shared/schema";
+import type { IntradayPrice } from "@shared/schema";
 
 export interface IndicatorBatchProgress {
   status: "idle" | "running" | "completed" | "error";
@@ -54,8 +55,8 @@ function ema(data: number[], period: number): number[] {
   return result;
 }
 
-function computeIndicators(prices: HistoricalPrice[]): InsertTechnicalIndicator | null {
-  if (prices.length < 80) return null;
+function computeIndicators(prices: HistoricalPrice[], minBars: number = 80): InsertTechnicalIndicator | null {
+  if (prices.length < minBars) return null;
   const closes = prices.map(p => p.close);
   const n = closes.length;
 
@@ -168,6 +169,102 @@ function computeIndicators(prices: HistoricalPrice[]): InsertTechnicalIndicator 
     overallSignal,
     overallLabel,
   };
+}
+
+const intradayIndicatorProgress: IndicatorBatchProgress = {
+  status: "idle",
+  total: 0,
+  processed: 0,
+  calculated: 0,
+  errors: 0,
+  startedAt: null,
+  completedAt: null,
+  message: "",
+};
+
+export function getIntradayIndicatorBatchProgress(): IndicatorBatchProgress {
+  return { ...intradayIndicatorProgress };
+}
+
+export async function startIntradayIndicatorBatch(concurrency: number = 3, onComplete?: () => void): Promise<void> {
+  if (intradayIndicatorProgress.status === "running") {
+    throw new Error("Already running");
+  }
+
+  const stats = await storage.getIntradayDataStats();
+  if (stats.totalBars === 0) {
+    console.log("[IntradayIndicators] 5分足データが存在しません。スキップします。");
+    if (onComplete) onComplete();
+    return;
+  }
+
+  const tickers = await storage.getAllStockTickers();
+  const pricedStocks = await storage.getStocksWithPrices();
+  const pricedTickers = new Set(pricedStocks.map(s => s.ticker));
+  const targetTickers = tickers.filter(t => pricedTickers.has(t));
+
+  intradayIndicatorProgress.status = "running";
+  intradayIndicatorProgress.total = targetTickers.length;
+  intradayIndicatorProgress.processed = 0;
+  intradayIndicatorProgress.calculated = 0;
+  intradayIndicatorProgress.errors = 0;
+  intradayIndicatorProgress.startedAt = Date.now();
+  intradayIndicatorProgress.completedAt = null;
+  intradayIndicatorProgress.message = "5分足テクニカル指標の計算を開始しました...";
+
+  console.log(`[IntradayIndicators] ${targetTickers.length}銘柄の5分足テクニカル指標を計算します...`);
+
+  (async () => {
+    try {
+      for (let i = 0; i < targetTickers.length; i += concurrency) {
+        const batch = targetTickers.slice(i, i + concurrency);
+
+        await Promise.allSettled(
+          batch.map(async (ticker) => {
+            try {
+              const bars = await storage.getIntradayPrices(ticker);
+              if (bars.length < 50) {
+                intradayIndicatorProgress.processed++;
+                return;
+              }
+              const prices: HistoricalPrice[] = bars.map(b => ({
+                date: b.datetime,
+                open: b.open,
+                high: b.high,
+                low: b.low,
+                close: b.close,
+                volume: b.volume,
+              }));
+              const result = computeIndicators(prices, 50);
+              if (result) {
+                result.ticker = ticker;
+                result.timeframe = "5m";
+                await storage.upsertTechnicalIndicator(result);
+                intradayIndicatorProgress.calculated++;
+              }
+            } catch {
+              intradayIndicatorProgress.errors++;
+            }
+            intradayIndicatorProgress.processed++;
+          })
+        );
+
+        intradayIndicatorProgress.message = `${intradayIndicatorProgress.processed}/${intradayIndicatorProgress.total} 処理済み (${intradayIndicatorProgress.calculated}件計算完了)`;
+      }
+
+      intradayIndicatorProgress.status = "completed";
+      intradayIndicatorProgress.completedAt = Date.now();
+      const elapsed = Math.round((intradayIndicatorProgress.completedAt - intradayIndicatorProgress.startedAt!) / 1000);
+      intradayIndicatorProgress.message = `完了: ${intradayIndicatorProgress.calculated}/${intradayIndicatorProgress.total}件の5分足指標を計算 (${elapsed}秒)`;
+      console.log(`[IntradayIndicators] ${intradayIndicatorProgress.message}`);
+      if (onComplete) onComplete();
+    } catch (err: any) {
+      intradayIndicatorProgress.status = "error";
+      intradayIndicatorProgress.completedAt = Date.now();
+      intradayIndicatorProgress.message = `エラー: ${err.message}`;
+      console.error("[IntradayIndicators] バッチ処理エラー:", err);
+    }
+  })();
 }
 
 export async function startIndicatorBatch(concurrency: number = 3, onComplete?: () => void): Promise<void> {

@@ -7,7 +7,7 @@ import { fetchHistoricalPrices } from "./yahoo-finance";
 import { fetchJQuantsHistorical, fetchJQuantsLatestPrices, isJQuantsConfigured } from "./jquants";
 import { importJPXStocks, fetchBatchPrices, startFetchAllPrices, getFetchAllProgress } from "./import-stocks";
 import { startScheduler, getSchedulerStatus, setSchedulerEnabled } from "./scheduler";
-import { startIndicatorBatch, getIndicatorBatchProgress } from "./technical-batch";
+import { startIndicatorBatch, getIndicatorBatchProgress, startIntradayIndicatorBatch, getIntradayIndicatorBatchProgress } from "./technical-batch";
 import { startBacktest, getBacktestProgress, DEFAULT_PARAMS, type BacktestParams } from "./backtest";
 import { startIntradayFetch, getIntradayFetchProgress } from "./intraday-batch";
 
@@ -292,33 +292,50 @@ export async function registerRoutes(
   });
 
   app.get("/api/indicators/:ticker", async (req, res) => {
-    const indicator = await storage.getTechnicalIndicator(req.params.ticker);
+    const timeframe = (req.query.timeframe as string) || "1d";
+    const indicator = await storage.getTechnicalIndicator(req.params.ticker, timeframe);
     if (!indicator) {
       return res.status(404).json({ message: "テクニカル指標が見つかりません" });
     }
     res.json(indicator);
   });
 
-  app.get("/api/indicators", async (_req, res) => {
-    const indicators = await storage.getAllTechnicalIndicators();
+  app.get("/api/indicators", async (req, res) => {
+    const timeframe = req.query.timeframe as string | undefined;
+    const indicators = await storage.getAllTechnicalIndicators(timeframe);
     res.json(indicators);
   });
 
-  app.post("/api/indicators/batch", async (_req, res) => {
+  app.post("/api/indicators/batch", async (req, res) => {
     try {
-      const indicatorProgress = getIndicatorBatchProgress();
-      if (indicatorProgress.status === "running") {
-        return res.status(409).json({ message: "既に実行中です" });
+      const timeframe = req.body.timeframe === "5m" ? "5m" : "1d";
+      if (timeframe === "5m") {
+        const intradayProg = getIntradayIndicatorBatchProgress();
+        if (intradayProg.status === "running") {
+          return res.status(409).json({ message: "既に5分足指標計算が実行中です" });
+        }
+        await startIntradayIndicatorBatch(3);
+        res.json({ message: "5分足テクニカル指標の計算を開始しました" });
+      } else {
+        const indicatorProgress = getIndicatorBatchProgress();
+        if (indicatorProgress.status === "running") {
+          return res.status(409).json({ message: "既に実行中です" });
+        }
+        await startIndicatorBatch(3);
+        res.json({ message: "テクニカル指標の計算を開始しました" });
       }
-      await startIndicatorBatch(3);
-      res.json({ message: "テクニカル指標の計算を開始しました" });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
   });
 
-  app.get("/api/indicators/batch/progress", async (_req, res) => {
-    res.json(getIndicatorBatchProgress());
+  app.get("/api/indicators/batch/progress", async (req, res) => {
+    const timeframe = req.query.timeframe as string | undefined;
+    if (timeframe === "5m") {
+      res.json(getIntradayIndicatorBatchProgress());
+    } else {
+      res.json(getIndicatorBatchProgress());
+    }
   });
 
   app.post("/api/backtest/run", async (req, res) => {

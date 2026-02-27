@@ -45,6 +45,8 @@ interface SchedulerStatus {
   indicatorProgress: BatchProgress | null;
   intradayStatus: string;
   intradayProgress: IntradayFetchProgress | null;
+  intradayIndicatorStatus: string;
+  intradayIndicatorProgress: BatchProgress | null;
 }
 
 function StatCard({ title, value, change, icon: Icon, trend }: {
@@ -316,7 +318,7 @@ export default function Dashboard() {
                   {scheduler.enabled ? "自動実行ON" : "自動実行OFF"}
                 </Badge>
                 <span className="text-xs text-muted-foreground">
-                  取引終了後に全銘柄の終値を自動取得 → テクニカル指標計算 → 5分足データ蓄積
+                  終値取得 → 日足指標計算 → 5分足データ蓄積 → 5分足指標計算
                 </span>
               </div>
               <div className="flex items-center gap-3 flex-wrap text-xs">
@@ -336,6 +338,12 @@ export default function Dashboard() {
                   <span className="text-muted-foreground">5分足:</span>
                   <Badge variant={scheduler.intradayStatus === "running" ? "default" : scheduler.intradayStatus === "completed" ? "secondary" : "outline"} className="text-xs" data-testid="badge-intraday-status">
                     {scheduler.intradayStatus === "idle" ? "待機中" : scheduler.intradayStatus === "running" ? "実行中" : scheduler.intradayStatus === "completed" ? "完了" : "エラー"}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">5分足指標:</span>
+                  <Badge variant={scheduler.intradayIndicatorStatus === "running" ? "default" : scheduler.intradayIndicatorStatus === "completed" ? "secondary" : "outline"} className="text-xs" data-testid="badge-intraday-indicator-status">
+                    {scheduler.intradayIndicatorStatus === "idle" ? "待機中" : scheduler.intradayIndicatorStatus === "running" ? "実行中" : scheduler.intradayIndicatorStatus === "completed" ? "完了" : "エラー"}
                   </Badge>
                 </div>
               </div>

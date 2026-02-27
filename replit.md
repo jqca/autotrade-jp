@@ -28,7 +28,7 @@ A simulated Japanese stock automated trading platform with all 3,771 TSE-listed 
 - `strategies` - Automated trading rules with conditions
 - `trades` - Trade execution history
 - `portfolio_positions` - Current holdings
-- `technical_indicators` - Pre-computed technical indicators per stock
+- `technical_indicators` - Pre-computed technical indicators per stock, supports both daily ("1d") and 5-minute ("5m") timeframes via composite unique (ticker, timeframe)
 - `backtest_runs` - Backtest run configurations (target %, min indicators, RSI range, MA filter, sim days)
 - `backtest_results` - Backtest simulation results (signal date, buy/sell prices, win/loss, indicator trends)
 - `intraday_prices` - Stored 5-minute bar data (ticker, datetime, OHLCV, interval) with unique index on (ticker, datetime, interval), 120-day retention
