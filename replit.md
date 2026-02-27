@@ -18,6 +18,7 @@ A simulated Japanese stock automated trading platform with all 3,771 TSE-listed 
 4. **Signals** - Buy/sell signal overview filtered by technical indicators, search, count summary cards
 5. **Backtest** - Configurable backtest simulation with adjustable parameters (target %, indicator count, RSI range, MA filter, sim days), multiple pattern comparison, run history with config metadata
 5b. **Risk Alert** - Market crash risk detection comparing classical anomaly detection vs QML (Quantum Machine Learning) with PennyLane
+5c. **Quantum Portfolio Optimization** - QAOA-based portfolio optimization comparing classical Markowitz vs quantum QAOA for selecting optimal stock allocation from buy-signal candidates
 6. **Strategies** - Create/manage automated trading rules (price drop buy, price rise sell, threshold buy/sell)
 6. **Trade History** - Complete trade log
 7. **Portfolio** - Current holdings with P&L tracking
@@ -38,7 +39,7 @@ A simulated Japanese stock automated trading platform with all 3,771 TSE-listed 
 ## Project Structure
 ```
 client/src/
-  pages/         - Dashboard, Watchlist, StockDetail, Signals, Backtest, RiskAlert, Strategies, Trades, Portfolio
+  pages/         - Dashboard, Watchlist, StockDetail, Signals, Backtest, RiskAlert, PortfolioOptimize, Strategies, Trades, Portfolio
   components/    - AppSidebar, ThemeToggle, UI components
 server/
   routes.ts      - API endpoints and seed data
@@ -53,6 +54,8 @@ server/
   risk-classical.ts - Classical market risk anomaly detection engine
   risk-qml.ts    - QML risk detection wrapper (calls Python PennyLane script)
   qml_risk.py    - PennyLane variational quantum circuit for anomaly detection
+  portfolio-optimizer.ts - Classical Markowitz + QAOA quantum portfolio optimizer wrapper
+  qaoa_portfolio.py - PennyLane QAOA circuit for portfolio selection (QUBO formulation)
 shared/
   schema.ts      - Drizzle schemas and TypeScript types
 ```
@@ -89,6 +92,7 @@ shared/
 - GET /api/risk/history - Risk assessment history (with ?limit=)
 - POST /api/risk/assess - Run risk assessment (body: {method: "classical"|"qml"|"both"})
 - GET /api/risk/preview - Live risk preview (no DB save)
+- POST /api/portfolio/optimize - Quantum portfolio optimization (body: {budget, riskAversion, maxAssets})
 
 ## Data Sources
 ### J-Quants API (Primary - JPX公式データ)

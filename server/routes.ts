@@ -12,6 +12,7 @@ import { startBacktest, getBacktestProgress, DEFAULT_PARAMS, type BacktestParams
 import { startIntradayFetch, getIntradayFetchProgress } from "./intraday-batch";
 import { runClassicalRiskAssessment, computeClassicalRisk } from "./risk-classical";
 import { runQmlRiskAssessment, computeQmlRisk } from "./risk-qml";
+import { optimizePortfolio } from "./portfolio-optimizer";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -513,6 +514,24 @@ export async function registerRoutes(
         computeQmlRisk(),
       ]);
       res.json({ classical, qml });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/portfolio/optimize", async (req, res) => {
+    try {
+      const schema = z.object({
+        budget: z.number().min(10000).max(100000000).default(1000000),
+        riskAversion: z.number().min(0).max(2).default(0.5),
+        maxAssets: z.number().min(2).max(15).default(10),
+      });
+      const parsed = schema.safeParse(req.body || {});
+      if (!parsed.success) {
+        return res.status(400).json({ message: "パラメータが無効です。予算: 10,000〜100,000,000円、リスク回避度: 0〜2、最大銘柄数: 2〜15" });
+      }
+      const result = await optimizePortfolio(parsed.data.budget, parsed.data.riskAversion, parsed.data.maxAssets);
+      res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
