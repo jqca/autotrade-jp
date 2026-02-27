@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertStrategySchema } from "@shared/schema";
 import { z } from "zod";
+import { fetchHistoricalPrices } from "./yahoo-finance";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -179,6 +180,29 @@ export async function registerRoutes(
   app.get("/api/portfolio", async (_req, res) => {
     const positions = await storage.getAllPositions();
     res.json(positions);
+  });
+
+  app.get("/api/stocks/:ticker/history", async (req, res) => {
+    const { ticker } = req.params;
+    const range = (req.query.range as string) || "6mo";
+    const interval = (req.query.interval as string) || "1d";
+
+    const validRanges = ["1mo", "3mo", "6mo", "1y", "2y", "5y"];
+    const validIntervals = ["1d", "1wk", "1mo"];
+
+    if (!validRanges.includes(range)) {
+      return res.status(400).json({ message: "Invalid range" });
+    }
+    if (!validIntervals.includes(interval)) {
+      return res.status(400).json({ message: "Invalid interval" });
+    }
+
+    try {
+      const prices = await fetchHistoricalPrices(ticker, range, interval);
+      res.json(prices);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message || "Failed to fetch historical prices" });
+    }
   });
 
   return httpServer;

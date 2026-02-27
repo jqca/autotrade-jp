@@ -12,12 +12,14 @@ import Watchlist from "@/pages/watchlist";
 import Strategies from "@/pages/strategies";
 import Trades from "@/pages/trades";
 import Portfolio from "@/pages/portfolio";
+import StockDetail from "@/pages/stock-detail";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/watchlist" component={Watchlist} />
+      <Route path="/stocks/:ticker" component={StockDetail} />
       <Route path="/strategies" component={Strategies} />
       <Route path="/trades" component={Trades} />
       <Route path="/portfolio" component={Portfolio} />

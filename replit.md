@@ -46,3 +46,11 @@ shared/
 - POST /api/strategies/:id/execute - Execute strategy
 - GET /api/trades - List all trades
 - GET /api/portfolio - List portfolio positions
+- GET /api/stocks/:ticker/history?range=6mo - Historical price data from Yahoo Finance
+
+## Historical Price Data
+- Real historical stock prices fetched from Yahoo Finance API (no API key needed)
+- Ticker format: `{code}.T` (e.g., 7203.T for Toyota on TSE)
+- Supported ranges: 1mo, 3mo, 6mo, 1y, 2y, 5y
+- Stock detail page with interactive area chart (recharts), period summary, and price statistics
+- Accessible from watchlist cards via "チャートを見る" button

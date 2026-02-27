@@ -3,9 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Star, StarOff, TrendingUp, TrendingDown, RefreshCw } from "lucide-react";
+import { Star, StarOff, TrendingUp, TrendingDown, RefreshCw, LineChart } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 import type { Stock } from "@shared/schema";
 
 export default function Watchlist() {
@@ -142,6 +143,14 @@ function StockCard({ stock, onToggleWatch }: { stock: Stock; onToggleWatch: any 
           <span>高値: {stock.dayHigh.toLocaleString("ja-JP")}</span>
           <span>安値: {stock.dayLow.toLocaleString("ja-JP")}</span>
           <span>出来高: {stock.volume.toLocaleString("ja-JP")}</span>
+        </div>
+        <div className="mt-3">
+          <Link href={`/stocks/${stock.ticker}`}>
+            <Button variant="outline" size="sm" className="w-full" data-testid={`button-chart-${stock.ticker}`}>
+              <LineChart className="h-3.5 w-3.5 mr-1.5" />
+              チャートを見る
+            </Button>
+          </Link>
         </div>
       </CardContent>
     </Card>
