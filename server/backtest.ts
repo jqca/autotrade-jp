@@ -260,11 +260,15 @@ function computeIndicatorsAtIndex(closes: number[], dayIndex: number, minBars: n
   else if (macdTrend === "buy") signalScore += 10;
   if (isRsiReversal) signalScore += 25;
   else if (rsiTrend === "buy") signalScore += 10;
-  if (maTrend === "buy") signalScore += 20;
+  if (maTrend === "buy") signalScore += 25;
+  else if (maTrend === "sell") signalScore -= 15;
   if (bbTrend === "buy") signalScore += 15;
   if (prevMa5 != null && prevMa25 != null && prevMa5 <= prevMa25 && ma5 != null && ma25 != null && ma5 > ma25) {
-    signalScore += 10;
+    signalScore += 15;
   }
+
+  const ma5Rising = prevMa5 != null && ma5 != null && ma5 > prevMa5;
+  if (maTrend === "sell" && ma5Rising) signalScore += 10;
 
   const ma75Arr = sma(slice, 75);
   const ma75 = ma75Arr[n - 1];
@@ -273,7 +277,7 @@ function computeIndicatorsAtIndex(closes: number[], dayIndex: number, minBars: n
     ? (closes[n - 1] > ma25 && ma25 > ma75 && ma75 >= prevMa75)
     : false;
 
-  if (isUptrend) signalScore += 10;
+  if (isUptrend) signalScore += 15;
 
   const bbWidth = mid[n - 1] != null ? (() => {
     let sumSq = 0;
@@ -378,6 +382,10 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
+            }
+
+            if (indicators.maTrend === "sell") {
+              if (!indicators.isMacdCrossover && !indicators.isRsiReversal) continue;
             }
 
             if (params.requireMacdCrossover && !indicators.isMacdCrossover) continue;
@@ -707,6 +715,10 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
+              }
+
+              if (indicators.maTrend === "sell") {
+                if (!indicators.isMacdCrossover && !indicators.isRsiReversal) continue;
               }
 
               if (params.requireMacdCrossover && !indicators.isMacdCrossover) continue;
@@ -1207,6 +1219,10 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
+              }
+
+              if (indicators.maTrend === "sell") {
+                if (!indicators.isMacdCrossover && !indicators.isRsiReversal) continue;
               }
 
               if (params.requireMacdCrossover && !indicators.isMacdCrossover) continue;
