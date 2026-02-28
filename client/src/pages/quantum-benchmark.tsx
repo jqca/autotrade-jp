@@ -10,22 +10,22 @@ import {
   Atom, BarChart3, TrendingUp, Shield, RefreshCw,
   CheckCircle, XCircle, Zap, Brain, Target,
   Layers, Activity, Award, Printer, Trash2, History,
-  Clock, Database, FlaskConical
+  Clock, Database, FlaskConical, Cpu, Sparkles, ArrowRight
 } from "lucide-react";
 
-function WinBadge({ quantum, classical, unit }: { quantum: number; classical: number; unit?: string }) {
-  const qWins = quantum > classical;
-  const diff = Math.abs(quantum - classical);
+function ComparisonBadge({ quantum, ai, unit }: { quantum: number; ai: number; unit?: string }) {
+  const qWins = quantum > ai;
+  const diff = Math.abs(quantum - ai);
   if (Math.abs(diff) < 0.01) return <Badge variant="outline" className="text-xs">同等</Badge>;
   return qWins
     ? <Badge className="bg-purple-600 text-white text-xs" data-testid="badge-quantum-wins">量子 +{diff.toFixed(1)}{unit || ""}</Badge>
-    : <Badge className="bg-blue-600 text-white text-xs" data-testid="badge-classical-wins">古典 +{diff.toFixed(1)}{unit || ""}</Badge>;
+    : <Badge className="bg-sky-600 text-white text-xs" data-testid="badge-ai-wins">AI +{diff.toFixed(1)}{unit || ""}</Badge>;
 }
 
 function AccuracyBar({ value, label, color }: { value: number; label: string; color: string }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs w-20 text-right">{label}</span>
+      <span className="text-xs w-24 text-right">{label}</span>
       <div className="flex-1 h-5 bg-muted rounded overflow-hidden relative">
         <div className={`h-full ${color} rounded`} style={{ width: `${Math.min(100, value)}%` }} />
         <span className="absolute inset-0 flex items-center justify-center text-xs font-medium">
@@ -48,6 +48,14 @@ function DataSourceBadge({ source }: { source: string }) {
   );
 }
 
+function BestBadge({ best }: { best: string }) {
+  return best === "量子" ? (
+    <Badge className="bg-purple-600 text-white text-xs gap-1"><Atom className="h-3 w-3" />量子が適任</Badge>
+  ) : (
+    <Badge className="bg-sky-600 text-white text-xs gap-1"><Cpu className="h-3 w-3" />AIが適任</Badge>
+  );
+}
+
 function formatDate(d: string | null) {
   if (!d) return "";
   return new Date(d).toLocaleString("ja-JP", {
@@ -65,57 +73,137 @@ function formatMs(ms: number | null) {
 function ResultDetail({ result }: { result: any }) {
   if (!result) return null;
 
+  const rs = result.risk?.summary || {};
+  const riskSummary = {
+    ai_accuracy: rs.ai_accuracy ?? rs.classical_accuracy ?? 0,
+    quantum_accuracy: rs.quantum_accuracy ?? 0,
+    ai_crisis_detection: rs.ai_crisis_detection ?? rs.classical_crisis_detection ?? 0,
+    quantum_crisis_detection: rs.quantum_crisis_detection ?? 0,
+    crisis_count: rs.crisis_count ?? 0,
+    normal_count: rs.normal_count ?? 0,
+    total_scenarios: rs.total_scenarios ?? 0,
+    ai_only_correct: rs.ai_only_correct ?? rs.classical_only_correct ?? 0,
+    quantum_only_correct: rs.quantum_only_correct ?? 0,
+  };
+  const ks = result.kernel?.standard_test || {};
+  const kernelStandard = {
+    n_samples: ks.n_samples ?? 0,
+    ai_accuracy: ks.ai_accuracy ?? ks.classical_accuracy ?? 0,
+    quantum_accuracy: ks.quantum_accuracy ?? 0,
+  };
+  const kb = result.kernel?.boundary_test || {};
+  const kernelBoundary = {
+    n_samples: kb.n_samples ?? 0,
+    ai_accuracy: kb.ai_accuracy ?? kb.classical_accuracy ?? 0,
+    quantum_accuracy: kb.quantum_accuracy ?? 0,
+    description: kb.description ?? "",
+  };
+  const summaryData = result.summary || {};
+  const aiWins = summaryData.ai_wins ?? summaryData.classical_wins ?? 0;
+  const quantumWins = summaryData.quantum_wins ?? 0;
+
   return (
     <div className="space-y-6 print-content" id="benchmark-report">
       {result.summary && (
         <div className="print-only hidden print:block mb-6 text-center border-b pb-4">
-          <h1 className="text-xl font-bold">量子技術ベンチマークレポート</h1>
+          <h1 className="text-xl font-bold">AI vs 量子 ベンチマークレポート</h1>
           <p className="text-sm text-muted-foreground mt-1">
             実行日時: {new Date().toLocaleString("ja-JP")} | データソース: {result.summary.data_source === "real" ? "実データ" : "合成データ"}
           </p>
         </div>
       )}
 
+      {result.allocation && (
+        <Card className="border-2 border-sky-500/20 bg-gradient-to-r from-sky-500/5 to-purple-500/5" data-testid="card-allocation">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Sparkles className="h-5 w-5 text-amber-500" />
+              {result.allocation.name}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {result.allocation.domains?.map((d: any, i: number) => (
+                <div key={i} className="p-3 bg-background rounded-lg border flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium flex items-center gap-1">
+                      {d.icon === "shield" && <Shield className="h-4 w-4 text-muted-foreground" />}
+                      {d.icon === "brain" && <Brain className="h-4 w-4 text-muted-foreground" />}
+                      {d.icon === "trending" && <TrendingUp className="h-4 w-4 text-muted-foreground" />}
+                      {d.icon === "activity" && <Activity className="h-4 w-4 text-muted-foreground" />}
+                      {d.task}
+                    </span>
+                    <BestBadge best={d.best} />
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1"><Cpu className="h-3 w-3 text-sky-500" />{d.ai_method}</span>
+                    <ArrowRight className="h-3 w-3" />
+                    <span className="flex items-center gap-1"><Atom className="h-3 w-3 text-purple-500" />{d.quantum_method}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{d.reason}</p>
+                </div>
+              ))}
+            </div>
+            <p className="text-sm font-medium mt-4 text-center text-amber-700 dark:text-amber-400">
+              {result.allocation.conclusion}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="border-purple-500/30 border-2 bg-purple-500/5" data-testid="card-summary">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg">
             <Award className="h-5 w-5 text-purple-500" />
-            総合結果サマリー
-            {result.risk?.data_source && (
-              <DataSourceBadge source={result.risk.data_source} />
-            )}
+            ベンチマーク結果
+            {result.risk?.data_source && <DataSourceBadge source={result.risk.data_source} />}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center p-3 bg-background rounded-lg">
-              <Shield className="h-5 w-5 mx-auto mb-1 text-purple-500" />
-              <p className="text-xs text-muted-foreground">リスク検知精度</p>
-              <p className="text-lg font-bold">{result.risk?.summary?.quantum_accuracy}%</p>
-              <WinBadge quantum={result.risk?.summary?.quantum_accuracy || 0} classical={result.risk?.summary?.classical_accuracy || 0} unit="%" />
+              <Shield className="h-5 w-5 mx-auto mb-1 text-sky-500" />
+              <p className="text-xs text-muted-foreground">リスク検知</p>
+              <div className="flex justify-center gap-1 mt-1">
+                <Badge variant="outline" className="text-xs">AI {riskSummary.ai_accuracy}%</Badge>
+                <Badge variant="outline" className="text-xs">量子 {riskSummary.quantum_accuracy}%</Badge>
+              </div>
+              <div className="mt-1">
+                <ComparisonBadge quantum={riskSummary.quantum_accuracy || 0} ai={riskSummary.ai_accuracy || 0} unit="%" />
+              </div>
             </div>
             <div className="text-center p-3 bg-background rounded-lg">
-              <Target className="h-5 w-5 mx-auto mb-1 text-purple-500" />
+              <Target className="h-5 w-5 mx-auto mb-1 text-sky-500" />
               <p className="text-xs text-muted-foreground">危機検出率</p>
-              <p className="text-lg font-bold">{result.risk?.summary?.quantum_crisis_detection}%</p>
-              <WinBadge quantum={result.risk?.summary?.quantum_crisis_detection || 0} classical={result.risk?.summary?.classical_crisis_detection || 0} unit="%" />
+              <div className="flex justify-center gap-1 mt-1">
+                <Badge variant="outline" className="text-xs">AI {riskSummary.ai_crisis_detection}%</Badge>
+                <Badge variant="outline" className="text-xs">量子 {riskSummary.quantum_crisis_detection}%</Badge>
+              </div>
+              <div className="mt-1">
+                <ComparisonBadge quantum={riskSummary.quantum_crisis_detection || 0} ai={riskSummary.ai_crisis_detection || 0} unit="%" />
+              </div>
             </div>
             <div className="text-center p-3 bg-background rounded-lg">
               <Brain className="h-5 w-5 mx-auto mb-1 text-purple-500" />
-              <p className="text-xs text-muted-foreground">カーネル境界精度</p>
-              <p className="text-lg font-bold">{result.kernel?.boundary_test?.quantum_accuracy}%</p>
-              <WinBadge quantum={result.kernel?.boundary_test?.quantum_accuracy || 0} classical={result.kernel?.boundary_test?.classical_accuracy || 0} unit="%" />
+              <p className="text-xs text-muted-foreground">シグナル分類</p>
+              <div className="flex justify-center gap-1 mt-1">
+                <Badge variant="outline" className="text-xs">AI {kernelStandard.ai_accuracy}%</Badge>
+                <Badge variant="outline" className="text-xs">量子 {kernelStandard.quantum_accuracy}%</Badge>
+              </div>
+              <div className="mt-1">
+                <ComparisonBadge quantum={kernelStandard.quantum_accuracy || 0} ai={kernelStandard.ai_accuracy || 0} unit="%" />
+              </div>
             </div>
             <div className="text-center p-3 bg-background rounded-lg">
               <Layers className="h-5 w-5 mx-auto mb-1 text-purple-500" />
-              <p className="text-xs text-muted-foreground">VaR推定 6qubit精度</p>
+              <p className="text-xs text-muted-foreground">VaR推定 6qubit</p>
               {(() => {
                 const q6 = result.var?.quantum?.find((q: any) => q.n_qubits === 6);
                 const c10k = result.var?.classical?.find((c: any) => c.n_simulations === 10000);
                 return (
                   <>
-                    <p className="text-lg font-bold">誤差 {q6?.var_error_pct}%</p>
-                    <WinBadge quantum={100 - (q6?.var_error_pct || 100)} classical={100 - (c10k?.var_error_pct || 100)} unit="%" />
+                    <p className="text-sm font-bold mt-1">誤差 {q6?.var_error_pct}%</p>
+                    <ComparisonBadge quantum={100 - (q6?.var_error_pct || 100)} ai={100 - (c10k?.var_error_pct || 100)} unit="%" />
                   </>
                 );
               })()}
@@ -125,8 +213,8 @@ function ResultDetail({ result }: { result: any }) {
           {result.summary?.findings && result.summary.findings.length > 0 && (
             <div className="mt-4 p-3 bg-background rounded-lg border">
               <p className="text-sm font-medium mb-2 flex items-center gap-1">
-                <Zap className="h-4 w-4 text-purple-500" />
-                量子技術による発見事項
+                <Zap className="h-4 w-4 text-amber-500" />
+                AI vs 量子 — 分析結果
               </p>
               <ul className="space-y-1">
                 {result.summary.findings.map((f: string, i: number) => (
@@ -136,7 +224,20 @@ function ResultDetail({ result }: { result: any }) {
                   </li>
                 ))}
               </ul>
-              <p className="text-sm font-medium mt-3 text-purple-600 dark:text-purple-400">
+              <div className="flex items-center gap-3 mt-3">
+                <div className="flex items-center gap-1 text-xs">
+                  <Cpu className="h-3 w-3 text-sky-500" />
+                  <span className="font-medium">AI {aiWins}勝</span>
+                </div>
+                <div className="flex items-center gap-1 text-xs">
+                  <Atom className="h-3 w-3 text-purple-500" />
+                  <span className="font-medium">量子 {quantumWins}勝</span>
+                </div>
+                {(summaryData.ties ?? 0) > 0 && (
+                  <span className="text-xs text-muted-foreground">引分 {summaryData.ties}</span>
+                )}
+              </div>
+              <p className="text-sm font-medium mt-2 text-amber-700 dark:text-amber-400">
                 {result.summary.conclusion}
               </p>
             </div>
@@ -148,38 +249,57 @@ function ResultDetail({ result }: { result: any }) {
         <Card data-testid="card-risk-benchmark">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
-              <Shield className="h-4 w-4 text-purple-500" />
+              <Shield className="h-4 w-4 text-sky-500" />
               {result.risk.name}
               <DataSourceBadge source={result.risk.data_source} />
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {(result.risk.ai_model || result.risk.quantum_model) && (
+            <div className="flex gap-2 flex-wrap text-xs text-muted-foreground">
+              {result.risk.ai_model && <span className="flex items-center gap-1"><Cpu className="h-3 w-3 text-sky-500" />{result.risk.ai_model}</span>}
+              {result.risk.quantum_model && <span className="flex items-center gap-1"><Atom className="h-3 w-3 text-purple-500" />{result.risk.quantum_model}</span>}
+            </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <p className="text-sm font-medium">全体精度</p>
-                <AccuracyBar value={result.risk.summary.classical_accuracy} label="古典" color="bg-blue-500" />
-                <AccuracyBar value={result.risk.summary.quantum_accuracy} label="量子(QML)" color="bg-purple-500" />
+                <AccuracyBar value={riskSummary.ai_accuracy} label="AI (GBM)" color="bg-sky-500" />
+                <AccuracyBar value={riskSummary.quantum_accuracy} label="量子 (QML)" color="bg-purple-500" />
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-medium">危機シナリオ検出率</p>
-                <AccuracyBar value={result.risk.summary.classical_crisis_detection} label="古典" color="bg-blue-500" />
-                <AccuracyBar value={result.risk.summary.quantum_crisis_detection} label="量子(QML)" color="bg-purple-500" />
+                <AccuracyBar value={riskSummary.ai_crisis_detection} label="AI (GBM)" color="bg-sky-500" />
+                <AccuracyBar value={riskSummary.quantum_crisis_detection} label="量子 (QML)" color="bg-purple-500" />
                 <p className="text-xs text-muted-foreground">
-                  {result.risk.summary.crisis_count}件の危機シナリオ / {result.risk.summary.total_scenarios}件中
+                  {riskSummary.crisis_count}件の危機シナリオ / {riskSummary.total_scenarios}件中
                 </p>
               </div>
             </div>
+            {result.risk.feature_importance && (
+              <div className="p-3 bg-sky-500/5 rounded-lg border-t">
+                <p className="text-sm font-medium mb-1 flex items-center gap-1">
+                  <Cpu className="h-3 w-3 text-sky-500" />
+                  AI特徴量重要度 (GradientBoosting)
+                </p>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {Object.entries(result.risk.feature_importance).map(([k, v]: [string, any]) => (
+                    <Badge key={k} variant="outline" className="text-xs">{k}: {(v * 100).toFixed(1)}%</Badge>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="overflow-x-auto pt-2 border-t">
               <p className="text-xs text-muted-foreground mb-2">シナリオ別詳細（上位10件）</p>
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b">
                     <th className="text-left py-1 px-2">#</th>
-                    {result.risk.data_source === "real" && <th className="text-left py-1 px-2">銘柄/セクター</th>}
+                    {result.risk.data_source === "real" && <th className="text-left py-1 px-2">対象</th>}
                     <th className="text-left py-1 px-2">状態</th>
-                    <th className="text-right py-1 px-2">古典スコア</th>
+                    <th className="text-right py-1 px-2">AIスコア</th>
                     <th className="text-right py-1 px-2">量子スコア</th>
-                    <th className="text-center py-1 px-2">古典判定</th>
+                    <th className="text-center py-1 px-2">AI判定</th>
                     <th className="text-center py-1 px-2">量子判定</th>
                   </tr>
                 </thead>
@@ -193,10 +313,10 @@ function ResultDetail({ result }: { result: any }) {
                           {s.is_crisis ? "危機" : "正常"}
                         </Badge>
                       </td>
-                      <td className="text-right py-1 px-2">{s.classical_score}</td>
+                      <td className="text-right py-1 px-2">{s.ai_score ?? s.classical_score}</td>
                       <td className="text-right py-1 px-2">{s.quantum_score}</td>
                       <td className="text-center py-1 px-2">
-                        {s.classical_correct ? <CheckCircle className="h-3 w-3 text-emerald-500 inline" /> : <XCircle className="h-3 w-3 text-red-500 inline" />}
+                        {(s.ai_correct ?? s.classical_correct) ? <CheckCircle className="h-3 w-3 text-emerald-500 inline" /> : <XCircle className="h-3 w-3 text-red-500 inline" />}
                       </td>
                       <td className="text-center py-1 px-2">
                         {s.quantum_correct ? <CheckCircle className="h-3 w-3 text-emerald-500 inline" /> : <XCircle className="h-3 w-3 text-red-500 inline" />}
@@ -206,6 +326,13 @@ function ResultDetail({ result }: { result: any }) {
                 </tbody>
               </table>
             </div>
+            {result.risk.analysis && (
+              <div className="p-3 bg-muted/30 rounded-lg border-t">
+                <p className="text-xs text-muted-foreground"><strong>AI:</strong> {result.risk.analysis.ai_strength}</p>
+                <p className="text-xs text-muted-foreground mt-1"><strong>量子:</strong> {result.risk.analysis.quantum_strength}</p>
+                <p className="text-xs font-medium mt-1 text-amber-700 dark:text-amber-400">{result.risk.analysis.recommendation}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -220,31 +347,53 @@ function ResultDetail({ result }: { result: any }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {(result.kernel.ai_model || result.kernel.quantum_model) && (
+            <div className="flex gap-2 flex-wrap text-xs text-muted-foreground">
+              {result.kernel.ai_model && <span className="flex items-center gap-1"><Cpu className="h-3 w-3 text-sky-500" />{result.kernel.ai_model}</span>}
+              {result.kernel.quantum_model && <span className="flex items-center gap-1"><Atom className="h-3 w-3 text-purple-500" />{result.kernel.quantum_model}</span>}
+            </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <p className="text-sm font-medium">標準テストセット ({result.kernel.standard_test.n_samples}件)</p>
-                <AccuracyBar value={result.kernel.standard_test.classical_accuracy} label="古典" color="bg-blue-500" />
-                <AccuracyBar value={result.kernel.standard_test.quantum_accuracy} label="量子カーネル" color="bg-purple-500" />
+                <p className="text-sm font-medium">標準テストセット ({kernelStandard.n_samples}件)</p>
+                <AccuracyBar value={kernelStandard.ai_accuracy} label="AI (RF)" color="bg-sky-500" />
+                <AccuracyBar value={kernelStandard.quantum_accuracy} label="量子カーネル" color="bg-purple-500" />
               </div>
               <div className="space-y-2">
-                <p className="text-sm font-medium">決定境界テスト ({result.kernel.boundary_test.n_samples}件)</p>
-                <AccuracyBar value={result.kernel.boundary_test.classical_accuracy} label="古典" color="bg-blue-500" />
-                <AccuracyBar value={result.kernel.boundary_test.quantum_accuracy} label="量子カーネル" color="bg-purple-500" />
-                <p className="text-xs text-muted-foreground">{result.kernel.boundary_test.description}</p>
+                <p className="text-sm font-medium">境界判定テスト ({kernelBoundary.n_samples}件)</p>
+                <AccuracyBar value={kernelBoundary.ai_accuracy} label="AI (RF)" color="bg-sky-500" />
+                <AccuracyBar value={kernelBoundary.quantum_accuracy} label="量子カーネル" color="bg-purple-500" />
+                <p className="text-xs text-muted-foreground">{kernelBoundary.description}</p>
               </div>
             </div>
+            {result.kernel.ai_feature_importance && (
+              <div className="p-3 bg-sky-500/5 rounded-lg border-t">
+                <p className="text-sm font-medium mb-1 flex items-center gap-1">
+                  <Cpu className="h-3 w-3 text-sky-500" />
+                  AI特徴量重要度 (RandomForest)
+                </p>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {Object.entries(result.kernel.ai_feature_importance).map(([k, v]: [string, any]) => (
+                    <Badge key={k} variant="outline" className="text-xs">{k}: {(v * 100).toFixed(1)}%</Badge>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="p-3 bg-purple-500/5 rounded-lg border-t">
               <p className="text-sm font-medium mb-1 flex items-center gap-1">
-                <Zap className="h-3 w-3 text-purple-500" />
-                量子カーネルの優位性
+                <Atom className="h-3 w-3 text-purple-500" />
+                量子カーネルの特徴空間
               </p>
-              <p className="text-xs text-muted-foreground">
-                <strong>特徴空間: </strong>{result.kernel.advantage.feature_space}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {result.kernel.advantage.description}
-              </p>
+              <p className="text-xs text-muted-foreground">{result.kernel.advantage?.feature_space}</p>
+              <p className="text-xs text-muted-foreground mt-1">{result.kernel.advantage?.description}</p>
             </div>
+            {result.kernel.analysis && (
+              <div className="p-3 bg-muted/30 rounded-lg border-t">
+                <p className="text-xs text-muted-foreground"><strong>AI:</strong> {result.kernel.analysis.ai_strength}</p>
+                <p className="text-xs text-muted-foreground mt-1"><strong>量子:</strong> {result.kernel.analysis.quantum_strength}</p>
+                <p className="text-xs font-medium mt-1 text-amber-700 dark:text-amber-400">{result.kernel.analysis.recommendation}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -269,8 +418,6 @@ function ResultDetail({ result }: { result: any }) {
                     <th className="text-right py-2 px-2">量子 Sharpe</th>
                     <th className="text-right py-2 px-2">古典リスク</th>
                     <th className="text-right py-2 px-2">量子リスク</th>
-                    <th className="text-right py-2 px-2">古典計算量</th>
-                    <th className="text-right py-2 px-2">量子計算量</th>
                     <th className="text-center py-2 px-2">優位</th>
                   </tr>
                 </thead>
@@ -285,10 +432,8 @@ function ResultDetail({ result }: { result: any }) {
                       <td className="text-right py-2 px-2">{r.quantum.sharpe}</td>
                       <td className="text-right py-2 px-2">{r.classical.risk}</td>
                       <td className="text-right py-2 px-2">{r.quantum.risk}</td>
-                      <td className="text-right py-2 px-2 text-xs text-muted-foreground">{r.classical.complexity}</td>
-                      <td className="text-right py-2 px-2 text-xs text-muted-foreground">{r.quantum.complexity}</td>
                       <td className="text-center py-2 px-2">
-                        <WinBadge quantum={r.quantum.sharpe} classical={r.classical.sharpe} />
+                        <ComparisonBadge quantum={r.quantum.sharpe} ai={r.classical.sharpe} />
                       </td>
                     </tr>
                   ))}
@@ -304,6 +449,12 @@ function ResultDetail({ result }: { result: any }) {
                 {result.portfolio.scaling.crossover_estimate}
               </p>
             </div>
+            {result.portfolio.analysis && (
+              <div className="p-3 bg-muted/30 rounded-lg border-t">
+                <p className="text-xs font-medium text-amber-700 dark:text-amber-400">{result.portfolio.analysis.recommendation}</p>
+                <p className="text-xs text-muted-foreground mt-1">{result.portfolio.analysis.ai_note}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -329,14 +480,12 @@ function ResultDetail({ result }: { result: any }) {
               </div>
             </div>
             {result.var.asset_names?.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                対象銘柄: {result.var.asset_names.join(", ")}
-              </p>
+              <p className="text-xs text-muted-foreground">対象銘柄: {result.var.asset_names.join(", ")}</p>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <p className="text-sm font-medium mb-2">古典モンテカルロ (シミュレーション数別)</p>
+                <p className="text-sm font-medium mb-2">古典モンテカルロ</p>
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b">
@@ -357,7 +506,7 @@ function ResultDetail({ result }: { result: any }) {
                 </table>
               </div>
               <div>
-                <p className="text-sm font-medium mb-2">量子振幅推定 (量子ビット数別)</p>
+                <p className="text-sm font-medium mb-2">量子振幅推定</p>
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b">
@@ -383,16 +532,15 @@ function ResultDetail({ result }: { result: any }) {
 
             <div className="p-3 bg-purple-500/5 rounded-lg border-t">
               <p className="text-sm font-medium mb-1">収束速度の優位性</p>
-              <p className="text-xs text-muted-foreground">
-                古典: {result.var.advantage.classical_convergence}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                量子: {result.var.advantage.quantum_convergence}
-              </p>
-              <p className="text-xs text-purple-600 dark:text-purple-400 mt-1 font-medium">
-                {result.var.advantage.speedup}
-              </p>
+              <p className="text-xs text-muted-foreground">古典: {result.var.advantage.classical_convergence}</p>
+              <p className="text-xs text-muted-foreground">量子: {result.var.advantage.quantum_convergence}</p>
+              <p className="text-xs text-purple-600 dark:text-purple-400 mt-1 font-medium">{result.var.advantage.speedup}</p>
             </div>
+            {result.var.analysis && (
+              <div className="p-3 bg-muted/30 rounded-lg border-t">
+                <p className="text-xs font-medium text-amber-700 dark:text-amber-400">{result.var.analysis.recommendation}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -452,28 +600,34 @@ function ResultDetail({ result }: { result: any }) {
       <Card className="bg-muted/30" data-testid="card-conclusion">
         <CardContent className="pt-4">
           <h3 className="font-medium text-sm mb-3 flex items-center gap-2">
-            <Atom className="h-4 w-4 text-purple-500" />
-            量子技術の優位性まとめ
+            <Sparkles className="h-4 w-4 text-amber-500" />
+            AI vs 量子 — 適材適所の結論
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-muted-foreground">
             <div className="space-y-2">
+              <p className="font-medium text-sky-600 dark:text-sky-400 flex items-center gap-1">
+                <Cpu className="h-3 w-3" />AIが得意な領域
+              </p>
               <p className="flex items-center gap-1">
                 <Shield className="h-3 w-3" />
-                <strong>リスク検知:</strong> 量子機械学習（変分量子回路）による非線形パターン検出
-              </p>
-              <p className="flex items-center gap-1">
-                <TrendingUp className="h-3 w-3" />
-                <strong>ポートフォリオ:</strong> QAOA量子最適化による組合せ最適化
-              </p>
-            </div>
-            <div className="space-y-2">
-              <p className="flex items-center gap-1">
-                <Activity className="h-3 w-3" />
-                <strong>VaR推定:</strong> 量子振幅推定による二乗速度向上
+                <strong>リスク検知:</strong> GradientBoostingによる大量データからの異常パターン学習
               </p>
               <p className="flex items-center gap-1">
                 <Brain className="h-3 w-3" />
-                <strong>カーネルSVM:</strong> 量子カーネルによる高次元特徴空間マッピング
+                <strong>シグナル分類:</strong> RandomForestによるアンサンブル学習と特徴量重要度分析
+              </p>
+            </div>
+            <div className="space-y-2">
+              <p className="font-medium text-purple-600 dark:text-purple-400 flex items-center gap-1">
+                <Atom className="h-3 w-3" />量子が得意な領域
+              </p>
+              <p className="flex items-center gap-1">
+                <TrendingUp className="h-3 w-3" />
+                <strong>ポートフォリオ最適化:</strong> QAOA量子最適化による組合せ探索の指数的高速化
+              </p>
+              <p className="flex items-center gap-1">
+                <Activity className="h-3 w-3" />
+                <strong>VaR推定:</strong> 量子振幅推定による確率サンプリングの二乗速度向上
               </p>
             </div>
           </div>
@@ -500,7 +654,7 @@ export default function QuantumBenchmark() {
     onSuccess: (data) => {
       setResult(data);
       queryClient.invalidateQueries({ queryKey: ["/api/benchmark/runs"] });
-      toast({ title: "ベンチマーク完了", description: "量子vs古典の比較分析が完了しました" });
+      toast({ title: "ベンチマーク完了", description: "AI vs 量子の比較分析が完了しました" });
     },
     onError: (err: Error) => {
       toast({ title: "エラー", description: err.message, variant: "destructive" });
@@ -537,8 +691,6 @@ export default function QuantumBenchmark() {
     window.print();
   };
 
-  const activeResult = result;
-
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
       <style>{`
@@ -554,11 +706,11 @@ export default function QuantumBenchmark() {
       <div className="flex items-center justify-between flex-wrap gap-4 no-print">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
-            <Award className="h-6 w-6 text-purple-500" />
-            量子技術ベンチマーク
+            <Sparkles className="h-6 w-6 text-amber-500" />
+            AI vs 量子 ベンチマーク
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            量子アルゴリズムの優位性を体系的に分析・比較
+            AIと量子コンピューティングの適材適所を体系的に分析・比較
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -571,7 +723,7 @@ export default function QuantumBenchmark() {
             <History className="h-4 w-4" />
             履歴 {historyQuery.data?.length ? `(${historyQuery.data.length})` : ""}
           </Button>
-          {activeResult && (
+          {result && (
             <Button
               variant="outline"
               onClick={handlePrint}
@@ -596,7 +748,7 @@ export default function QuantumBenchmark() {
               </>
             ) : (
               <>
-                <Atom className="h-4 w-4" />
+                <Zap className="h-4 w-4" />
                 全ベンチマーク実行
               </>
             )}
@@ -636,23 +788,20 @@ export default function QuantumBenchmark() {
                           <DataSourceBadge source={run.dataSource} />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {formatDate(run.runAt)}
-                          </p>
+                          <p className="text-sm font-medium truncate">{formatDate(run.runAt)}</p>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {formatMs(run.executionTimeMs)}
+                              <Clock className="h-3 w-3" />{formatMs(run.executionTimeMs)}
                             </span>
                             {run.stockCount > 0 && (
                               <span className="flex items-center gap-1">
-                                <Database className="h-3 w-3" />
-                                {run.stockCount}銘柄
+                                <Database className="h-3 w-3" />{run.stockCount}銘柄
                               </span>
                             )}
                             {summary && (
                               <span>
-                                量子{summary.quantum_wins}勝 古典{summary.classical_wins}勝
+                                <Cpu className="h-3 w-3 inline" /> AI {summary.ai_wins ?? summary.classical_wins ?? 0}勝
+                                {" "}<Atom className="h-3 w-3 inline" /> 量子 {summary.quantum_wins ?? 0}勝
                               </span>
                             )}
                           </div>
@@ -683,10 +832,10 @@ export default function QuantumBenchmark() {
         <div className="space-y-4 no-print">
           <Card>
             <CardContent className="py-8 text-center">
-              <RefreshCw className="h-10 w-10 animate-spin mx-auto text-purple-500 mb-4" />
-              <p className="text-lg font-medium">量子回路を実行中...</p>
+              <RefreshCw className="h-10 w-10 animate-spin mx-auto text-amber-500 mb-4" />
+              <p className="text-lg font-medium">AI vs 量子ベンチマーク実行中...</p>
               <p className="text-sm text-muted-foreground mt-2">
-                実データを取得し、4種類のベンチマーク（リスク検知・ポートフォリオ最適化・VaR推定・量子カーネル）を実行しています。
+                実データを取得し、AI (GradientBoosting, RandomForest) と 量子 (QML, QAOA, 振幅推定, カーネル) の4分野比較を実行しています。
                 最大5分程度かかります。
               </p>
             </CardContent>
@@ -704,8 +853,8 @@ export default function QuantumBenchmark() {
         </div>
       )}
 
-      {activeResult && !benchmarkMutation.isPending && (
-        <ResultDetail result={activeResult} />
+      {result && !benchmarkMutation.isPending && (
+        <ResultDetail result={result} />
       )}
     </div>
   );

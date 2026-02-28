@@ -60,8 +60,8 @@ server/
   qaoa_portfolio.py - PennyLane QAOA circuit for portfolio selection (QUBO formulation)
   var-calculator.ts - Classical Monte Carlo + Quantum Monte Carlo VaR calculator wrapper
   quantum_mc_var.py - PennyLane quantum amplitude estimation for VaR/CVaR calculation
-  quantum_benchmark.py - Multi-domain quantum benchmark (risk/portfolio/VaR/kernel, accepts real data via stdin)
-  quantum-benchmark.ts - Benchmark orchestrator (gathers real data from DB/Yahoo, runs Python, saves results)
+  quantum_benchmark.py - AI vs Quantum benchmark: GradientBoosting(risk)/RandomForest(signal) vs QML/QAOA/amplitude estimation/quantum kernel, accepts real data via stdin
+  quantum-benchmark.ts - Benchmark orchestrator (gathers real data from DB/Yahoo, runs Python, saves results to DB)
 shared/
   schema.ts      - Drizzle schemas and TypeScript types
 ```
@@ -146,3 +146,4 @@ shared/
 - recharts - For historical price charts
 - pennylane (Python) - Quantum machine learning framework for QML risk detection
 - numpy (Python) - Numerical computing for QML feature processing
+- scikit-learn (Python) - ML models (GradientBoosting, RandomForest) for AI vs quantum benchmark
