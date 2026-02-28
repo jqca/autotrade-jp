@@ -137,6 +137,7 @@ export default function Backtest() {
   const [aiThreshold, setAiThreshold] = useState(0.5);
   const [stopLossPercent, setStopLossPercent] = useState(1);
   const [maxHoldDays, setMaxHoldDays] = useState(3);
+  const [minVolume, setMinVolume] = useState(100000);
   const [requireUptrend, setRequireUptrend] = useState(false);
   const [dynamicTarget, setDynamicTarget] = useState(true);
   const [requireMacdCrossover, setRequireMacdCrossover] = useState(false);
@@ -206,6 +207,7 @@ export default function Backtest() {
       aiThreshold,
       stopLossPercent,
       maxHoldDays,
+      minVolume,
       requireUptrend,
       dynamicTarget,
       requireMacdCrossover,
@@ -757,6 +759,25 @@ export default function Backtest() {
                     </div>
 
                     <div className="space-y-3">
+                      <Label className="text-sm font-medium">最低出来高</Label>
+                      <div className="flex items-center gap-3">
+                        <Slider
+                          value={[minVolume / 10000]}
+                          onValueChange={([v]) => setMinVolume(v * 10000)}
+                          min={0}
+                          max={100}
+                          step={5}
+                          className="flex-1"
+                          data-testid="slider-min-volume"
+                        />
+                        <Badge variant="secondary" className="min-w-[70px] justify-center" data-testid="text-min-volume">
+                          {minVolume === 0 ? "なし" : `${(minVolume / 10000).toFixed(0)}万株`}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">出来高が少ない銘柄を除外（推奨: 10万株以上）</p>
+                    </div>
+
+                    <div className="space-y-3">
                       <Label className="text-sm font-medium">最小シグナルスコア</Label>
                       <div className="flex items-center gap-3">
                         <Slider
@@ -1024,6 +1045,7 @@ export default function Backtest() {
                   {stopLossPercent > 0 && <Badge variant="outline" className="border-red-300 text-red-700 dark:text-red-400">SL {stopLossPercent}%</Badge>}
                   {trailingStop && <Badge variant="outline" className="border-amber-300 text-amber-700 dark:text-amber-400">TS {trailingStopPercent}%</Badge>}
                   {maxHoldDays > 1 && <Badge variant="outline">{maxHoldDays}日保持</Badge>}
+                  {minVolume > 0 && <Badge variant="outline" className="border-blue-300 text-blue-700 dark:text-blue-400">出来高≥{(minVolume / 10000).toFixed(0)}万</Badge>}
                   {dynamicTarget && <Badge variant="outline">動的利確</Badge>}
                   {requireDailyConfirm && <Badge variant="outline" className="border-indigo-300 text-indigo-700 dark:text-indigo-400">日足確認</Badge>}
                 </div>
