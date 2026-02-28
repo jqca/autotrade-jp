@@ -598,49 +598,4 @@ async function seedData() {
     await storage.createStock(stock);
   }
 
-  await storage.createStrategy({
-    name: "Toyota Dip Buyer",
-    stockTicker: "7203",
-    type: "price_drop_buy",
-    buyCondition: 2,
-    sellCondition: 3,
-    quantity: 100,
-    isActive: true,
-  });
-
-  await storage.createStrategy({
-    name: "Sony Profit Taker",
-    stockTicker: "6758",
-    type: "price_rise_sell",
-    buyCondition: 3,
-    sellCondition: 2,
-    quantity: 50,
-    isActive: true,
-  });
-
-  await storage.createStrategy({
-    name: "Keyence Value Buy",
-    stockTicker: "6861",
-    type: "threshold_buy",
-    buyCondition: 64000,
-    sellCondition: 68000,
-    quantity: 10,
-    isActive: false,
-  });
-
-  await storage.upsertPosition("7203", 200, 2800, 2850);
-  await storage.upsertPosition("6758", 100, 12800, 13200);
-  await storage.upsertPosition("8306", 500, 1620, 1680);
-
-  const tradeData = [
-    { stockTicker: "7203", side: "buy", price: 2780, quantity: 100, total: 278000 },
-    { stockTicker: "7203", side: "buy", price: 2820, quantity: 100, total: 282000 },
-    { stockTicker: "6758", side: "buy", price: 12800, quantity: 100, total: 1280000 },
-    { stockTicker: "8306", side: "buy", price: 1620, quantity: 500, total: 810000 },
-    { stockTicker: "6758", side: "sell", price: 13100, quantity: 50, total: 655000 },
-  ];
-
-  for (const trade of tradeData) {
-    await storage.createTrade(trade);
-  }
 }
