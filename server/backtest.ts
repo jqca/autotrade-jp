@@ -33,6 +33,9 @@ export interface BacktestParams {
   trailingStopPercent?: number;
   confirmDays?: number;
   minSignalScore?: number;
+  requireDailyConfirm?: boolean;
+  dailyMinBuyIndicators?: number;
+  dailyMinSignalScore?: number;
 }
 
 export const DEFAULT_PARAMS: BacktestParams = {
@@ -61,6 +64,9 @@ export const DEFAULT_PARAMS: BacktestParams = {
   trailingStopPercent: 1.5,
   confirmDays: 1,
   minSignalScore: 0,
+  requireDailyConfirm: false,
+  dailyMinBuyIndicators: 2,
+  dailyMinSignalScore: 0,
 };
 
 export interface BacktestProgress {
@@ -576,6 +582,46 @@ async function loadIntradayBars(ticker: string, simDays: number, timeframe: stri
   return bars5m;
 }
 
+interface DailyContext {
+  overallSignal: string;
+  buyIndicatorCount: number;
+  signalScore: number;
+  isUptrend: boolean;
+  macdTrend: string;
+  maTrend: string;
+}
+
+async function buildDailyContext(ticker: string): Promise<Map<string, DailyContext>> {
+  const dailyMap = new Map<string, DailyContext>();
+  try {
+    const history = await fetchHistoricalPrices(ticker, "2y", "1d");
+    if (history.length < 100) return dailyMap;
+
+    const closes = history.map(p => p.close);
+    const dates = history.map(p => p.date);
+
+    for (let d = 79; d < closes.length; d++) {
+      const ind = computeIndicatorsAtIndex(closes, d);
+      if (!ind) continue;
+
+      const dateKey = dates[d].substring(0, 10);
+      const buyCount = [ind.macdTrend, ind.rsiTrend, ind.maTrend, ind.bbTrend]
+        .filter(t => t === "buy").length;
+
+      dailyMap.set(dateKey, {
+        overallSignal: ind.overallSignal,
+        buyIndicatorCount: buyCount,
+        signalScore: ind.signalScore,
+        isUptrend: ind.isUptrend,
+        macdTrend: ind.macdTrend,
+        maTrend: ind.maTrend,
+      });
+    }
+  } catch {
+  }
+  return dailyMap;
+}
+
 async function collectIntradaySignals(params: BacktestParams, tickers: string[], concurrency: number): Promise<SignalCandidate[]> {
   const allSignals: SignalCandidate[] = [];
 
@@ -592,6 +638,12 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
           }
 
           bars.sort((a, b) => a.date.localeCompare(b.date));
+
+          const useDailyConfirm = params.requireDailyConfirm ?? false;
+          let dailyCtx: Map<string, DailyContext> | null = null;
+          if (useDailyConfirm) {
+            dailyCtx = await buildDailyContext(ticker);
+          }
 
           const dayMap = groupBarsByDay(bars);
           const tradingDays = Array.from(dayMap.keys()).sort();
@@ -615,6 +667,15 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
           for (let dayIdx = startDayIdx; dayIdx < tradingDays.length - 1; dayIdx++) {
             const dayInfo = dayBarOffsets[dayIdx];
             const dayBars = dayMap.get(dayInfo.day)!;
+
+            if (useDailyConfirm && dailyCtx) {
+              const dc = dailyCtx.get(dayInfo.day);
+              if (!dc) continue;
+              const dailyMinBuy = params.dailyMinBuyIndicators ?? 2;
+              if (dc.buyIndicatorCount < dailyMinBuy) continue;
+              const dailyMinScore = params.dailyMinSignalScore ?? 0;
+              if (dailyMinScore > 0 && dc.signalScore < dailyMinScore) continue;
+            }
 
             const stopLoss = params.stopLossPercent ?? 0;
 
@@ -1061,6 +1122,12 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
 
           bars.sort((a, b) => a.date.localeCompare(b.date));
 
+          const useDailyConfirm2 = params.requireDailyConfirm ?? false;
+          let dailyCtx2: Map<string, DailyContext> | null = null;
+          if (useDailyConfirm2) {
+            dailyCtx2 = await buildDailyContext(ticker);
+          }
+
           const dayMap = groupBarsByDay(bars);
           const tradingDays = Array.from(dayMap.keys()).sort();
 
@@ -1083,6 +1150,16 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
           for (let dayIdx = startDayIdx; dayIdx < tradingDays.length - 1; dayIdx++) {
             const dayInfo = dayBarOffsets[dayIdx];
             const dayBars = dayMap.get(dayInfo.day)!;
+
+            if (useDailyConfirm2 && dailyCtx2) {
+              const dc = dailyCtx2.get(dayInfo.day);
+              if (!dc) continue;
+              const dailyMinBuy = params.dailyMinBuyIndicators ?? 2;
+              if (dc.buyIndicatorCount < dailyMinBuy) continue;
+              const dailyMinScore = params.dailyMinSignalScore ?? 0;
+              if (dailyMinScore > 0 && dc.signalScore < dailyMinScore) continue;
+            }
+
             const stopLoss = params.stopLossPercent ?? 0;
 
             for (let barInDay = 0; barInDay < dayBars.length - 1; barInDay++) {

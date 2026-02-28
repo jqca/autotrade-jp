@@ -496,6 +496,9 @@ export async function registerRoutes(
       const trailingStopPercent = req.body.trailingStopPercent != null ? Math.max(0.3, Math.min(5.0, Number(req.body.trailingStopPercent))) : 1.5;
       const confirmDays = req.body.confirmDays != null ? Math.max(1, Math.min(5, Math.round(Number(req.body.confirmDays)))) : 1;
       const minSignalScore = req.body.minSignalScore != null ? Math.max(0, Math.min(100, Math.round(Number(req.body.minSignalScore)))) : 0;
+      const requireDailyConfirm = Boolean(req.body.requireDailyConfirm);
+      const dailyMinBuyIndicators = req.body.dailyMinBuyIndicators != null ? Math.max(1, Math.min(4, Math.round(Number(req.body.dailyMinBuyIndicators)))) : 2;
+      const dailyMinSignalScore = req.body.dailyMinSignalScore != null ? Math.max(0, Math.min(100, Math.round(Number(req.body.dailyMinSignalScore)))) : 0;
       const params: BacktestParams = {
         targetPercent,
         minBuyIndicators,
@@ -524,6 +527,9 @@ export async function registerRoutes(
         trailingStopPercent,
         confirmDays,
         minSignalScore,
+        requireDailyConfirm,
+        dailyMinBuyIndicators,
+        dailyMinSignalScore,
       };
       await startBacktest(params, 3);
       res.json({ message: "バックテストを開始しました", params });

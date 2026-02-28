@@ -74,6 +74,9 @@ interface BacktestParams {
   trailingStopPercent?: number;
   confirmDays?: number;
   minSignalScore?: number;
+  requireDailyConfirm?: boolean;
+  dailyMinBuyIndicators?: number;
+  dailyMinSignalScore?: number;
 }
 
 function TrendBadge({ trend, label }: { trend: string | null; label: string }) {
@@ -145,6 +148,9 @@ export default function Backtest() {
   const [trailingStopPercent, setTrailingStopPercent] = useState(1.5);
   const [confirmDays, setConfirmDays] = useState(1);
   const [minSignalScore, setMinSignalScore] = useState(0);
+  const [requireDailyConfirm, setRequireDailyConfirm] = useState(false);
+  const [dailyMinBuyIndicators, setDailyMinBuyIndicators] = useState(2);
+  const [dailyMinSignalScore, setDailyMinSignalScore] = useState(0);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [now, setNow] = useState(Date.now());
@@ -211,6 +217,9 @@ export default function Backtest() {
       trailingStopPercent,
       confirmDays,
       minSignalScore,
+      requireDailyConfirm,
+      dailyMinBuyIndicators,
+      dailyMinSignalScore,
     }),
     onSuccess: () => {
       setPolling(true);
@@ -913,6 +922,69 @@ export default function Backtest() {
                         </div>
                       </div>
                     )}
+
+                    {isIntraday && (
+                      <>
+                        <div className="sm:col-span-2 pt-3 border-t">
+                          <div className="flex items-center gap-3">
+                            <Switch
+                              checked={requireDailyConfirm}
+                              onCheckedChange={setRequireDailyConfirm}
+                              data-testid="switch-daily-confirm"
+                            />
+                            <div>
+                              <Label className="text-sm font-medium flex items-center gap-1">
+                                <Activity className="h-3 w-3 text-indigo-500" />
+                                日足確認フィルター
+                              </Label>
+                              <p className="text-xs text-muted-foreground">日足の指標も買いシグナルの日のみ日中足でエントリー</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {requireDailyConfirm && (
+                          <>
+                            <div className="space-y-3">
+                              <Label className="text-sm font-medium">日足 最小買い指標数</Label>
+                              <div className="flex items-center gap-3">
+                                <Slider
+                                  value={[dailyMinBuyIndicators]}
+                                  onValueChange={([v]) => setDailyMinBuyIndicators(v)}
+                                  min={1}
+                                  max={4}
+                                  step={1}
+                                  className="flex-1"
+                                  data-testid="slider-daily-min-buy"
+                                />
+                                <Badge variant="secondary" className="min-w-[50px] justify-center" data-testid="text-daily-min-buy">
+                                  {dailyMinBuyIndicators}/4
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground">日足MACD/RSI/MA/BBのうち何個以上が「買い」</p>
+                            </div>
+
+                            <div className="space-y-3">
+                              <Label className="text-sm font-medium">日足 最小シグナルスコア</Label>
+                              <div className="flex items-center gap-3">
+                                <Slider
+                                  value={[dailyMinSignalScore]}
+                                  onValueChange={([v]) => setDailyMinSignalScore(v)}
+                                  min={0}
+                                  max={100}
+                                  step={5}
+                                  className="flex-1"
+                                  data-testid="slider-daily-min-score"
+                                />
+                                <Badge variant="secondary" className="min-w-[50px] justify-center" data-testid="text-daily-min-score">
+                                  {dailyMinSignalScore}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground">日足の複合シグナルスコア下限</p>
+                            </div>
+                          </>
+                        )}
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -953,6 +1025,7 @@ export default function Backtest() {
                   {trailingStop && <Badge variant="outline" className="border-amber-300 text-amber-700 dark:text-amber-400">TS {trailingStopPercent}%</Badge>}
                   {maxHoldDays > 1 && <Badge variant="outline">{maxHoldDays}日保持</Badge>}
                   {dynamicTarget && <Badge variant="outline">動的利確</Badge>}
+                  {requireDailyConfirm && <Badge variant="outline" className="border-indigo-300 text-indigo-700 dark:text-indigo-400">日足確認</Badge>}
                 </div>
               </div>
             </CardContent>
@@ -1051,10 +1124,20 @@ export default function Backtest() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.3); setMinBuyIndicators(3); setRsiMin(20); setRsiMax(30); setRequireMaBuy(true); setSimDays(60); setUseAi(false); setUseQuantum(false); }}
+                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.3); setMinBuyIndicators(3); setRsiMin(20); setRsiMax(30); setRequireMaBuy(true); setSimDays(60); setUseAi(false); setUseQuantum(false); setRequireDailyConfirm(false); }}
                     data-testid="button-preset-5m-strict"
                   >
                     5分足 厳格
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-indigo-300 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.3); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(60); setUseAi(false); setUseQuantum(false); setRequireDailyConfirm(true); setDailyMinBuyIndicators(2); setDailyMinSignalScore(30); setStopLossPercent(1.0); setDynamicTarget(true); setMinSignalScore(30); setShowAdvanced(true); }}
+                    data-testid="button-preset-5m-daily"
+                  >
+                    <Activity className="h-3 w-3 mr-1 text-indigo-500" />
+                    5分足+日足確認
                   </Button>
                 </div>
               </div>
