@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertStrategySchema } from "@shared/schema";
+import { requireAuth } from "./auth";
 import { z } from "zod";
 import { fetchHistoricalPrices } from "./yahoo-finance";
 import { fetchJQuantsHistorical, fetchJQuantsLatestPrices, isJQuantsConfigured } from "./jquants";
@@ -60,6 +61,13 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   await seedData();
+
+  app.use("/api", (req, res, next) => {
+    if (req.path.startsWith("/auth/")) {
+      return next();
+    }
+    return requireAuth(req, res, next);
+  });
 
   app.get("/api/stocks", async (req, res) => {
     const query = (req.query.q as string) || "";

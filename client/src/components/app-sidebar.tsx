@@ -1,5 +1,6 @@
-import { LayoutDashboard, Eye, Zap, History, Wallet, Signal, FlaskConical, ShieldAlert, Atom, Gauge, Award, BatteryCharging } from "lucide-react";
+import { LayoutDashboard, Eye, Zap, History, Wallet, Signal, FlaskConical, ShieldAlert, Atom, Gauge, Award, BatteryCharging, LogOut, User } from "lucide-react";
 import { useLocation, Link } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
 import {
   Sidebar,
   SidebarContent,
@@ -10,7 +11,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarHeader,
+  SidebarFooter,
 } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
 
 const navItems = [
   { title: "ダッシュボード", url: "/", icon: LayoutDashboard, testId: "link-dashboard" },
@@ -29,6 +32,7 @@ const navItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const { user, logout } = useAuth();
 
   return (
     <Sidebar>
@@ -62,6 +66,24 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter className="p-3 border-t">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <User className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="text-sm truncate text-muted-foreground" data-testid="text-current-user">{user?.username}</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={() => logout.mutate()}
+            disabled={logout.isPending}
+            data-testid="button-logout"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
+        </div>
+      </SidebarFooter>
     </Sidebar>
   );
 }

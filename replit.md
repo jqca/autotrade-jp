@@ -11,6 +11,15 @@ A simulated Japanese stock automated trading platform with all 3,771 TSE-listed 
 - **State Management**: TanStack React Query
 - **Charts**: recharts (price charts, technical indicators)
 
+## Authentication
+- Session-based auth with express-session + connect-pg-simple (PostgreSQL-backed sessions)
+- Password hashing with bcrypt
+- Login/register page (Japanese UI) at root when unauthenticated
+- All `/api` routes protected by `requireAuth` middleware (except `/api/auth/*`)
+- Auth endpoints: POST /api/auth/register, POST /api/auth/login, POST /api/auth/logout, GET /api/auth/user
+- Sidebar footer shows current username and logout button
+- Files: server/auth.ts, client/src/hooks/use-auth.ts, client/src/pages/auth-page.tsx
+
 ## Key Features
 1. **Dashboard** - Portfolio overview, recent trades, top movers, scheduler/batch status
 2. **Watchlist** - Japanese stock monitoring with search/pagination (3,771 stocks), simulated price updates
