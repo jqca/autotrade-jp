@@ -19,6 +19,7 @@ A simulated Japanese stock automated trading platform with all 3,771 TSE-listed 
 5. **Backtest** - Configurable backtest simulation with adjustable parameters (target %, indicator count, RSI range, MA filter, sim days), multiple pattern comparison, run history with config metadata
 5b. **Risk Alert** - Market crash risk detection comparing classical anomaly detection vs QML (Quantum Machine Learning) with PennyLane
 5c. **Quantum Portfolio Optimization** - QAOA-based portfolio optimization comparing classical Markowitz vs quantum QAOA for selecting optimal stock allocation from buy-signal candidates
+5d. **Quantum VaR Analysis** - Classical Monte Carlo vs Quantum Monte Carlo (amplitude estimation) Value at Risk comparison with CVaR, percentile distribution, and quantum circuit details
 6. **Strategies** - Create/manage automated trading rules (price drop buy, price rise sell, threshold buy/sell)
 6. **Trade History** - Complete trade log
 7. **Portfolio** - Current holdings with P&L tracking
@@ -39,7 +40,7 @@ A simulated Japanese stock automated trading platform with all 3,771 TSE-listed 
 ## Project Structure
 ```
 client/src/
-  pages/         - Dashboard, Watchlist, StockDetail, Signals, Backtest, RiskAlert, PortfolioOptimize, Strategies, Trades, Portfolio
+  pages/         - Dashboard, Watchlist, StockDetail, Signals, Backtest, RiskAlert, PortfolioOptimize, VarAnalysis, Strategies, Trades, Portfolio
   components/    - AppSidebar, ThemeToggle, UI components
 server/
   routes.ts      - API endpoints and seed data
@@ -56,6 +57,8 @@ server/
   qml_risk.py    - PennyLane variational quantum circuit for anomaly detection
   portfolio-optimizer.ts - Classical Markowitz + QAOA quantum portfolio optimizer wrapper
   qaoa_portfolio.py - PennyLane QAOA circuit for portfolio selection (QUBO formulation)
+  var-calculator.ts - Classical Monte Carlo + Quantum Monte Carlo VaR calculator wrapper
+  quantum_mc_var.py - PennyLane quantum amplitude estimation for VaR/CVaR calculation
 shared/
   schema.ts      - Drizzle schemas and TypeScript types
 ```
@@ -93,6 +96,7 @@ shared/
 - POST /api/risk/assess - Run risk assessment (body: {method: "classical"|"qml"|"both"})
 - GET /api/risk/preview - Live risk preview (no DB save)
 - POST /api/portfolio/optimize - Quantum portfolio optimization (body: {budget, riskAversion, maxAssets})
+- POST /api/var/calculate - Quantum Monte Carlo VaR analysis (body: {portfolioValue, confidenceLevel, holdingDays, nSimulations, nQubits, tickers?})
 
 ## Data Sources
 ### J-Quants API (Primary - JPX公式データ)

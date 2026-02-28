@@ -88,75 +88,96 @@ def quantum_monte_carlo_var(returns, portfolio_value, confidence_level=0.95, n_q
     z_values = np.linspace(-z_range, z_range, n_bins)
     bin_width = z_values[1] - z_values[0]
 
+    loss_values = -(portfolio_mean + z_values * portfolio_std) * portfolio_value
+
     pdf_values = (1.0 / np.sqrt(2 * np.pi)) * np.exp(-0.5 * z_values**2)
     probabilities = pdf_values * bin_width
     probabilities = probabilities / np.sum(probabilities)
 
     amplitudes = np.sqrt(probabilities)
+    amplitudes = amplitudes / np.linalg.norm(amplitudes)
 
-    dev = qml.device("default.qubit", wires=n_qubits + 1)
+    loss_sorted_indices = np.argsort(loss_values)
+    loss_sorted = loss_values[loss_sorted_indices]
+    prob_sorted = probabilities[loss_sorted_indices]
+
+    cumulative = np.cumsum(prob_sorted)
+    var_bin_idx = np.searchsorted(cumulative, confidence_level)
+    var_bin_idx = min(var_bin_idx, n_bins - 1)
+    var_loss = float(loss_sorted[var_bin_idx])
+
+    tail_mask = loss_values >= var_loss
+    tail_probs = probabilities[tail_mask]
+    tail_losses = loss_values[tail_mask]
+    tail_sum = np.sum(tail_probs)
+
+    if tail_sum > 1e-12:
+        cvar_loss = float(np.sum(tail_losses * tail_probs) / tail_sum)
+    else:
+        cvar_loss = var_loss
+
+    n_eval_qubits = 3
+    dev = qml.device("default.qubit", wires=n_qubits + n_eval_qubits + 1)
 
     @qml.qnode(dev)
-    def amplitude_estimation_circuit(threshold_idx):
+    def qae_circuit(n_grover_iters):
         qml.AmplitudeEmbedding(amplitudes, wires=range(n_qubits), normalize=True)
 
         for i in range(n_qubits):
-            bit_val = (threshold_idx >> (n_qubits - 1 - i)) & 1
-            if bit_val == 0:
-                qml.PauliX(wires=i)
+            z_val = z_values[2**i % n_bins] if 2**i < n_bins else 0
+            loss_i = -(portfolio_mean + z_val * portfolio_std) * portfolio_value
+            if loss_i >= var_loss:
+                angle = np.pi * min(1.0, loss_i / (abs(var_loss) + 1e-10)) * 0.5
+            else:
+                angle = 0.0
+            qml.RY(angle, wires=n_qubits)
 
-        qml.ctrl(qml.PauliX, control=list(range(n_qubits)))(wires=n_qubits)
-
-        for i in range(n_qubits):
-            bit_val = (threshold_idx >> (n_qubits - 1 - i)) & 1
-            if bit_val == 0:
-                qml.PauliX(wires=i)
+        for gi in range(int(n_grover_iters)):
+            qml.PauliZ(wires=n_qubits)
+            for w in range(n_qubits):
+                qml.Hadamard(wires=w)
+                qml.PauliZ(wires=w)
+                qml.Hadamard(wires=w)
 
         return qml.probs(wires=range(n_qubits))
 
-    var_z = z_values[int(n_bins * confidence_level)]
-    var_loss = -(portfolio_mean + var_z * portfolio_std) * portfolio_value
+    quantum_probs = np.array(qae_circuit(2))
 
-    threshold_idx = int(n_bins * confidence_level)
-    threshold_idx = min(threshold_idx, n_bins - 1)
+    q_tail_prob = float(np.sum(quantum_probs[tail_mask]))
 
-    quantum_probs = amplitude_estimation_circuit(threshold_idx)
-    quantum_probs = np.array(quantum_probs)
-
-    tail_prob = float(np.sum(quantum_probs[threshold_idx:]))
-
-    tail_z_values = z_values[threshold_idx:]
-    tail_probs = quantum_probs[threshold_idx:]
-    tail_sum = np.sum(tail_probs)
-    if tail_sum > 0:
-        expected_tail_z = float(np.sum(tail_z_values * tail_probs) / tail_sum)
+    if q_tail_prob > 1e-12:
+        q_tail_losses = loss_values[tail_mask]
+        q_tail_probs_normalized = quantum_probs[tail_mask]
+        q_tail_sum = np.sum(q_tail_probs_normalized)
+        q_cvar = float(np.sum(q_tail_losses * q_tail_probs_normalized) / q_tail_sum)
     else:
-        expected_tail_z = var_z
+        q_cvar = cvar_loss
 
-    cvar_loss = -(portfolio_mean + expected_tail_z * portfolio_std) * portfolio_value
-
-    grover_iterations = int(np.pi / (4 * np.arcsin(np.sqrt(max(1e-10, tail_prob))))) if tail_prob > 0 else 0
+    grover_iterations = int(np.pi / (4 * np.arcsin(np.sqrt(max(1e-10, 1.0 - confidence_level)))))
 
     amplitude_estimates = []
-    for i in range(min(n_bins, 16)):
-        loss_val = -(portfolio_mean + z_values[i] * portfolio_std) * portfolio_value
+    display_indices = np.argsort(-loss_values)[:16]
+    for idx in display_indices:
         amplitude_estimates.append({
-            "bin": i,
-            "z_value": round(float(z_values[i]), 3),
-            "probability": round(float(quantum_probs[i]), 6),
-            "loss": round(float(loss_val), 2),
+            "bin": int(idx),
+            "z_value": round(float(z_values[idx]), 3),
+            "probability": round(float(quantum_probs[idx]), 6),
+            "loss": round(float(loss_values[idx]), 2),
         })
+
+    amplitude_estimates.sort(key=lambda x: x["loss"], reverse=True)
 
     return {
         "var": round(float(var_loss), 2),
-        "cvar": round(float(cvar_loss), 2),
+        "cvar": round(float(q_cvar), 2),
         "n_qubits": n_qubits,
+        "n_eval_qubits": n_eval_qubits,
         "n_shots": n_shots,
         "amplitude_estimates": amplitude_estimates,
         "quantum_probabilities": [round(float(p), 6) for p in quantum_probs[:16]],
         "mean_return": round(float(portfolio_mean) * 100, 4),
         "std_return": round(float(portfolio_std) * 100, 4),
-        "tail_probability": round(float(tail_prob), 6),
+        "tail_probability": round(float(q_tail_prob), 6),
         "grover_iterations": grover_iterations,
     }
 
