@@ -127,6 +127,17 @@ shared/
 - `timeframe` field in `backtest_runs` table (default "1d" for backward compat)
 - Intraday indicators computed on closes with minimum 50 bars (vs 80 for daily)
 - simDays range: daily=80-400, intraday=10-60
+- AI/Quantum pipeline: Phase1=signal scan, Phase2=AI scoring (GBM) + quantum portfolio optimization (QAOA) + quantum VaR estimation, Phase3=save filtered results
+- `backtest_runs` has `useAi`, `useQuantum`, `aiThreshold`, `aiQuantumSummary` fields
+- `backtest_results` has `aiScore`, `aiModel`, `quantumSelected`, `quantumMethod`, `varEstimate` fields
+
+## Quantum Benchmark
+- AI vs Quantum systematic comparison across 4 domains with DB-persisted history
+- DB table `quantum_benchmark_runs`: stores full results JSON per domain + summary + execution metadata
+- Real data pipeline: gathers technical indicators, stock prices, covariance matrices from DB/Yahoo Finance
+- Domains: Risk detection (GBM vs QML), Portfolio optimization (Markowitz vs QAOA), VaR estimation (MC vs amplitude), Signal classification (RF vs quantum kernel)
+- Frontend: history table with AI/quantum win counts, print-friendly report output, "量子技術による発見事項" section for real-data results
+- Summary auto-generated with findings, win/loss tally, and conclusion
 
 ## Historical Price Data
 - Supported ranges: 1d, 5d, 60d, 1mo, 3mo, 6mo, 1y, 2y, 5y

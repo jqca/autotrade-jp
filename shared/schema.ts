@@ -100,6 +100,10 @@ export const backtestRuns = pgTable("backtest_runs", {
   simDays: integer("sim_days").notNull().default(200),
   timeframe: text("timeframe").notNull().default("1d"),
   label: text("label").notNull().default(""),
+  useAi: boolean("use_ai").notNull().default(false),
+  useQuantum: boolean("use_quantum").notNull().default(false),
+  aiThreshold: real("ai_threshold").notNull().default(0.5),
+  aiQuantumSummary: text("ai_quantum_summary"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -125,6 +129,11 @@ export const backtestResults = pgTable("backtest_results", {
   maTrend: text("ma_trend"),
   bbTrend: text("bb_trend"),
   rsiValue: real("rsi_value"),
+  aiScore: real("ai_score"),
+  aiModel: text("ai_model"),
+  quantumSelected: boolean("quantum_selected"),
+  quantumMethod: text("quantum_method"),
+  varEstimate: real("var_estimate"),
   runId: text("run_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });

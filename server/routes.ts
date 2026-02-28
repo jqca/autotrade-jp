@@ -443,6 +443,9 @@ export async function registerRoutes(
       }
       const startDate = isIntraday && req.body.startDate ? String(req.body.startDate) : undefined;
       const endDate = isIntraday && req.body.endDate ? String(req.body.endDate) : undefined;
+      const useAi = Boolean(req.body.useAi);
+      const useQuantum = Boolean(req.body.useQuantum);
+      const aiThreshold = req.body.aiThreshold != null ? Number(req.body.aiThreshold) : 0.5;
       const params: BacktestParams = {
         targetPercent,
         minBuyIndicators,
@@ -454,6 +457,9 @@ export async function registerRoutes(
         label: req.body.label || "",
         startDate,
         endDate,
+        useAi,
+        useQuantum,
+        aiThreshold,
       };
       await startBacktest(params, 3);
       res.json({ message: "バックテストを開始しました", params });

@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   PlayCircle, Trophy, TrendingDown, BarChart3, Trash2, Loader2,
   CheckCircle, XCircle, Settings2, GitCompare, List,
-  Clock, AlertTriangle, Activity, Zap,
+  Clock, AlertTriangle, Activity, Zap, Brain, Atom, Shield,
 } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { Link } from "wouter";
@@ -41,6 +41,9 @@ interface BacktestProgress {
   message: string;
   runId: string | null;
   params: BacktestParams | null;
+  phase?: string;
+  aiFiltered?: number;
+  quantumSelected?: number;
 }
 
 interface BacktestParams {
@@ -54,6 +57,9 @@ interface BacktestParams {
   label: string;
   startDate?: string;
   endDate?: string;
+  useAi?: boolean;
+  useQuantum?: boolean;
+  aiThreshold?: number;
 }
 
 function TrendBadge({ trend, label }: { trend: string | null; label: string }) {
@@ -68,10 +74,30 @@ function RunLabel({ run }: { run: BacktestRun }) {
   const cfg = run.config;
   const tfLabels: Record<string, string> = { "5m": "5分足", "10m": "10分足", "30m": "30分足", "1d": "日足" };
   const tfLabel = cfg?.timeframe ? (tfLabels[cfg.timeframe] || cfg.timeframe) : "日足";
+  const aiLabel = cfg?.useAi || cfg?.useQuantum
+    ? ` [${cfg.useAi ? "AI" : ""}${cfg.useAi && cfg.useQuantum ? "+" : ""}${cfg.useQuantum ? "量子" : ""}]`
+    : "";
   const paramStr = cfg
-    ? `${tfLabel} 目標${cfg.targetPercent}% 指標${cfg.minBuyIndicators}+ RSI${cfg.rsiMin}-${cfg.rsiMax}${cfg.requireMaBuy ? " MA必須" : ""}`
+    ? `${tfLabel} 目標${cfg.targetPercent}% 指標${cfg.minBuyIndicators}+${aiLabel}`
     : "";
   return <span>{dateStr} {paramStr} ({run.count}件)</span>;
+}
+
+function PhaseIndicator({ phase }: { phase?: string }) {
+  if (!phase) return null;
+  const labels: Record<string, { label: string; icon: typeof Brain }> = {
+    scan: { label: "シグナルスキャン", icon: Activity },
+    ai_quantum: { label: "AI/量子分析", icon: Brain },
+    save: { label: "結果保存", icon: CheckCircle },
+  };
+  const info = labels[phase] || { label: phase, icon: Activity };
+  const Icon = info.icon;
+  return (
+    <Badge variant="outline" className="text-xs gap-1" data-testid="badge-phase">
+      <Icon className="h-3 w-3" />
+      {info.label}
+    </Badge>
+  );
 }
 
 export default function Backtest() {
@@ -89,6 +115,9 @@ export default function Backtest() {
   const [timeframe, setTimeframe] = useState("1d");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [useAi, setUseAi] = useState(false);
+  const [useQuantum, setUseQuantum] = useState(false);
+  const [aiThreshold, setAiThreshold] = useState(0.5);
 
   const [now, setNow] = useState(Date.now());
   const { data: progressData } = useQuery<BacktestProgress>({
@@ -138,10 +167,13 @@ export default function Backtest() {
       label: "",
       ...(isIntraday && startDate ? { startDate } : {}),
       ...(isIntraday && endDate ? { endDate } : {}),
+      useAi,
+      useQuantum,
+      aiThreshold,
     }),
     onSuccess: () => {
       setPolling(true);
-      toast({ title: "バックテスト開始", description: "シミュレーションを実行中です..." });
+      toast({ title: "バックテスト開始", description: `シミュレーションを実行中です...${useAi || useQuantum ? " (AI/量子分析有効)" : ""}` });
     },
     onError: (err: any) => {
       toast({ title: "エラー", description: err.message, variant: "destructive" });
@@ -167,7 +199,9 @@ export default function Backtest() {
     const totalWinPL = results.filter(r => r.isWin).reduce((s, r) => s + r.profitLossPercent, 0);
     const totalLossPL = Math.abs(results.filter(r => !r.isWin).reduce((s, r) => s + r.profitLossPercent, 0));
     const profitFactor = totalLossPL > 0 ? Math.round((totalWinPL / totalLossPL) * 100) / 100 : totalWinPL > 0 ? Infinity : 0;
-    return { wins, losses, winRate, avgPL, total: results.length, profitFactor };
+    const hasAi = results.some(r => r.aiScore != null);
+    const hasQuantum = results.some(r => r.quantumSelected != null);
+    return { wins, losses, winRate, avgPL, total: results.length, profitFactor, hasAi, hasQuantum };
   }, [results]);
 
   const comparisonData = useMemo(() => {
@@ -180,6 +214,15 @@ export default function Backtest() {
 
   const isRunning = progressData?.status === "running";
   const activeRunConfig = runs?.find(r => r.runId === activeRunId)?.config;
+
+  const aiQuantumSummary = useMemo(() => {
+    if (!activeRunConfig?.aiQuantumSummary) return null;
+    try {
+      return JSON.parse(activeRunConfig.aiQuantumSummary);
+    } catch {
+      return null;
+    }
+  }, [activeRunConfig]);
 
   return (
     <div className="p-6 space-y-6">
@@ -211,7 +254,10 @@ export default function Backtest() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold" data-testid="text-progress-title">バックテスト実行中</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold" data-testid="text-progress-title">バックテスト実行中</h3>
+                      <PhaseIndicator phase={progressData.phase} />
+                    </div>
                     <span className="text-lg font-bold text-primary tabular-nums" data-testid="text-progress-pct">
                       {pct.toFixed(1)}%
                     </span>
@@ -273,6 +319,23 @@ export default function Backtest() {
                 </div>
               </div>
 
+              {(progressData.aiFiltered != null || progressData.quantumSelected != null) && (
+                <div className="flex items-center gap-4 text-xs border-t pt-3">
+                  {progressData.aiFiltered != null && (
+                    <div className="flex items-center gap-1.5">
+                      <Brain className="h-3 w-3 text-sky-500" />
+                      <span>AI除外: {progressData.aiFiltered}件</span>
+                    </div>
+                  )}
+                  {progressData.quantumSelected != null && (
+                    <div className="flex items-center gap-1.5">
+                      <Atom className="h-3 w-3 text-purple-500" />
+                      <span>量子選択: {progressData.quantumSelected}件</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-3">
                 <div className="flex items-center gap-1.5">
                   <Activity className="h-3 w-3" />
@@ -284,9 +347,11 @@ export default function Backtest() {
                       {({"5m":"5分足","10m":"10分足","30m":"30分足","1d":"日足"} as Record<string,string>)[progressData.params.timeframe] || progressData.params.timeframe}
                     </Badge>
                     <Badge variant="outline" className="text-[10px] h-5" data-testid="badge-progress-target">目標{progressData.params.targetPercent}%</Badge>
-                    <Badge variant="outline" className="text-[10px] h-5" data-testid="badge-progress-rsi">RSI{progressData.params.rsiMin}-{progressData.params.rsiMax}</Badge>
-                    {(progressData.params.startDate || progressData.params.endDate) && (
-                      <Badge variant="outline" className="text-[10px] h-5" data-testid="badge-progress-daterange">{progressData.params.startDate || "最古"}〜{progressData.params.endDate || "最新"}</Badge>
+                    {progressData.params.useAi && (
+                      <Badge className="text-[10px] h-5 bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300" data-testid="badge-progress-ai">AI</Badge>
+                    )}
+                    {progressData.params.useQuantum && (
+                      <Badge className="text-[10px] h-5 bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300" data-testid="badge-progress-quantum">量子</Badge>
                     )}
                   </div>
                 )}
@@ -312,6 +377,99 @@ export default function Backtest() {
         </TabsList>
 
         <TabsContent value="config" className="space-y-4 mt-4">
+          <Card data-testid="card-ai-quantum-config">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Brain className="h-5 w-5 text-sky-500" />
+                <Atom className="h-5 w-5 text-purple-500" />
+                AI / 量子 適材適所モード
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                有効にすると、AIがシグナルの勝率を予測し、量子コンピュータが最適なポートフォリオを選択します。
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Brain className="h-4 w-4 text-sky-500" />
+                      <Label className="font-medium">AIシグナルスコアリング</Label>
+                    </div>
+                    <Switch
+                      checked={useAi}
+                      onCheckedChange={setUseAi}
+                      data-testid="switch-use-ai"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">GradientBoostingで各シグナルの勝率を予測し、低確率シグナルを除外</p>
+                  {useAi && (
+                    <div className="space-y-2 pt-2 border-t">
+                      <Label className="text-xs">AIフィルター閾値</Label>
+                      <div className="flex items-center gap-3">
+                        <Slider
+                          value={[aiThreshold]}
+                          onValueChange={([v]) => setAiThreshold(v)}
+                          min={0.3}
+                          max={0.8}
+                          step={0.05}
+                          className="flex-1"
+                          data-testid="slider-ai-threshold"
+                        />
+                        <Badge variant="secondary" className="min-w-[50px] justify-center" data-testid="text-ai-threshold">
+                          {(aiThreshold * 100).toFixed(0)}%
+                        </Badge>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">AI予測勝率がこの値以上のシグナルのみ採用</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Atom className="h-4 w-4 text-purple-500" />
+                      <Label className="font-medium">量子ポートフォリオ最適化</Label>
+                    </div>
+                    <Switch
+                      checked={useQuantum}
+                      onCheckedChange={setUseQuantum}
+                      data-testid="switch-use-quantum"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">QAOA量子アルゴリズムで同日シグナルから最適な組み合わせを選択</p>
+                  {useQuantum && (
+                    <div className="pt-2 border-t">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Shield className="h-3 w-3" />
+                        <span>量子VaRリスク推定も自動実行されます</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {(useAi || useQuantum) && (
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <Zap className="h-4 w-4 text-amber-500 mt-0.5" />
+                    <div className="text-xs space-y-1">
+                      <p className="font-medium">適材適所パイプライン</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="outline" className="text-[10px]">Phase1: シグナルスキャン</Badge>
+                        <span>→</span>
+                        {useAi && <Badge className="text-[10px] bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300">Phase2: AI勝率予測</Badge>}
+                        {useQuantum && <Badge className="text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">Phase3: 量子最適化+VaR</Badge>}
+                        <span>→</span>
+                        <Badge variant="outline" className="text-[10px]">結果保存</Badge>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-lg flex items-center gap-2">
@@ -491,33 +649,39 @@ export default function Backtest() {
                     data-testid="switch-require-ma"
                   />
                   <div>
-                    <Label className="text-sm font-medium">MA（移動平均）買いを必須にする</Label>
-                    <p className="text-xs text-muted-foreground">MA5がMA25の上（上昇トレンド）の場合のみエントリー</p>
+                    <Label className="text-sm font-medium">MA（移動平均）必須</Label>
+                    <p className="text-xs text-muted-foreground">移動平均線が買いシグナルでなければエントリーしない</p>
                   </div>
                 </div>
               </div>
 
-              <div className="border-t pt-4">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <Button
-                    onClick={() => runMutation.mutate()}
-                    disabled={isRunning || runMutation.isPending}
-                    data-testid="button-run-backtest"
-                  >
-                    {isRunning ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <PlayCircle className="h-4 w-4 mr-2" />}
-                    {isRunning ? "実行中..." : "この条件でバックテスト実行"}
-                  </Button>
-                  <div className="flex gap-2 text-xs text-muted-foreground flex-wrap">
-                    <Badge variant={timeframe !== "1d" ? "default" : "outline"}>{({"5m":"5分足","10m":"10分足","30m":"30分足","1d":"日足"} as Record<string,string>)[timeframe] || timeframe}</Badge>
-                    <Badge variant="outline">目標 {targetPercent.toFixed(1)}%</Badge>
-                    <Badge variant="outline">指標 {minBuyIndicators}+</Badge>
-                    <Badge variant="outline">RSI {rsiMin}-{rsiMax}</Badge>
-                    {requireMaBuy && <Badge variant="outline">MA必須</Badge>}
-                    <Badge variant="outline">{simDays}日間</Badge>
-                    {isIntraday && (startDate || endDate) && (
-                      <Badge variant="outline">{startDate || "最古"}〜{endDate || "最新"}</Badge>
-                    )}
-                  </div>
+              <div className="pt-4 border-t flex items-center gap-3 flex-wrap">
+                <Button
+                  onClick={() => { setActiveTab("results"); runMutation.mutate(); }}
+                  disabled={isRunning || runMutation.isPending}
+                  data-testid="button-run-backtest"
+                >
+                  {runMutation.isPending || isRunning ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <PlayCircle className="h-4 w-4 mr-2" />
+                  )}
+                  {isRunning ? "実行中..." : "バックテスト実行"}
+                  {(useAi || useQuantum) && !isRunning && (
+                    <span className="ml-1 text-xs opacity-80">
+                      [{useAi ? "AI" : ""}{useAi && useQuantum ? "+" : ""}{useQuantum ? "量子" : ""}]
+                    </span>
+                  )}
+                </Button>
+                <div className="flex gap-2 text-xs text-muted-foreground flex-wrap">
+                  <Badge variant={timeframe !== "1d" ? "default" : "outline"}>{({"5m":"5分足","10m":"10分足","30m":"30分足","1d":"日足"} as Record<string,string>)[timeframe] || timeframe}</Badge>
+                  <Badge variant="outline">目標 {targetPercent.toFixed(1)}%</Badge>
+                  <Badge variant="outline">指標 {minBuyIndicators}+</Badge>
+                  <Badge variant="outline">RSI {rsiMin}-{rsiMax}</Badge>
+                  {requireMaBuy && <Badge variant="outline">MA必須</Badge>}
+                  <Badge variant="outline">{simDays}日間</Badge>
+                  {useAi && <Badge className="bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300">AI</Badge>}
+                  {useQuantum && <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">量子</Badge>}
                 </div>
               </div>
             </CardContent>
@@ -534,23 +698,34 @@ export default function Backtest() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setTimeframe("1d"); setTargetPercent(1.0); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); }}
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(1.0); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); setUseAi(false); setUseQuantum(false); }}
                     data-testid="button-preset-default"
                   >
-                    デフォルト（現行条件）
+                    デフォルト（ルールベース）
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setTimeframe("1d"); setTargetPercent(0.5); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); }}
-                    data-testid="button-preset-low-target"
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(1.0); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); setUseAi(true); setUseQuantum(true); setAiThreshold(0.5); }}
+                    data-testid="button-preset-ai-quantum"
                   >
-                    低い利確目標（0.5%）
+                    <Brain className="h-3 w-3 mr-1 text-sky-500" />
+                    <Atom className="h-3 w-3 mr-1 text-purple-500" />
+                    AI+量子 適材適所
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setTimeframe("1d"); setTargetPercent(1.0); setMinBuyIndicators(4); setRsiMin(20); setRsiMax(30); setRequireMaBuy(true); setSimDays(200); }}
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(0.5); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); setUseAi(true); setUseQuantum(false); setAiThreshold(0.6); }}
+                    data-testid="button-preset-ai-only"
+                  >
+                    <Brain className="h-3 w-3 mr-1 text-sky-500" />
+                    AIスコアリングのみ
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(1.0); setMinBuyIndicators(4); setRsiMin(20); setRsiMax(30); setRequireMaBuy(true); setSimDays(200); setUseAi(false); setUseQuantum(false); }}
                     data-testid="button-preset-strict"
                   >
                     厳格フィルター
@@ -558,15 +733,7 @@ export default function Backtest() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setTimeframe("1d"); setTargetPercent(0.5); setMinBuyIndicators(3); setRsiMin(20); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); }}
-                    data-testid="button-preset-conservative"
-                  >
-                    保守的
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => { setTimeframe("1d"); setTargetPercent(0.7); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(true); setSimDays(200); }}
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(0.7); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(true); setSimDays(200); setUseAi(false); setUseQuantum(false); }}
                     data-testid="button-preset-trend-follow"
                   >
                     トレンドフォロー
@@ -574,18 +741,19 @@ export default function Backtest() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setTimeframe("1d"); setTargetPercent(2.0); setMinBuyIndicators(4); setRsiMin(0); setRsiMax(25); setRequireMaBuy(true); setSimDays(200); }}
-                    data-testid="button-preset-aggressive"
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(2.0); setMinBuyIndicators(4); setRsiMin(0); setRsiMax(25); setRequireMaBuy(true); setSimDays(200); setUseAi(true); setUseQuantum(true); setAiThreshold(0.6); }}
+                    data-testid="button-preset-aggressive-ai"
                   >
-                    積極的（高目標）
+                    <Brain className="h-3 w-3 mr-1 text-sky-500" />
+                    積極的+AI厳選
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground font-medium mt-4">5分足プリセット（デイトレ向け）</p>
+                <p className="text-xs text-muted-foreground font-medium mt-4">5分足プリセット</p>
                 <div className="grid gap-2 sm:grid-cols-3">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.3); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(60); }}
+                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.3); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(60); setUseAi(false); setUseQuantum(false); }}
                     data-testid="button-preset-5m-default"
                   >
                     5分足デフォルト
@@ -593,56 +761,19 @@ export default function Backtest() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.5); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(60); }}
-                    data-testid="button-preset-5m-medium"
+                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.5); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(60); setUseAi(true); setUseQuantum(true); setAiThreshold(0.5); }}
+                    data-testid="button-preset-5m-ai-quantum"
                   >
-                    5分足 中目標（0.5%）
+                    <Brain className="h-3 w-3 mr-1 text-sky-500" />
+                    5分足 AI+量子
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.3); setMinBuyIndicators(3); setRsiMin(20); setRsiMax(30); setRequireMaBuy(true); setSimDays(60); }}
+                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.3); setMinBuyIndicators(3); setRsiMin(20); setRsiMax(30); setRequireMaBuy(true); setSimDays(60); setUseAi(false); setUseQuantum(false); }}
                     data-testid="button-preset-5m-strict"
                   >
                     5分足 厳格
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground font-medium mt-4">10分足プリセット</p>
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => { setTimeframe("10m"); setTargetPercent(0.5); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(60); }}
-                    data-testid="button-preset-10m-default"
-                  >
-                    10分足デフォルト
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => { setTimeframe("10m"); setTargetPercent(0.7); setMinBuyIndicators(3); setRsiMin(20); setRsiMax(30); setRequireMaBuy(true); setSimDays(60); }}
-                    data-testid="button-preset-10m-trend"
-                  >
-                    10分足 トレンドフォロー
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground font-medium mt-4">30分足プリセット</p>
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => { setTimeframe("30m"); setTargetPercent(0.7); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(60); }}
-                    data-testid="button-preset-30m-default"
-                  >
-                    30分足デフォルト
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => { setTimeframe("30m"); setTargetPercent(1.0); setMinBuyIndicators(3); setRsiMin(20); setRsiMax(30); setRequireMaBuy(true); setSimDays(60); }}
-                    data-testid="button-preset-30m-swing"
-                  >
-                    30分足 スイング
                   </Button>
                 </div>
               </div>
@@ -666,9 +797,7 @@ export default function Backtest() {
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">実行日時</th>
                         <th className="text-center py-2 px-2 font-medium text-muted-foreground">時間足</th>
                         <th className="text-center py-2 px-2 font-medium text-muted-foreground">目標%</th>
-                        <th className="text-center py-2 px-2 font-medium text-muted-foreground">指標数</th>
-                        <th className="text-center py-2 px-2 font-medium text-muted-foreground">RSI範囲</th>
-                        <th className="text-center py-2 px-2 font-medium text-muted-foreground">MA必須</th>
+                        <th className="text-center py-2 px-2 font-medium text-muted-foreground">AI/量子</th>
                         <th className="text-center py-2 px-2 font-medium text-muted-foreground">シグナル数</th>
                         <th className="text-center py-2 px-2 font-medium text-muted-foreground">勝ち</th>
                         <th className="text-center py-2 px-2 font-medium text-muted-foreground">負け</th>
@@ -680,6 +809,7 @@ export default function Backtest() {
                       {comparisonData.map((run, idx) => {
                         const best = comparisonData.reduce((a, b) => a.winRate > b.winRate ? a : b);
                         const isBest = run.runId === best.runId;
+                        const cfg = run.config;
                         return (
                           <tr
                             key={run.runId}
@@ -698,23 +828,19 @@ export default function Backtest() {
                               </div>
                             </td>
                             <td className="text-center py-2.5 px-2">
-                              <Badge variant={run.config?.timeframe === "5m" ? "default" : "outline"} className="text-xs">
-                                {run.config?.timeframe === "5m" ? "5分足" : "日足"}
+                              <Badge variant={cfg?.timeframe !== "1d" ? "default" : "outline"} className="text-xs">
+                                {({"5m":"5分足","10m":"10分足","30m":"30分足","1d":"日足"} as Record<string,string>)[cfg?.timeframe || "1d"]}
                               </Badge>
                             </td>
                             <td className="text-center py-2.5 px-2">
-                              <Badge variant="outline" className="text-xs">{run.config?.targetPercent ?? "?"}%</Badge>
+                              <Badge variant="outline" className="text-xs">{cfg?.targetPercent ?? "?"}%</Badge>
                             </td>
                             <td className="text-center py-2.5 px-2">
-                              <Badge variant="outline" className="text-xs">{run.config?.minBuyIndicators ?? "?"}/4</Badge>
-                            </td>
-                            <td className="text-center py-2.5 px-2">
-                              <Badge variant="outline" className="text-xs">{run.config ? `${run.config.rsiMin}-${run.config.rsiMax}` : "?"}</Badge>
-                            </td>
-                            <td className="text-center py-2.5 px-2">
-                              {run.config?.requireMaBuy
-                                ? <Badge className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">はい</Badge>
-                                : <Badge variant="secondary" className="text-xs">いいえ</Badge>}
+                              <div className="flex items-center justify-center gap-1">
+                                {cfg?.useAi && <Badge className="text-[10px] bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300">AI</Badge>}
+                                {cfg?.useQuantum && <Badge className="text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">量子</Badge>}
+                                {!cfg?.useAi && !cfg?.useQuantum && <Badge variant="secondary" className="text-[10px]">ルール</Badge>}
+                              </div>
                             </td>
                             <td className="text-center py-2.5 px-2 font-medium">{run.count}</td>
                             <td className="text-center py-2.5 px-2 text-emerald-600 dark:text-emerald-400 font-medium">{run.wins}</td>
@@ -764,14 +890,118 @@ export default function Backtest() {
               <CardContent className="py-3 px-4">
                 <div className="flex items-center gap-2 text-sm flex-wrap">
                   <span className="text-muted-foreground">実行条件:</span>
-                  <Badge variant={activeRunConfig.timeframe === "5m" ? "default" : "outline"}>
-                    {activeRunConfig.timeframe === "5m" ? "5分足" : "日足"}
+                  <Badge variant={activeRunConfig.timeframe !== "1d" ? "default" : "outline"}>
+                    {({"5m":"5分足","10m":"10分足","30m":"30分足","1d":"日足"} as Record<string,string>)[activeRunConfig.timeframe]}
                   </Badge>
                   <Badge variant="outline">目標 {activeRunConfig.targetPercent}%</Badge>
                   <Badge variant="outline">指標 {activeRunConfig.minBuyIndicators}+</Badge>
                   <Badge variant="outline">RSI {activeRunConfig.rsiMin}-{activeRunConfig.rsiMax}</Badge>
                   {activeRunConfig.requireMaBuy && <Badge variant="outline">MA必須</Badge>}
                   <Badge variant="outline">{activeRunConfig.simDays}日間</Badge>
+                  {activeRunConfig.useAi && <Badge className="bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300">AI (閾値{((activeRunConfig.aiThreshold ?? 0.5) * 100).toFixed(0)}%)</Badge>}
+                  {activeRunConfig.useQuantum && <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">量子QAOA</Badge>}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {aiQuantumSummary && (
+            <Card data-testid="card-ai-quantum-summary" className="border-sky-200 dark:border-sky-800">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Brain className="h-4 w-4 text-sky-500" />
+                  <Atom className="h-4 w-4 text-purple-500" />
+                  AI/量子 分析サマリー
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {aiQuantumSummary.ai && !aiQuantumSummary.ai.skipped && (
+                    <div className="bg-sky-50 dark:bg-sky-950/30 rounded-lg p-3">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Brain className="h-3.5 w-3.5 text-sky-500" />
+                        <span className="text-xs font-medium">AIスコアリング</span>
+                      </div>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">モデル精度</span>
+                          <span className="font-medium">{aiQuantumSummary.ai.test_accuracy}%</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">通過</span>
+                          <span className="font-medium text-emerald-600">{aiQuantumSummary.ai.passed}件</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">除外</span>
+                          <span className="font-medium text-red-500">{aiQuantumSummary.ai.filtered}件</span>
+                        </div>
+                        {aiQuantumSummary.ai.feature_importance && (
+                          <div className="pt-2 border-t mt-2">
+                            <p className="text-[10px] text-muted-foreground mb-1">特徴量重要度</p>
+                            {Object.entries(aiQuantumSummary.ai.feature_importance as Record<string, number>)
+                              .sort(([, a], [, b]) => (b as number) - (a as number))
+                              .slice(0, 4)
+                              .map(([key, val]) => (
+                                <div key={key} className="flex items-center gap-1.5 mb-0.5">
+                                  <div className="flex-1 bg-sky-200 dark:bg-sky-800 rounded-full h-1.5 overflow-hidden">
+                                    <div className="bg-sky-500 h-full rounded-full" style={{ width: `${(val as number) * 100}%` }} />
+                                  </div>
+                                  <span className="text-[10px] w-16 text-right">{key}</span>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {aiQuantumSummary.quantum && !aiQuantumSummary.quantum.skipped && (
+                    <div className="bg-purple-50 dark:bg-purple-950/30 rounded-lg p-3">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Atom className="h-3.5 w-3.5 text-purple-500" />
+                        <span className="text-xs font-medium">量子最適化</span>
+                      </div>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">手法</span>
+                          <span className="font-medium">QAOA</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">最適化日数</span>
+                          <span className="font-medium">{aiQuantumSummary.quantum.days_optimized}日</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">選択数</span>
+                          <span className="font-medium text-purple-600">{aiQuantumSummary.quantum.selected}件</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">処理時間</span>
+                          <span className="font-medium">{aiQuantumSummary.quantum.time_ms}ms</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {aiQuantumSummary.var && !aiQuantumSummary.var.skipped && (
+                    <div className="bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Shield className="h-3.5 w-3.5 text-amber-500" />
+                        <span className="text-xs font-medium">量子VaR推定</span>
+                      </div>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">VaR (95%)</span>
+                          <span className="font-medium">{aiQuantumSummary.var.var_95_pct}%</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">平均リターン</span>
+                          <span className="font-medium">{aiQuantumSummary.var.mean_return_pct}%</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">標準偏差</span>
+                          <span className="font-medium">{aiQuantumSummary.var.std_pct}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -914,6 +1144,18 @@ export default function Backtest() {
                               <Badge variant={r.isWin ? "default" : "destructive"} className="text-xs">
                                 {r.isWin ? "勝ち" : "負け"}
                               </Badge>
+                              {r.aiScore != null && (
+                                <Badge className="text-[10px] bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300" data-testid={`badge-ai-score-${r.id}`}>
+                                  <Brain className="h-2.5 w-2.5 mr-0.5" />
+                                  AI {(r.aiScore * 100).toFixed(0)}%
+                                </Badge>
+                              )}
+                              {r.quantumSelected != null && (
+                                <Badge className="text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300" data-testid={`badge-quantum-${r.id}`}>
+                                  <Atom className="h-2.5 w-2.5 mr-0.5" />
+                                  {r.quantumMethod?.includes("QAOA") ? "QAOA" : "量子"}
+                                </Badge>
+                              )}
                             </div>
                             <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground flex-wrap">
                               <span>シグナル: {r.signalDate}</span>
@@ -922,6 +1164,12 @@ export default function Backtest() {
                               <span>始値 {r.buyPrice.toLocaleString("ja-JP")}円</span>
                               <span>|</span>
                               <span>高値 {r.dayHigh.toLocaleString("ja-JP")}円</span>
+                              {r.varEstimate != null && (
+                                <>
+                                  <span>|</span>
+                                  <span className="text-amber-600">VaR: {r.varEstimate.toFixed(2)}%</span>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>

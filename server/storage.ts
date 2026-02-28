@@ -51,6 +51,7 @@ export interface IStorage {
   getBacktestRuns(): Promise<{ runId: string; count: number; wins: number; losses: number; createdAt: Date | null }[]>;
   deleteBacktestRun(runId: string): Promise<void>;
   insertBacktestRun(run: InsertBacktestRun): Promise<void>;
+  updateBacktestRunSummary(runId: string, summary: string): Promise<void>;
   getBacktestRunConfig(runId: string): Promise<BacktestRun | undefined>;
   getAllBacktestRunConfigs(): Promise<BacktestRun[]>;
   bulkInsertIntradayPrices(bars: InsertIntradayPrice[]): Promise<number>;
@@ -320,6 +321,10 @@ export class DatabaseStorage implements IStorage {
 
   async insertBacktestRun(run: InsertBacktestRun): Promise<void> {
     await db.insert(backtestRuns).values(run);
+  }
+
+  async updateBacktestRunSummary(runId: string, summary: string): Promise<void> {
+    await db.update(backtestRuns).set({ aiQuantumSummary: summary }).where(eq(backtestRuns.runId, runId));
   }
 
   async getBacktestRunConfig(runId: string): Promise<BacktestRun | undefined> {
