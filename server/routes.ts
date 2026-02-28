@@ -14,6 +14,7 @@ import { runClassicalRiskAssessment, computeClassicalRisk } from "./risk-classic
 import { runQmlRiskAssessment, computeQmlRisk } from "./risk-qml";
 import { optimizePortfolio } from "./portfolio-optimizer";
 import { calculateVar } from "./var-calculator";
+import { runQuantumBenchmark, isBenchmarkRunning } from "./quantum-benchmark";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -548,6 +549,18 @@ export async function registerRoutes(
         parsed.data.nQubits,
         parsed.data.tickers,
       );
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/benchmark/run", async (_req, res) => {
+    try {
+      if (isBenchmarkRunning()) {
+        return res.status(409).json({ message: "ベンチマークが既に実行中です" });
+      }
+      const result = await runQuantumBenchmark();
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
