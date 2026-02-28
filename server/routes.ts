@@ -9,7 +9,7 @@ import { fetchJQuantsHistorical, fetchJQuantsLatestPrices, isJQuantsConfigured }
 import { importJPXStocks, fetchBatchPrices, startFetchAllPrices, getFetchAllProgress } from "./import-stocks";
 import { startScheduler, getSchedulerStatus, setSchedulerEnabled } from "./scheduler";
 import { startIndicatorBatch, getIndicatorBatchProgress, startIntradayIndicatorBatch, getIntradayIndicatorBatchProgress } from "./technical-batch";
-import { startBacktest, getBacktestProgress, DEFAULT_PARAMS, type BacktestParams } from "./backtest";
+import { startBacktest, getBacktestProgress, cancelBacktest, DEFAULT_PARAMS, type BacktestParams } from "./backtest";
 import { startIntradayFetch, getIntradayFetchProgress, aggregateStoredIntradayData } from "./intraday-batch";
 import { runClassicalRiskAssessment, computeClassicalRisk } from "./risk-classical";
 import { runQmlRiskAssessment, computeQmlRisk } from "./risk-qml";
@@ -541,6 +541,15 @@ export async function registerRoutes(
 
   app.get("/api/backtest/progress", async (_req, res) => {
     res.json(getBacktestProgress());
+  });
+
+  app.post("/api/backtest/cancel", requireAuth, async (_req: any, res) => {
+    const cancelled = cancelBacktest();
+    if (cancelled) {
+      res.json({ message: "キャンセルを要求しました" });
+    } else {
+      res.status(400).json({ message: "実行中のバックテストがありません" });
+    }
   });
 
   app.get("/api/backtest/runs", async (_req, res) => {

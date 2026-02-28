@@ -98,8 +98,21 @@ const progress: BacktestProgress = {
   params: null,
 };
 
+let cancelRequested = false;
+
 export function getBacktestProgress(): BacktestProgress {
   return { ...progress };
+}
+
+export function cancelBacktest(): boolean {
+  if (progress.status !== "running") return false;
+  cancelRequested = true;
+  progress.message = "キャンセル中...";
+  return true;
+}
+
+function isCancelled(): boolean {
+  return cancelRequested;
 }
 
 function sma(data: number[], period: number): (number | null)[] {
@@ -334,6 +347,7 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
   const allSignals: SignalCandidate[] = [];
 
   for (let i = 0; i < tickers.length; i += concurrency) {
+    if (isCancelled()) break;
     const batch = tickers.slice(i, i + concurrency);
 
     await Promise.allSettled(
@@ -650,6 +664,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
   const allSignals: SignalCandidate[] = [];
 
   for (let i = 0; i < tickers.length; i += concurrency) {
+    if (isCancelled()) break;
     const batch = tickers.slice(i, i + concurrency);
 
     await Promise.allSettled(
@@ -1021,6 +1036,7 @@ async function saveSignals(signals: SignalCandidate[], runId: string, params: Ba
 
 async function runDailyBacktest(params: BacktestParams, runId: string, tickers: string[], concurrency: number): Promise<void> {
   for (let i = 0; i < tickers.length; i += concurrency) {
+    if (isCancelled()) break;
     const batch = tickers.slice(i, i + concurrency);
 
     await Promise.allSettled(
@@ -1160,6 +1176,7 @@ async function runDailyBacktest(params: BacktestParams, runId: string, tickers: 
 
 async function runIntradayBacktest(params: BacktestParams, runId: string, tickers: string[], concurrency: number): Promise<void> {
   for (let i = 0; i < tickers.length; i += concurrency) {
+    if (isCancelled()) break;
     const batch = tickers.slice(i, i + concurrency);
 
     await Promise.allSettled(
@@ -1398,6 +1415,7 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
   };
   await storage.insertBacktestRun(runConfig);
 
+  cancelRequested = false;
   progress.status = "running";
   progress.total = tickers.length;
   progress.processed = 0;
@@ -1476,15 +1494,22 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
         logEnergy("backtest", isIntraday ? "日中バックテスト (テクニカル分析)" : "日次バックテスト (テクニカル分析)", "CPU", backtestDurationMs, 0.6, { mode: isIntraday ? "intraday" : "daily", tickers: tickers.length }).catch(() => {});
       }
 
-      progress.status = "completed";
       progress.completedAt = Date.now();
       progress.phase = undefined;
       const elapsed = Math.round((progress.completedAt - progress.startedAt!) / 1000);
-      const aiQuantumInfo = useAiQuantum
-        ? ` (AI除外: ${progress.aiFiltered ?? 0}件, 量子選択: ${progress.quantumSelected ?? "-"}件)`
-        : "";
-      progress.message = `完了: ${progress.processed}銘柄処理, ${progress.signals}件シグナル${aiQuantumInfo} (${elapsed}秒)`;
-      console.log(`[Backtest] ${progress.message}`);
+      if (cancelRequested) {
+        progress.status = "cancelled";
+        progress.message = `キャンセル: ${progress.processed}銘柄処理済み, ${progress.signals}件シグナル (${elapsed}秒)`;
+        console.log(`[Backtest] ${progress.message}`);
+        cancelRequested = false;
+      } else {
+        progress.status = "completed";
+        const aiQuantumInfo = useAiQuantum
+          ? ` (AI除外: ${progress.aiFiltered ?? 0}件, 量子選択: ${progress.quantumSelected ?? "-"}件)`
+          : "";
+        progress.message = `完了: ${progress.processed}銘柄処理, ${progress.signals}件シグナル${aiQuantumInfo} (${elapsed}秒)`;
+        console.log(`[Backtest] ${progress.message}`);
+      }
     } catch (err: any) {
       progress.status = "error";
       progress.completedAt = Date.now();

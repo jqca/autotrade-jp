@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  PlayCircle, Trophy, TrendingDown, BarChart3, Trash2, Loader2,
+  PlayCircle, StopCircle, Trophy, TrendingDown, BarChart3, Trash2, Loader2,
   CheckCircle, XCircle, Settings2, GitCompare, List,
   Clock, AlertTriangle, Activity, Zap, Brain, Atom, Shield,
 } from "lucide-react";
@@ -173,6 +173,11 @@ export default function Backtest() {
       setPolling(false);
       queryClient.invalidateQueries({ queryKey: ["/api/backtest/runs"] });
       queryClient.invalidateQueries({ predicate: (q) => (q.queryKey[0] as string)?.startsWith("/api/backtest/results") });
+    } else if (polling && progressData?.status === "cancelled") {
+      setPolling(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/backtest/runs"] });
+      queryClient.invalidateQueries({ predicate: (q) => (q.queryKey[0] as string)?.startsWith("/api/backtest/results") });
+      toast({ title: "バックテスト中止", description: progressData.message });
     } else if (polling && progressData?.status !== "running") {
       setPolling(false);
     }
@@ -227,6 +232,16 @@ export default function Backtest() {
       setPolling(true);
       queryClient.invalidateQueries({ queryKey: ["/api/backtest/progress"] });
       toast({ title: "バックテスト開始", description: `シミュレーションを実行中です...${useAi || useQuantum ? " (AI/量子分析有効)" : ""}` });
+    },
+    onError: (err: any) => {
+      toast({ title: "エラー", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/backtest/cancel"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/backtest/progress"] });
     },
     onError: (err: any) => {
       toast({ title: "エラー", description: err.message, variant: "destructive" });
@@ -390,9 +405,22 @@ export default function Backtest() {
               )}
 
               <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-3">
-                <div className="flex items-center gap-1.5">
-                  <Activity className="h-3 w-3" />
-                  <span data-testid="text-processing-speed">処理速度: {speed} 銘柄/秒</span>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <Activity className="h-3 w-3" />
+                    <span data-testid="text-processing-speed">処理速度: {speed} 銘柄/秒</span>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="h-7 px-3 text-xs"
+                    onClick={() => cancelMutation.mutate()}
+                    disabled={cancelMutation.isPending}
+                    data-testid="button-cancel-backtest"
+                  >
+                    <StopCircle className="h-3.5 w-3.5 mr-1" />
+                    {cancelMutation.isPending ? "中止中..." : "中止"}
+                  </Button>
                 </div>
                 {progressData.params && (
                   <div className="flex items-center gap-1.5 flex-wrap justify-end" data-testid="progress-params-badges">
