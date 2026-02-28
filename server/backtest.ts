@@ -64,7 +64,7 @@ export const DEFAULT_PARAMS: BacktestParams = {
   trailingStopPercent: 1.5,
   confirmDays: 1,
   minSignalScore: 0,
-  requireDailyConfirm: false,
+  requireDailyConfirm: true,
   dailyMinBuyIndicators: 2,
   dailyMinSignalScore: 0,
 };
