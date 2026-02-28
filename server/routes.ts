@@ -16,6 +16,44 @@ import { optimizePortfolio } from "./portfolio-optimizer";
 import { calculateVar } from "./var-calculator";
 import { runQuantumBenchmark, isBenchmarkRunning } from "./quantum-benchmark";
 
+interface PriceBar {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+function aggregateBars(bars: PriceBar[], minutesPer: number): PriceBar[] {
+  if (bars.length === 0) return [];
+
+  const groups = new Map<string, PriceBar[]>();
+  for (const bar of bars) {
+    const d = new Date(bar.date);
+    const totalMinutes = d.getHours() * 60 + d.getMinutes();
+    const bucket = Math.floor(totalMinutes / minutesPer) * minutesPer;
+    const bucketH = Math.floor(bucket / 60);
+    const bucketM = bucket % 60;
+    const key = `${bar.date.substring(0, 11)}${String(bucketH).padStart(2, "0")}:${String(bucketM).padStart(2, "0")}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(bar);
+  }
+
+  const result: PriceBar[] = [];
+  for (const [key, group] of groups) {
+    result.push({
+      date: key,
+      open: group[0].open,
+      high: Math.max(...group.map(b => b.high)),
+      low: Math.min(...group.map(b => b.low)),
+      close: group[group.length - 1].close,
+      volume: group.reduce((sum, b) => sum + b.volume, 0),
+    });
+  }
+  return result.sort((a, b) => a.date.localeCompare(b.date));
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -218,7 +256,7 @@ export async function registerRoutes(
     const interval = (req.query.interval as string) || "1d";
 
     const validRanges = ["1d", "5d", "60d", "1mo", "3mo", "6mo", "1y", "2y", "5y"];
-    const validIntervals = ["1m", "5m", "15m", "1d", "1wk", "1mo"];
+    const validIntervals = ["1m", "5m", "10m", "15m", "30m", "1d", "1wk", "1mo"];
 
     if (!validRanges.includes(range)) {
       return res.status(400).json({ message: "Invalid range" });
@@ -230,10 +268,11 @@ export async function registerRoutes(
     try {
       let prices;
 
-      if (interval === "5m") {
+      if (interval === "5m" || interval === "10m" || interval === "30m") {
+        let bars5m: { date: string; open: number; high: number; low: number; close: number; volume: number }[];
         const stored = await storage.getIntradayPrices(ticker);
         if (stored.length > 0) {
-          prices = stored.map(b => ({
+          bars5m = stored.map(b => ({
             date: b.datetime,
             open: b.open,
             high: b.high,
@@ -242,7 +281,14 @@ export async function registerRoutes(
             volume: b.volume,
           }));
         } else {
-          prices = await fetchHistoricalPrices(ticker, "1d", "5m");
+          bars5m = await fetchHistoricalPrices(ticker, "1d", "5m");
+        }
+
+        if (interval === "5m") {
+          prices = bars5m;
+        } else {
+          const minutesPer = interval === "10m" ? 10 : 30;
+          prices = aggregateBars(bars5m, minutesPer);
         }
       } else if (isJQuantsConfigured() && interval === "1d") {
         try {
