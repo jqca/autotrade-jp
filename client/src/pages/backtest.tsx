@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   PlayCircle, Trophy, TrendingDown, BarChart3, Trash2, Loader2,
   CheckCircle, XCircle, Settings2, GitCompare, List,
+  Clock, AlertTriangle, Activity, Zap,
 } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { Link } from "wouter";
@@ -89,10 +90,17 @@ export default function Backtest() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
+  const [now, setNow] = useState(Date.now());
   const { data: progressData } = useQuery<BacktestProgress>({
     queryKey: ["/api/backtest/progress"],
     refetchInterval: polling ? 2000 : false,
   });
+
+  useEffect(() => {
+    if (!polling) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [polling]);
 
   useEffect(() => {
     if (progressData?.status === "running") {
@@ -100,7 +108,7 @@ export default function Backtest() {
     } else if (polling && progressData?.status === "completed") {
       setPolling(false);
       queryClient.invalidateQueries({ queryKey: ["/api/backtest/runs"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/backtest/results"] });
+      queryClient.invalidateQueries({ predicate: (q) => (q.queryKey[0] as string)?.startsWith("/api/backtest/results") });
     } else if (polling && progressData?.status !== "running") {
       setPolling(false);
     }
@@ -113,8 +121,7 @@ export default function Backtest() {
   const activeRunId = selectedRun === "latest" ? runs?.[0]?.runId : selectedRun;
 
   const { data: results, isLoading: resultsLoading } = useQuery<BacktestResult[]>({
-    queryKey: ["/api/backtest/results", activeRunId],
-    queryFn: () => fetch(`/api/backtest/results${activeRunId ? `?runId=${activeRunId}` : ""}`).then(r => r.json()),
+    queryKey: [`/api/backtest/results?runId=${activeRunId}`],
     enabled: !!activeRunId,
   });
 
@@ -145,7 +152,7 @@ export default function Backtest() {
     mutationFn: (runId: string) => apiRequest("DELETE", `/api/backtest/runs/${runId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/backtest/runs"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/backtest/results"] });
+      queryClient.invalidateQueries({ predicate: (q) => (q.queryKey[0] as string)?.startsWith("/api/backtest/results") });
       toast({ title: "削除完了", description: "バックテスト結果を削除しました" });
     },
   });
@@ -183,31 +190,111 @@ export default function Backtest() {
         </div>
       </div>
 
-      {isRunning && progressData && (
-        <Card data-testid="card-backtest-progress">
-          <CardContent className="pt-4 pb-3 px-4 space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">{progressData.message}</span>
-              <Badge variant="outline">{progressData.signals}件シグナル</Badge>
-            </div>
-            <Progress value={progressData.total > 0 ? (progressData.processed / progressData.total) * 100 : 0} />
-            {progressData.params && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-                <Badge variant={progressData.params.timeframe !== "1d" ? "default" : "outline"}>
-                  {({"5m":"5分足","10m":"10分足","30m":"30分足","1d":"日足"} as Record<string,string>)[progressData.params.timeframe] || progressData.params.timeframe}
-                </Badge>
-                <Badge variant="outline">目標 {progressData.params.targetPercent}%</Badge>
-                <Badge variant="outline">指標 {progressData.params.minBuyIndicators}+</Badge>
-                <Badge variant="outline">RSI {progressData.params.rsiMin}-{progressData.params.rsiMax}</Badge>
-                {progressData.params.requireMaBuy && <Badge variant="outline">MA必須</Badge>}
-                {(progressData.params.startDate || progressData.params.endDate) && (
-                  <Badge variant="outline">{progressData.params.startDate || "最古"}〜{progressData.params.endDate || "最新"}</Badge>
+      {isRunning && progressData && (() => {
+        const pct = progressData.total > 0 ? Math.min((progressData.processed / progressData.total) * 100, 100) : 0;
+        const elapsed = progressData.startedAt ? Math.max(0, Math.floor((now - progressData.startedAt) / 1000)) : 0;
+        const elapsedMin = Math.floor(elapsed / 60);
+        const elapsedSec = elapsed % 60;
+        const speed = elapsed > 0 ? (progressData.processed / elapsed).toFixed(1) : "0";
+        const remaining = elapsed > 0 && progressData.processed > 0
+          ? Math.max(0, Math.ceil((progressData.total - progressData.processed) / (progressData.processed / elapsed)))
+          : null;
+        const remainingMin = remaining != null ? Math.floor(remaining / 60) : 0;
+        const remainingSec = remaining != null ? remaining % 60 : 0;
+        return (
+          <Card data-testid="card-backtest-progress" className="border-primary/30 shadow-md">
+            <CardContent className="pt-5 pb-4 px-5 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                  <Activity className="h-4 w-4 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold" data-testid="text-progress-title">バックテスト実行中</h3>
+                    <span className="text-lg font-bold text-primary tabular-nums" data-testid="text-progress-pct">
+                      {pct.toFixed(1)}%
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate" data-testid="text-progress-message">
+                    {progressData.message}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Progress value={pct} className="h-3" />
+                <div className="flex items-center justify-between text-xs text-muted-foreground tabular-nums">
+                  <span data-testid="text-progress-count">
+                    {progressData.processed.toLocaleString()} / {progressData.total.toLocaleString()} 銘柄
+                  </span>
+                  <span data-testid="text-remaining-count">残り {progressData.total - progressData.processed} 銘柄</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-muted/50 rounded-lg p-2.5 text-center">
+                  <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                    <Clock className="h-3 w-3" />
+                    <span className="text-[10px] font-medium">経過時間</span>
+                  </div>
+                  <p className="text-sm font-semibold tabular-nums" data-testid="text-elapsed-time">
+                    {elapsedMin > 0 ? `${elapsedMin}分${elapsedSec}秒` : `${elapsedSec}秒`}
+                  </p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-2.5 text-center">
+                  <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                    <Clock className="h-3 w-3" />
+                    <span className="text-[10px] font-medium">残り時間</span>
+                  </div>
+                  <p className="text-sm font-semibold tabular-nums" data-testid="text-remaining-time">
+                    {remaining != null
+                      ? remainingMin > 0 ? `約${remainingMin}分${remainingSec}秒` : `約${remainingSec}秒`
+                      : "計算中..."}
+                  </p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-2.5 text-center">
+                  <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                    <Zap className="h-3 w-3" />
+                    <span className="text-[10px] font-medium">シグナル</span>
+                  </div>
+                  <p className="text-sm font-semibold text-primary tabular-nums" data-testid="text-signal-count">
+                    {progressData.signals}件
+                  </p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-2.5 text-center">
+                  <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    <span className="text-[10px] font-medium">エラー</span>
+                  </div>
+                  <p className={`text-sm font-semibold tabular-nums ${progressData.errors > 0 ? "text-destructive" : ""}`} data-testid="text-error-count">
+                    {progressData.errors}件
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-3">
+                <div className="flex items-center gap-1.5">
+                  <Activity className="h-3 w-3" />
+                  <span data-testid="text-processing-speed">処理速度: {speed} 銘柄/秒</span>
+                </div>
+                {progressData.params && (
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end" data-testid="progress-params-badges">
+                    <Badge variant={progressData.params.timeframe !== "1d" ? "default" : "outline"} className="text-[10px] h-5" data-testid="badge-progress-timeframe">
+                      {({"5m":"5分足","10m":"10分足","30m":"30分足","1d":"日足"} as Record<string,string>)[progressData.params.timeframe] || progressData.params.timeframe}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] h-5" data-testid="badge-progress-target">目標{progressData.params.targetPercent}%</Badge>
+                    <Badge variant="outline" className="text-[10px] h-5" data-testid="badge-progress-rsi">RSI{progressData.params.rsiMin}-{progressData.params.rsiMax}</Badge>
+                    {(progressData.params.startDate || progressData.params.endDate) && (
+                      <Badge variant="outline" className="text-[10px] h-5" data-testid="badge-progress-daterange">{progressData.params.startDate || "最古"}〜{progressData.params.endDate || "最新"}</Badge>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
