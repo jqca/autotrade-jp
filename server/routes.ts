@@ -13,6 +13,7 @@ import { startIntradayFetch, getIntradayFetchProgress } from "./intraday-batch";
 import { runClassicalRiskAssessment, computeClassicalRisk } from "./risk-classical";
 import { runQmlRiskAssessment, computeQmlRisk } from "./risk-qml";
 import { optimizePortfolio } from "./portfolio-optimizer";
+import { calculateVar } from "./var-calculator";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -514,6 +515,34 @@ export async function registerRoutes(
         computeQmlRisk(),
       ]);
       res.json({ classical, qml });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/var/calculate", async (req, res) => {
+    try {
+      const schema = z.object({
+        portfolioValue: z.number().min(10000).max(100000000).default(1000000),
+        confidenceLevel: z.number().min(0.9).max(0.99).default(0.95),
+        holdingDays: z.number().min(1).max(30).default(1),
+        nSimulations: z.number().min(1000).max(100000).default(10000),
+        nQubits: z.number().min(4).max(10).default(6),
+        tickers: z.array(z.string()).max(12).optional(),
+      });
+      const parsed = schema.safeParse(req.body || {});
+      if (!parsed.success) {
+        return res.status(400).json({ message: "パラメータが無効です" });
+      }
+      const result = await calculateVar(
+        parsed.data.portfolioValue,
+        parsed.data.confidenceLevel,
+        parsed.data.holdingDays,
+        parsed.data.nSimulations,
+        parsed.data.nQubits,
+        parsed.data.tickers,
+      );
+      res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
