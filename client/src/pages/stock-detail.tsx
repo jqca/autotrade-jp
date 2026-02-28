@@ -329,40 +329,76 @@ export default function StockDetail() {
               <p className="text-muted-foreground text-sm">しばらくしてから再試行してください</p>
             </div>
           ) : chartData.length > 0 ? (
-            <div className="h-[350px]" data-testid="chart-container">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-                  <defs>
-                    <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={isPeriodUp ? "hsl(150, 70%, 40%)" : "hsl(0, 70%, 50%)"} stopOpacity={0.3} />
-                      <stop offset="95%" stopColor={isPeriodUp ? "hsl(150, 70%, 40%)" : "hsl(0, 70%, 50%)"} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis
-                    dataKey="dateLabel"
-                    tick={{ fontSize: 11 }}
-                    className="text-muted-foreground"
-                    interval="preserveStartEnd"
-                    tickCount={8}
-                  />
-                  <YAxis
-                    domain={[yMin, yMax]}
-                    tick={{ fontSize: 11 }}
-                    className="text-muted-foreground"
-                    tickFormatter={(v) => v.toLocaleString("ja-JP")}
-                    width={70}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Area
-                    type="monotone"
-                    dataKey="close"
-                    stroke={isPeriodUp ? "hsl(150, 70%, 40%)" : "hsl(0, 70%, 50%)"}
-                    fill="url(#priceGradient)"
-                    strokeWidth={2}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+            <div data-testid="chart-container">
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 0 }} syncId="stockChart">
+                    <defs>
+                      <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={isPeriodUp ? "hsl(150, 70%, 40%)" : "hsl(0, 70%, 50%)"} stopOpacity={0.3} />
+                        <stop offset="95%" stopColor={isPeriodUp ? "hsl(150, 70%, 40%)" : "hsl(0, 70%, 50%)"} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis
+                      dataKey="dateLabel"
+                      tick={{ fontSize: 11 }}
+                      className="text-muted-foreground"
+                      interval="preserveStartEnd"
+                      tickCount={8}
+                      hide
+                    />
+                    <YAxis
+                      domain={[yMin, yMax]}
+                      tick={{ fontSize: 11 }}
+                      className="text-muted-foreground"
+                      tickFormatter={(v) => v.toLocaleString("ja-JP")}
+                      width={70}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Area
+                      type="monotone"
+                      dataKey="close"
+                      stroke={isPeriodUp ? "hsl(150, 70%, 40%)" : "hsl(0, 70%, 50%)"}
+                      fill="url(#priceGradient)"
+                      strokeWidth={2}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="h-[80px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={chartData} margin={{ top: 0, right: 10, left: 10, bottom: 5 }} syncId="stockChart">
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
+                    <XAxis
+                      dataKey="dateLabel"
+                      tick={{ fontSize: 10 }}
+                      className="text-muted-foreground"
+                      interval="preserveStartEnd"
+                      tickCount={8}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10 }}
+                      className="text-muted-foreground"
+                      tickFormatter={(v) => v >= 1000000 ? `${(v / 1000000).toFixed(0)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)}
+                      width={70}
+                    />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) return null;
+                        const d = payload[0].payload;
+                        return (
+                          <div className="bg-popover border rounded-md p-2 text-xs shadow-md">
+                            <p className="font-medium">{d.dateLabel}</p>
+                            <p className="text-muted-foreground">出来高: <span className="font-mono">{(d.volume || 0).toLocaleString("ja-JP")}</span></p>
+                          </div>
+                        );
+                      }}
+                    />
+                    <Bar dataKey="volume" fill="hsl(210, 60%, 50%)" fillOpacity={0.5} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           ) : (
             <div className="text-center py-16">
