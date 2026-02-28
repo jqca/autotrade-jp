@@ -264,7 +264,7 @@ export default function Dashboard() {
                   <Badge variant="secondary" className="text-xs" data-testid="badge-jquants-status">未設定</Badge>
                 )}
                 <span className="text-xs text-muted-foreground">
-                  {jquantsStatus.configured ? "JPX公式データで株価を取得中" : "APIキーを設定すると公式データが利用可能になります"}
+                  {jquantsStatus.configured ? "JPX公式データ接続済み" : "APIキーを設定すると公式データが利用可能になります"}
                 </span>
               </div>
             </div>
