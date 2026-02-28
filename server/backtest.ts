@@ -417,10 +417,20 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
               ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
               : 0.02;
 
+            const recent5 = closes.slice(Math.max(0, d - 4), d + 1);
+            if (recent5.length >= 3) {
+              let downDays = 0;
+              for (let r = 1; r < recent5.length; r++) {
+                if (recent5[r] < recent5[r - 1]) downDays++;
+              }
+              if (downDays >= recent5.length - 1) continue;
+            }
+
             let effectiveTarget = params.targetPercent;
             if (params.dynamicTarget) {
               const volPercent = volatility * 100;
-              effectiveTarget = Math.max(0.3, Math.min(3.0, volPercent * 0.8));
+              const minTarget = stopLoss > 0 ? stopLoss * 1.5 : 0.5;
+              effectiveTarget = Math.max(minTarget, Math.min(5.0, volPercent * 1.2));
             }
 
             const targetMultiplier = 1 + effectiveTarget / 100;
@@ -438,6 +448,13 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
 
             const endIdx = Math.min(buyDayIdx + holdDays - 1, closes.length - 1);
             for (let k = buyDayIdx; k <= endIdx; k++) {
+              if (highs[k] >= targetPrice) {
+                isWin = true;
+                sellPrice = targetPrice;
+                sellDate = dates[k];
+                break;
+              }
+
               if (highs[k] > maxHigh) {
                 maxHigh = highs[k];
                 if (useTrailingStop) {
@@ -452,17 +469,10 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
                 break;
               }
 
-              if (useTrailingStop && trailingStopPrice > 0 && lows[k] <= trailingStopPrice) {
+              if (useTrailingStop && trailingStopPrice > 0 && trailingStopPrice > buyPrice && lows[k] <= trailingStopPrice) {
                 sellPrice = trailingStopPrice;
                 sellDate = dates[k];
-                isWin = sellPrice > buyPrice;
-                break;
-              }
-
-              if (highs[k] >= targetPrice) {
                 isWin = true;
-                sellPrice = targetPrice;
-                sellDate = dates[k];
                 break;
               }
 
@@ -1042,10 +1052,20 @@ async function runDailyBacktest(params: BacktestParams, runId: string, tickers: 
               ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
               : 0.02;
 
+            const recent5 = closes.slice(Math.max(0, d - 4), d + 1);
+            if (recent5.length >= 3) {
+              let downDays = 0;
+              for (let r = 1; r < recent5.length; r++) {
+                if (recent5[r] < recent5[r - 1]) downDays++;
+              }
+              if (downDays >= recent5.length - 1) continue;
+            }
+
             let effectiveTarget = params.targetPercent;
             if (params.dynamicTarget) {
               const volPercent = volatility * 100;
-              effectiveTarget = Math.max(0.3, Math.min(3.0, volPercent * 0.8));
+              const minTarget = stopLoss > 0 ? stopLoss * 1.5 : 0.5;
+              effectiveTarget = Math.max(minTarget, Math.min(5.0, volPercent * 1.2));
             }
 
             const targetMultiplier = 1 + effectiveTarget / 100;
@@ -1054,14 +1074,21 @@ async function runDailyBacktest(params: BacktestParams, runId: string, tickers: 
 
             let isWin = false;
             let sellPrice = 0;
-            let maxHigh = 0;
+            let maxHigh = buyPrice;
             let sellDate = dates[buyDayIdx];
+            let trailingStopPrice2 = 0;
 
             const endIdx = Math.min(buyDayIdx + holdDays - 1, closes.length - 1);
             for (let k = buyDayIdx; k <= endIdx; k++) {
-              if (highs[k] > maxHigh) maxHigh = highs[k];
-              if (stopPrice > 0 && lows[k] <= stopPrice) { isWin = false; sellPrice = stopPrice; sellDate = dates[k]; break; }
               if (highs[k] >= targetPrice) { isWin = true; sellPrice = targetPrice; sellDate = dates[k]; break; }
+              if (highs[k] > maxHigh) {
+                maxHigh = highs[k];
+                if (useTrailingStop) {
+                  trailingStopPrice2 = Math.round(maxHigh * (1 - trailingStopPct / 100) * 100) / 100;
+                }
+              }
+              if (stopPrice > 0 && lows[k] <= stopPrice) { isWin = false; sellPrice = stopPrice; sellDate = dates[k]; break; }
+              if (useTrailingStop && trailingStopPrice2 > 0 && trailingStopPrice2 > buyPrice && lows[k] <= trailingStopPrice2) { sellPrice = trailingStopPrice2; sellDate = dates[k]; isWin = true; break; }
               if (k === endIdx) { sellPrice = closes[k]; sellDate = dates[k]; isWin = sellPrice > buyPrice; }
             }
             if (sellPrice === 0) { sellPrice = closes[endIdx]; sellDate = dates[endIdx]; }
@@ -1229,7 +1256,8 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               let effectiveTarget = params.targetPercent;
               if (params.dynamicTarget) {
                 const volPercent = volatility * 100;
-                effectiveTarget = Math.max(0.2, Math.min(2.0, volPercent * 0.6));
+                const minTarget = stopLoss > 0 ? stopLoss * 1.5 : 0.3;
+                effectiveTarget = Math.max(minTarget, Math.min(3.0, volPercent * 0.8));
               }
 
               const targetMultiplier = 1 + effectiveTarget / 100;
@@ -1248,6 +1276,7 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               if (!entryDayInfo) continue;
 
               for (let k = entryBarGlobal; k <= entryDayInfo.endIdx; k++) {
+                if (bars[k].high >= targetPrice) { isWin = true; sellPrice = targetPrice; sellDate = bars[k].date; break; }
                 if (bars[k].high > maxHigh) {
                   maxHigh = bars[k].high;
                   if (useTrailingStop2) {
@@ -1255,8 +1284,7 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
                   }
                 }
                 if (stopPrice > 0 && bars[k].low <= stopPrice) { isWin = false; sellPrice = stopPrice; sellDate = bars[k].date; break; }
-                if (useTrailingStop2 && trailingStopPrice2 > 0 && bars[k].low <= trailingStopPrice2) { sellPrice = trailingStopPrice2; sellDate = bars[k].date; isWin = sellPrice > buyPrice; break; }
-                if (bars[k].high >= targetPrice) { isWin = true; sellPrice = targetPrice; sellDate = bars[k].date; break; }
+                if (useTrailingStop2 && trailingStopPrice2 > 0 && trailingStopPrice2 > buyPrice && bars[k].low <= trailingStopPrice2) { sellPrice = trailingStopPrice2; sellDate = bars[k].date; isWin = true; break; }
               }
 
               if (sellPrice === 0) {
