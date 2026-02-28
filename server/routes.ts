@@ -429,16 +429,20 @@ export async function registerRoutes(
       if (rsiMin > rsiMax) {
         return res.status(400).json({ message: "RSI下限は上限以下にしてください" });
       }
-      const timeframe = req.body.timeframe === "5m" ? "5m" : "1d";
-      if (timeframe === "5m") {
+      const validTimeframes = ["1d", "5m", "10m", "30m"];
+      const timeframe = validTimeframes.includes(req.body.timeframe) ? req.body.timeframe : "1d";
+      const isIntraday = timeframe !== "1d";
+      if (isIntraday) {
         if (simDays < 10 || simDays > 60) {
-          return res.status(400).json({ message: "5分足のシミュレーション日数は10〜60の範囲で指定してください" });
+          return res.status(400).json({ message: "日中足のシミュレーション日数は10〜60の範囲で指定してください" });
         }
       } else {
         if (simDays < 80 || simDays > 400) {
           return res.status(400).json({ message: "シミュレーション日数は80〜400の範囲で指定してください" });
         }
       }
+      const startDate = isIntraday && req.body.startDate ? String(req.body.startDate) : undefined;
+      const endDate = isIntraday && req.body.endDate ? String(req.body.endDate) : undefined;
       const params: BacktestParams = {
         targetPercent,
         minBuyIndicators,
@@ -448,6 +452,8 @@ export async function registerRoutes(
         simDays,
         timeframe,
         label: req.body.label || "",
+        startDate,
+        endDate,
       };
       await startBacktest(params, 3);
       res.json({ message: "バックテストを開始しました", params });

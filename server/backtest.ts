@@ -11,6 +11,8 @@ export interface BacktestParams {
   simDays: number;
   timeframe: string;
   label: string;
+  startDate?: string;
+  endDate?: string;
 }
 
 export const DEFAULT_PARAMS: BacktestParams = {
@@ -305,12 +307,12 @@ function aggregateIntradayBars(bars: HistoricalPrice[], minutesPer: number): His
   return result.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-async function loadIntradayBars(ticker: string, simDays: number, timeframe: string): Promise<HistoricalPrice[]> {
-  const fromDate = new Date(Date.now() - (simDays + 10) * 24 * 60 * 60 * 1000);
-  const fromStr = fromDate.toISOString().split("T")[0];
+async function loadIntradayBars(ticker: string, simDays: number, timeframe: string, startDate?: string, endDate?: string): Promise<HistoricalPrice[]> {
+  const fromStr = startDate || new Date(Date.now() - (simDays + 10) * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const toStr = endDate ? `${endDate}T23:59` : undefined;
 
   const dbInterval = timeframe === "10m" ? "10m" : timeframe === "30m" ? "30m" : "5m";
-  const stored = await storage.getIntradayPrices(ticker, fromStr, undefined, dbInterval);
+  const stored = await storage.getIntradayPrices(ticker, fromStr, toStr, dbInterval);
 
   if (stored.length >= 100) {
     return stored.map(b => ({
@@ -323,7 +325,15 @@ async function loadIntradayBars(ticker: string, simDays: number, timeframe: stri
     }));
   }
 
-  const bars5m = await fetchHistoricalPrices(ticker, "60d", "5m");
+  let bars5m = await fetchHistoricalPrices(ticker, "60d", "5m");
+  if (startDate || endDate) {
+    bars5m = bars5m.filter(b => {
+      const d = b.date.split(/[T ]/)[0];
+      if (startDate && d < startDate) return false;
+      if (endDate && d > endDate) return false;
+      return true;
+    });
+  }
   if (timeframe === "10m") return aggregateIntradayBars(bars5m, 10);
   if (timeframe === "30m") return aggregateIntradayBars(bars5m, 30);
   return bars5m;
@@ -336,7 +346,7 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
     await Promise.allSettled(
       batch.map(async (ticker) => {
         try {
-          const bars = await loadIntradayBars(ticker, params.simDays, params.timeframe);
+          const bars = await loadIntradayBars(ticker, params.simDays, params.timeframe, params.startDate, params.endDate);
           if (bars.length < 200) {
             progress.processed++;
             return;
@@ -481,7 +491,7 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
     requireMaBuy: params.requireMaBuy,
     simDays: params.simDays,
     timeframe: params.timeframe,
-    label: params.label || `${tfLabel} 目標${params.targetPercent}% 指標${params.minBuyIndicators}+ RSI${params.rsiMin}-${params.rsiMax}${params.requireMaBuy ? " MA必須" : ""}`,
+    label: params.label || `${tfLabel} 目標${params.targetPercent}% 指標${params.minBuyIndicators}+ RSI${params.rsiMin}-${params.rsiMax}${params.requireMaBuy ? " MA必須" : ""}${params.startDate || params.endDate ? ` ${params.startDate || ""}〜${params.endDate || ""}` : ""}`,
   };
   await storage.insertBacktestRun(runConfig);
 

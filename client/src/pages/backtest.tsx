@@ -51,6 +51,8 @@ interface BacktestParams {
   simDays: number;
   timeframe: string;
   label: string;
+  startDate?: string;
+  endDate?: string;
 }
 
 function TrendBadge({ trend, label }: { trend: string | null; label: string }) {
@@ -84,6 +86,8 @@ export default function Backtest() {
   const [requireMaBuy, setRequireMaBuy] = useState(false);
   const [simDays, setSimDays] = useState(200);
   const [timeframe, setTimeframe] = useState("1d");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   const { data: progressData } = useQuery<BacktestProgress>({
     queryKey: ["/api/backtest/progress"],
@@ -114,6 +118,7 @@ export default function Backtest() {
     enabled: !!activeRunId,
   });
 
+  const isIntraday = timeframe !== "1d";
   const runMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/backtest/run", {
       targetPercent,
@@ -124,6 +129,8 @@ export default function Backtest() {
       simDays,
       timeframe,
       label: "",
+      ...(isIntraday && startDate ? { startDate } : {}),
+      ...(isIntraday && endDate ? { endDate } : {}),
     }),
     onSuccess: () => {
       setPolling(true);
@@ -193,6 +200,9 @@ export default function Backtest() {
                 <Badge variant="outline">指標 {progressData.params.minBuyIndicators}+</Badge>
                 <Badge variant="outline">RSI {progressData.params.rsiMin}-{progressData.params.rsiMax}</Badge>
                 {progressData.params.requireMaBuy && <Badge variant="outline">MA必須</Badge>}
+                {(progressData.params.startDate || progressData.params.endDate) && (
+                  <Badge variant="outline">{progressData.params.startDate || "最古"}〜{progressData.params.endDate || "最新"}</Badge>
+                )}
               </div>
             )}
           </CardContent>
@@ -263,6 +273,49 @@ export default function Backtest() {
                     ? "過去2年分の日足データでスイングトレードシミュレーションを行います"
                     : `過去60日分の${timeframe === "5m" ? "5" : timeframe === "10m" ? "10" : "30"}分足データでデイトレシミュレーションを行います`}
                 </p>
+                {isIntraday && (
+                  <div className="mt-3 pt-3 border-t">
+                    <Label className="text-sm font-medium mb-2 block">日付範囲（任意）</Label>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs text-muted-foreground whitespace-nowrap">開始日</Label>
+                        <Input
+                          type="date"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          className="w-[160px] h-8 text-sm"
+                          data-testid="input-start-date"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs text-muted-foreground whitespace-nowrap">終了日</Label>
+                        <Input
+                          type="date"
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          className="w-[160px] h-8 text-sm"
+                          data-testid="input-end-date"
+                        />
+                      </div>
+                      {(startDate || endDate) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => { setStartDate(""); setEndDate(""); }}
+                          className="text-xs h-8"
+                          data-testid="button-clear-dates"
+                        >
+                          クリア
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      {startDate || endDate
+                        ? `指定期間: ${startDate || "最古"}〜${endDate || "最新"} のデータでシミュレーション`
+                        : "未指定の場合はシミュレーション日数に基づいて自動的に範囲を決定します"}
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="grid gap-6 sm:grid-cols-2">
@@ -374,6 +427,9 @@ export default function Backtest() {
                     <Badge variant="outline">RSI {rsiMin}-{rsiMax}</Badge>
                     {requireMaBuy && <Badge variant="outline">MA必須</Badge>}
                     <Badge variant="outline">{simDays}日間</Badge>
+                    {isIntraday && (startDate || endDate) && (
+                      <Badge variant="outline">{startDate || "最古"}〜{endDate || "最新"}</Badge>
+                    )}
                   </div>
                 </div>
               </div>
