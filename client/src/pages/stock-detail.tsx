@@ -41,6 +41,7 @@ interface HistoricalPrice {
 }
 
 const rangeOptions = [
+  { value: "5m", label: "5分足" },
   { value: "1mo", label: "1ヶ月" },
   { value: "3mo", label: "3ヶ月" },
   { value: "6mo", label: "6ヶ月" },
@@ -136,8 +137,13 @@ export default function StockDetail() {
   const { data: stocks, isLoading: stocksLoading } = useQuery<Stock[]>({ queryKey: ["/api/stocks"] });
   const stock = stocks?.find(s => s.ticker === ticker);
 
+  const is5m = range === "5m";
+  const historyUrl = is5m
+    ? `/api/stocks/${ticker}/history?range=1d&interval=5m`
+    : `/api/stocks/${ticker}/history?range=${range}`;
+
   const { data: history, isLoading: historyLoading, error } = useQuery<HistoricalPrice[]>({
-    queryKey: [`/api/stocks/${ticker}/history?range=${range}`],
+    queryKey: [historyUrl],
   });
 
   const change = stock ? stock.currentPrice - stock.previousClose : 0;
@@ -146,7 +152,9 @@ export default function StockDetail() {
 
   const chartData = history?.map(p => ({
     ...p,
-    dateLabel: new Date(p.date).toLocaleDateString("ja-JP", { month: "short", day: "numeric" }),
+    dateLabel: is5m
+      ? new Date(p.date).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })
+      : new Date(p.date).toLocaleDateString("ja-JP", { month: "short", day: "numeric" }),
   })) ?? [];
 
   const firstPrice = chartData.length > 0 ? chartData[0].close : 0;
@@ -170,25 +178,16 @@ export default function StockDetail() {
     const macd = calcMACD(prices);
     const signals = calcSignals(prices);
 
-    const maChart = ma.map(d => ({
-      ...d,
-      dateLabel: new Date(d.date).toLocaleDateString("ja-JP", { month: "short", day: "numeric" }),
-    }));
-    const bbChart = bb.map(d => ({
-      ...d,
-      dateLabel: new Date(d.date).toLocaleDateString("ja-JP", { month: "short", day: "numeric" }),
-    }));
-    const rsiChart = rsi.map(d => ({
-      ...d,
-      dateLabel: new Date(d.date).toLocaleDateString("ja-JP", { month: "short", day: "numeric" }),
-    }));
-    const macdChart = macd.map(d => ({
-      ...d,
-      dateLabel: new Date(d.date).toLocaleDateString("ja-JP", { month: "short", day: "numeric" }),
-    }));
+    const fmt = (date: string) => is5m
+      ? new Date(date).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })
+      : new Date(date).toLocaleDateString("ja-JP", { month: "short", day: "numeric" });
+    const maChart = ma.map(d => ({ ...d, dateLabel: fmt(d.date) }));
+    const bbChart = bb.map(d => ({ ...d, dateLabel: fmt(d.date) }));
+    const rsiChart = rsi.map(d => ({ ...d, dateLabel: fmt(d.date) }));
+    const macdChart = macd.map(d => ({ ...d, dateLabel: fmt(d.date) }));
 
     return { ma: maChart, bb: bbChart, rsi: rsiChart, macd: macdChart, signals };
-  }, [history]);
+  }, [history, is5m]);
 
   if (stocksLoading) {
     return (
@@ -298,10 +297,10 @@ export default function StockDetail() {
         <CardHeader>
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div>
-              <CardTitle className="text-lg">株価チャート</CardTitle>
+              <CardTitle className="text-lg">{is5m ? "5分足チャート" : "株価チャート"}</CardTitle>
               {chartData.length > 0 && (
                 <p className={`text-sm mt-1 ${isPeriodUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
-                  期間変動: {isPeriodUp ? "+" : ""}{periodChange.toFixed(0)} 円 ({isPeriodUp ? "+" : ""}{periodChangePercent.toFixed(2)}%)
+                  {is5m ? "日中" : "期間"}変動: {isPeriodUp ? "+" : ""}{periodChange.toFixed(0)} 円 ({isPeriodUp ? "+" : ""}{periodChangePercent.toFixed(2)}%)
                 </p>
               )}
             </div>
@@ -407,7 +406,7 @@ export default function StockDetail() {
 
           <Card data-testid="card-ma">
             <CardHeader>
-              <CardTitle className="text-lg">移動平均線（5日・25日・75日）</CardTitle>
+              <CardTitle className="text-lg">{is5m ? "移動平均線（5本・25本・75本）" : "移動平均線（5日・25日・75日）"}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-[300px]">
@@ -435,7 +434,7 @@ export default function StockDetail() {
 
           <Card data-testid="card-bollinger">
             <CardHeader>
-              <CardTitle className="text-lg">ボリンジャーバンド（20日・±2σ）</CardTitle>
+              <CardTitle className="text-lg">{is5m ? "ボリンジャーバンド（20本・±2σ）" : "ボリンジャーバンド（20日・±2σ）"}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-[300px]">

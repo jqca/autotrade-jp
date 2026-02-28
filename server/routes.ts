@@ -229,7 +229,22 @@ export async function registerRoutes(
 
     try {
       let prices;
-      if (isJQuantsConfigured() && interval === "1d") {
+
+      if (interval === "5m") {
+        const stored = await storage.getIntradayPrices(ticker);
+        if (stored.length > 0) {
+          prices = stored.map(b => ({
+            date: b.datetime,
+            open: b.open,
+            high: b.high,
+            low: b.low,
+            close: b.close,
+            volume: b.volume,
+          }));
+        } else {
+          prices = await fetchHistoricalPrices(ticker, "1d", "5m");
+        }
+      } else if (isJQuantsConfigured() && interval === "1d") {
         try {
           prices = await fetchJQuantsHistorical(ticker, range);
         } catch {
