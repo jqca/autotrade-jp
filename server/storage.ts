@@ -10,7 +10,8 @@ import {
   type IntradayPrice, type InsertIntradayPrice,
   type MarketRiskAssessment, type InsertMarketRiskAssessment,
   type QuantumBenchmarkRun, type InsertQuantumBenchmarkRun,
-  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults, backtestRuns, intradayPrices, marketRiskAssessments, quantumBenchmarkRuns,
+  type EnergyLog, type InsertEnergyLog,
+  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults, backtestRuns, intradayPrices, marketRiskAssessments, quantumBenchmarkRuns, energyLogs,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, sql, like, or, ilike, count, and, gte, lte } from "drizzle-orm";
@@ -65,6 +66,11 @@ export interface IStorage {
   getBenchmarkRuns(limit?: number): Promise<QuantumBenchmarkRun[]>;
   getBenchmarkRun(id: string): Promise<QuantumBenchmarkRun | undefined>;
   deleteBenchmarkRun(id: string): Promise<void>;
+  insertEnergyLog(log: InsertEnergyLog): Promise<EnergyLog>;
+  getEnergyLogs(limit?: number): Promise<EnergyLog[]>;
+  getEnergySummary(): Promise<{ totalAiWh: number; totalQuantumWh: number; totalCo2: number; count: number }>;
+  deleteEnergyLog(id: string): Promise<void>;
+  clearEnergyLogs(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -415,6 +421,41 @@ export class DatabaseStorage implements IStorage {
 
   async deleteBenchmarkRun(id: string): Promise<void> {
     await db.delete(quantumBenchmarkRuns).where(eq(quantumBenchmarkRuns.id, id));
+  }
+
+  async insertEnergyLog(log: InsertEnergyLog): Promise<EnergyLog> {
+    const [row] = await db.insert(energyLogs).values(log).returning();
+    return row;
+  }
+
+  async getEnergyLogs(limit: number = 200): Promise<EnergyLog[]> {
+    return db.select().from(energyLogs)
+      .orderBy(sql`${energyLogs.recordedAt} desc`)
+      .limit(limit);
+  }
+
+  async getEnergySummary(): Promise<{ totalAiWh: number; totalQuantumWh: number; totalCo2: number; count: number }> {
+    const rows = await db.select().from(energyLogs);
+    let totalAiWh = 0;
+    let totalQuantumWh = 0;
+    let totalCo2 = 0;
+    for (const r of rows) {
+      if (r.processor === "CPU" || r.processor === "GPU") {
+        totalAiWh += r.energyWh;
+      } else {
+        totalQuantumWh += r.energyWh;
+      }
+      totalCo2 += r.co2Grams;
+    }
+    return { totalAiWh, totalQuantumWh, totalCo2, count: rows.length };
+  }
+
+  async deleteEnergyLog(id: string): Promise<void> {
+    await db.delete(energyLogs).where(eq(energyLogs.id, id));
+  }
+
+  async clearEnergyLogs(): Promise<void> {
+    await db.delete(energyLogs);
   }
 }
 

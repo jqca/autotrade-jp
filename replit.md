@@ -139,6 +139,15 @@ shared/
 - Frontend: history table with AI/quantum win counts, print-friendly report output, "量子技術による発見事項" section for real-data results
 - Summary auto-generated with findings, win/loss tally, and conclusion
 
+## Energy Monitor
+- DB table `energy_logs`: tracks power consumption per computation task (AI/quantum)
+- Power profiles: CPU (15-65W), GPU (30-250W), QPU (0.01-0.025W), Cryo (15kW-25kW)
+- Auto-logged from quantum benchmark (6 entries per run: 3 AI + 3 quantum) and backtest AI/quantum pipeline
+- CO₂ calculated at 0.423 g/Wh (Japan average)
+- Frontend `/energy`: summary cards, processor/task breakdown, log table, comparison simulator, hardware profiles
+- Comparison simulator shows energy at different durations + quantum speedup savings (10x, 100x)
+- Sidebar nav: "消費電力モニター" with BatteryCharging icon
+
 ## Historical Price Data
 - Supported ranges: 1d, 5d, 60d, 1mo, 3mo, 6mo, 1y, 2y, 5y
 - Supported intervals: 1m, 5m, 15m, 1d, 1wk, 1mo

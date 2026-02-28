@@ -196,6 +196,23 @@ export const insertQuantumBenchmarkRunSchema = createInsertSchema(quantumBenchma
 export type QuantumBenchmarkRun = typeof quantumBenchmarkRuns.$inferSelect;
 export type InsertQuantumBenchmarkRun = z.infer<typeof insertQuantumBenchmarkRunSchema>;
 
+export const energyLogs = pgTable("energy_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskType: text("task_type").notNull(),
+  taskName: text("task_name").notNull(),
+  processor: text("processor").notNull(),
+  durationMs: real("duration_ms").notNull(),
+  powerWatts: real("power_watts").notNull(),
+  energyWh: real("energy_wh").notNull(),
+  co2Grams: real("co2_grams").notNull(),
+  details: text("details"),
+  recordedAt: timestamp("recorded_at").defaultNow(),
+});
+
+export const insertEnergyLogSchema = createInsertSchema(energyLogs).omit({ id: true, recordedAt: true });
+export type EnergyLog = typeof energyLogs.$inferSelect;
+export type InsertEnergyLog = z.infer<typeof insertEnergyLogSchema>;
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),

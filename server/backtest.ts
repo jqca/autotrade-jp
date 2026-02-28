@@ -3,6 +3,7 @@ import path from "path";
 import { fetchHistoricalPrices, type HistoricalPrice } from "./yahoo-finance";
 import { storage } from "./storage";
 import type { InsertBacktestResult, InsertBacktestRun } from "@shared/schema";
+import { logEnergy } from "./energy-monitor";
 
 export interface BacktestParams {
   targetPercent: number;
@@ -594,6 +595,15 @@ async function runAiQuantumPipeline(signals: SignalCandidate[], params: Backtest
             s.quantumMethod = ps.quantum_method ?? undefined;
             s.varEstimate = ps.var_estimate ?? undefined;
           }
+        }
+
+        const aiTimeMs = result.ai_summary?.time_ms || 5000;
+        const qTimeMs = result.quantum_summary?.time_ms || 3000;
+        const varTimeMs = result.var_summary?.time_ms || 2000;
+        logEnergy("backtest", "AIシグナルスコアリング (GBM)", "CPU", aiTimeMs, 0.8, { model: "GradientBoosting", signals: signals.length }).catch(() => {});
+        if (params.useQuantum) {
+          logEnergy("backtest", "量子ポートフォリオ選択 (QAOA)", "QPU+CRYO", qTimeMs, 0.7, { method: "QAOA" }).catch(() => {});
+          logEnergy("backtest", "量子VaR推定 (振幅推定)", "QPU+CRYO", varTimeMs, 0.7, { method: "AmplitudeEstimation" }).catch(() => {});
         }
 
         resolve({

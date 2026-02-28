@@ -15,6 +15,7 @@ import { runQmlRiskAssessment, computeQmlRisk } from "./risk-qml";
 import { optimizePortfolio } from "./portfolio-optimizer";
 import { calculateVar } from "./var-calculator";
 import { runQuantumBenchmark, isBenchmarkRunning } from "./quantum-benchmark";
+import { logEnergy, estimateEnergy, getComparisonEstimate, getPowerProfiles, type ProcessorType } from "./energy-monitor";
 
 interface PriceBar {
   date: string;
@@ -693,6 +694,124 @@ export async function registerRoutes(
       }
       const result = await optimizePortfolio(parsed.data.budget, parsed.data.riskAversion, parsed.data.maxAssets);
       res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/energy/logs", async (_req, res) => {
+    try {
+      const logs = await storage.getEnergyLogs(200);
+      res.json(logs);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/energy/summary", async (_req, res) => {
+    try {
+      const summary = await storage.getEnergySummary();
+      const logs = await storage.getEnergyLogs(200);
+
+      const byProcessor: Record<string, { totalWh: number; totalCo2: number; count: number; totalMs: number }> = {};
+      const byTask: Record<string, { totalWh: number; totalCo2: number; count: number; totalMs: number }> = {};
+      const timeline: { date: string; aiWh: number; quantumWh: number }[] = [];
+      const timeMap = new Map<string, { aiWh: number; quantumWh: number }>();
+
+      for (const log of logs) {
+        if (!byProcessor[log.processor]) {
+          byProcessor[log.processor] = { totalWh: 0, totalCo2: 0, count: 0, totalMs: 0 };
+        }
+        byProcessor[log.processor].totalWh += log.energyWh;
+        byProcessor[log.processor].totalCo2 += log.co2Grams;
+        byProcessor[log.processor].count += 1;
+        byProcessor[log.processor].totalMs += log.durationMs;
+
+        if (!byTask[log.taskType]) {
+          byTask[log.taskType] = { totalWh: 0, totalCo2: 0, count: 0, totalMs: 0 };
+        }
+        byTask[log.taskType].totalWh += log.energyWh;
+        byTask[log.taskType].totalCo2 += log.co2Grams;
+        byTask[log.taskType].count += 1;
+        byTask[log.taskType].totalMs += log.durationMs;
+
+        const dateKey = log.recordedAt ? new Date(log.recordedAt).toISOString().slice(0, 10) : "unknown";
+        if (!timeMap.has(dateKey)) timeMap.set(dateKey, { aiWh: 0, quantumWh: 0 });
+        const entry = timeMap.get(dateKey)!;
+        if (log.processor === "CPU" || log.processor === "GPU") {
+          entry.aiWh += log.energyWh;
+        } else {
+          entry.quantumWh += log.energyWh;
+        }
+      }
+
+      for (const [date, val] of Array.from(timeMap.entries()).sort()) {
+        timeline.push({ date, aiWh: Math.round(val.aiWh * 10000) / 10000, quantumWh: Math.round(val.quantumWh * 10000) / 10000 });
+      }
+
+      res.json({ ...summary, byProcessor, byTask, timeline, profiles: getPowerProfiles() });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/energy/log", async (req, res) => {
+    try {
+      const schema = z.object({
+        taskType: z.string(),
+        taskName: z.string(),
+        processor: z.enum(["CPU", "GPU", "QPU", "QPU+CRYO"]),
+        durationMs: z.number().min(0),
+        loadFactor: z.number().min(0).max(1).default(0.7),
+        details: z.record(z.any()).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "パラメータが無効です" });
+      }
+      const result = await logEnergy(
+        parsed.data.taskType,
+        parsed.data.taskName,
+        parsed.data.processor as ProcessorType,
+        parsed.data.durationMs,
+        parsed.data.loadFactor,
+        parsed.data.details
+      );
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/energy/compare", async (req, res) => {
+    try {
+      const schema = z.object({
+        durationMs: z.number().min(1).default(60000),
+      });
+      const parsed = schema.safeParse(req.body || {});
+      if (!parsed.success) {
+        return res.status(400).json({ message: "パラメータが無効です" });
+      }
+      const result = getComparisonEstimate(parsed.data.durationMs);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/energy/logs", async (_req, res) => {
+    try {
+      await storage.clearEnergyLogs();
+      res.json({ message: "消費電力ログを全削除しました" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/energy/logs/:id", async (req, res) => {
+    try {
+      await storage.deleteEnergyLog(req.params.id);
+      res.json({ message: "削除しました" });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

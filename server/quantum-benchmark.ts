@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import path from "path";
 import { storage } from "./storage";
 import { fetchHistoricalPrices } from "./yahoo-finance";
+import { logEnergy } from "./energy-monitor";
 
 let benchmarkRunning = false;
 
@@ -290,6 +291,24 @@ export async function runQuantumBenchmark(useRealData: boolean = true): Promise<
       });
     } catch (err) {
       console.error("[Benchmark] DB保存エラー:", err);
+    }
+
+    try {
+      const riskAiMs = result.risk?.scenarios?.[0]?.ai_time_ms ? result.risk.scenarios.reduce((s: number, sc: any) => s + (sc.ai_time_ms || 0), 0) : executionTimeMs * 0.3;
+      const riskQMs = result.risk?.scenarios?.[0]?.quantum_time_ms ? result.risk.scenarios.reduce((s: number, sc: any) => s + (sc.quantum_time_ms || 0), 0) : executionTimeMs * 0.2;
+      const portAiMs = result.portfolio?.classical?.time_ms || executionTimeMs * 0.1;
+      const portQMs = result.portfolio?.quantum?.time_ms || executionTimeMs * 0.15;
+      const varAiMs = result.var?.classical?.time_ms || executionTimeMs * 0.1;
+      const varQMs = result.var?.quantum?.time_ms || executionTimeMs * 0.1;
+
+      await logEnergy("benchmark", "リスク検知 (AI/GBM)", "CPU", riskAiMs, 0.8, { domain: "risk", method: "GradientBoosting" });
+      await logEnergy("benchmark", "リスク検知 (量子/QML)", "QPU+CRYO", riskQMs, 0.7, { domain: "risk", method: "QML" });
+      await logEnergy("benchmark", "ポートフォリオ最適化 (古典/Markowitz)", "CPU", portAiMs, 0.8, { domain: "portfolio", method: "Markowitz" });
+      await logEnergy("benchmark", "ポートフォリオ最適化 (量子/QAOA)", "QPU+CRYO", portQMs, 0.7, { domain: "portfolio", method: "QAOA" });
+      await logEnergy("benchmark", "VaR推定 (古典/モンテカルロ)", "CPU", varAiMs, 0.8, { domain: "var", method: "MonteCarlo" });
+      await logEnergy("benchmark", "VaR推定 (量子/振幅推定)", "QPU+CRYO", varQMs, 0.7, { domain: "var", method: "AmplitudeEstimation" });
+    } catch (err) {
+      console.error("[Benchmark] エネルギーログエラー:", err);
     }
 
     return result;

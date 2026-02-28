@@ -19,6 +19,7 @@ import RiskAlert from "@/pages/risk-alert";
 import PortfolioOptimize from "@/pages/portfolio-optimize";
 import VarAnalysis from "@/pages/var-analysis";
 import QuantumBenchmark from "@/pages/quantum-benchmark";
+import EnergyMonitor from "@/pages/energy-monitor";
 
 function Router() {
   return (
@@ -32,6 +33,7 @@ function Router() {
       <Route path="/optimize" component={PortfolioOptimize} />
       <Route path="/var" component={VarAnalysis} />
       <Route path="/benchmark" component={QuantumBenchmark} />
+      <Route path="/energy" component={EnergyMonitor} />
       <Route path="/strategies" component={Strategies} />
       <Route path="/trades" component={Trades} />
       <Route path="/portfolio" component={Portfolio} />
