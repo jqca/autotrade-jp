@@ -205,6 +205,12 @@ export async function registerRoutes(
     res.json(positions);
   });
 
+  app.delete("/api/portfolio/:ticker", async (req, res) => {
+    const { ticker } = req.params;
+    await storage.deletePosition(ticker);
+    res.json({ success: true });
+  });
+
   app.get("/api/stocks/:ticker/history", async (req, res) => {
     const { ticker } = req.params;
     const range = (req.query.range as string) || "6mo";
