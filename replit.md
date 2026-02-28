@@ -36,6 +36,7 @@ A simulated Japanese stock automated trading platform with all 3,771 TSE-listed 
 - `backtest_results` - Backtest simulation results (signal date, buy/sell prices, win/loss, indicator trends)
 - `intraday_prices` - Stored intraday bar data (ticker, datetime, OHLCV, interval) with unique index on (ticker, datetime, interval), 120-day retention. Intervals: 5m, 10m (aggregated from 5m), 30m (aggregated from 5m)
 - `market_risk_assessments` - Risk assessment results from classical and QML methods (risk score, level, sub-scores, details JSON)
+- `quantum_benchmark_runs` - Quantum benchmark execution history (risk/portfolio/VaR/kernel results as JSON, data source, summary, execution time, stock count)
 
 ## Project Structure
 ```
@@ -59,6 +60,8 @@ server/
   qaoa_portfolio.py - PennyLane QAOA circuit for portfolio selection (QUBO formulation)
   var-calculator.ts - Classical Monte Carlo + Quantum Monte Carlo VaR calculator wrapper
   quantum_mc_var.py - PennyLane quantum amplitude estimation for VaR/CVaR calculation
+  quantum_benchmark.py - Multi-domain quantum benchmark (risk/portfolio/VaR/kernel, accepts real data via stdin)
+  quantum-benchmark.ts - Benchmark orchestrator (gathers real data from DB/Yahoo, runs Python, saves results)
 shared/
   schema.ts      - Drizzle schemas and TypeScript types
 ```
@@ -98,6 +101,10 @@ shared/
 - GET /api/risk/preview - Live risk preview (no DB save)
 - POST /api/portfolio/optimize - Quantum portfolio optimization (body: {budget, riskAversion, maxAssets})
 - POST /api/var/calculate - Quantum Monte Carlo VaR analysis (body: {portfolioValue, confidenceLevel, holdingDays, nSimulations, nQubits, tickers?})
+- POST /api/benchmark/run - Run quantum benchmark (body: {useRealData: true/false}), saves to DB
+- GET /api/benchmark/runs - List benchmark run history
+- GET /api/benchmark/runs/:id - Get specific benchmark run detail
+- DELETE /api/benchmark/runs/:id - Delete benchmark run
 
 ## Data Sources
 ### J-Quants API (Primary - JPX公式データ)

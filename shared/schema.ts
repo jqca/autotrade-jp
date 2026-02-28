@@ -169,6 +169,24 @@ export const insertMarketRiskAssessmentSchema = createInsertSchema(marketRiskAss
 export type MarketRiskAssessment = typeof marketRiskAssessments.$inferSelect;
 export type InsertMarketRiskAssessment = z.infer<typeof insertMarketRiskAssessmentSchema>;
 
+export const quantumBenchmarkRuns = pgTable("quantum_benchmark_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  runAt: timestamp("run_at").defaultNow(),
+  dataSource: text("data_source").notNull().default("synthetic"),
+  riskResult: text("risk_result"),
+  portfolioResult: text("portfolio_result"),
+  varResult: text("var_result"),
+  kernelResult: text("kernel_result"),
+  scalingResult: text("scaling_result"),
+  summary: text("summary"),
+  stockCount: integer("stock_count").default(0),
+  executionTimeMs: integer("execution_time_ms").default(0),
+});
+
+export const insertQuantumBenchmarkRunSchema = createInsertSchema(quantumBenchmarkRuns).omit({ id: true, runAt: true });
+export type QuantumBenchmarkRun = typeof quantumBenchmarkRuns.$inferSelect;
+export type InsertQuantumBenchmarkRun = z.infer<typeof insertQuantumBenchmarkRunSchema>;
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),

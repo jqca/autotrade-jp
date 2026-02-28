@@ -9,7 +9,8 @@ import {
   type BacktestRun, type InsertBacktestRun,
   type IntradayPrice, type InsertIntradayPrice,
   type MarketRiskAssessment, type InsertMarketRiskAssessment,
-  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults, backtestRuns, intradayPrices, marketRiskAssessments,
+  type QuantumBenchmarkRun, type InsertQuantumBenchmarkRun,
+  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults, backtestRuns, intradayPrices, marketRiskAssessments, quantumBenchmarkRuns,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, sql, like, or, ilike, count, and, gte, lte } from "drizzle-orm";
@@ -59,6 +60,10 @@ export interface IStorage {
   insertMarketRiskAssessment(assessment: InsertMarketRiskAssessment): Promise<void>;
   getMarketRiskAssessments(limit?: number): Promise<MarketRiskAssessment[]>;
   getLatestRiskByMethod(method: string): Promise<MarketRiskAssessment | undefined>;
+  insertBenchmarkRun(run: InsertQuantumBenchmarkRun): Promise<QuantumBenchmarkRun>;
+  getBenchmarkRuns(limit?: number): Promise<QuantumBenchmarkRun[]>;
+  getBenchmarkRun(id: string): Promise<QuantumBenchmarkRun | undefined>;
+  deleteBenchmarkRun(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -386,6 +391,25 @@ export class DatabaseStorage implements IStorage {
       .orderBy(sql`${marketRiskAssessments.calculatedAt} desc`)
       .limit(1);
     return row;
+  }
+  async insertBenchmarkRun(run: InsertQuantumBenchmarkRun): Promise<QuantumBenchmarkRun> {
+    const [row] = await db.insert(quantumBenchmarkRuns).values(run).returning();
+    return row;
+  }
+
+  async getBenchmarkRuns(limit: number = 50): Promise<QuantumBenchmarkRun[]> {
+    return db.select().from(quantumBenchmarkRuns)
+      .orderBy(sql`${quantumBenchmarkRuns.runAt} desc`)
+      .limit(limit);
+  }
+
+  async getBenchmarkRun(id: string): Promise<QuantumBenchmarkRun | undefined> {
+    const [row] = await db.select().from(quantumBenchmarkRuns).where(eq(quantumBenchmarkRuns.id, id));
+    return row;
+  }
+
+  async deleteBenchmarkRun(id: string): Promise<void> {
+    await db.delete(quantumBenchmarkRuns).where(eq(quantumBenchmarkRuns.id, id));
   }
 }
 

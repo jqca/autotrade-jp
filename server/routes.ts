@@ -633,13 +633,42 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/benchmark/run", async (_req, res) => {
+  app.post("/api/benchmark/run", async (req, res) => {
     try {
       if (isBenchmarkRunning()) {
         return res.status(409).json({ message: "ベンチマークが既に実行中です" });
       }
-      const result = await runQuantumBenchmark();
+      const useRealData = req.body?.useRealData !== false;
+      const result = await runQuantumBenchmark(useRealData);
       res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/benchmark/runs", async (_req, res) => {
+    try {
+      const runs = await storage.getBenchmarkRuns(100);
+      res.json(runs);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/benchmark/runs/:id", async (req, res) => {
+    try {
+      const run = await storage.getBenchmarkRun(req.params.id);
+      if (!run) return res.status(404).json({ message: "結果が見つかりません" });
+      res.json(run);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/benchmark/runs/:id", async (req, res) => {
+    try {
+      await storage.deleteBenchmarkRun(req.params.id);
+      res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
