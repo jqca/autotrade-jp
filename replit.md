@@ -34,7 +34,7 @@ A simulated Japanese stock automated trading platform with all 3,771 TSE-listed 
 - `technical_indicators` - Pre-computed technical indicators per stock, supports both daily ("1d") and 5-minute ("5m") timeframes via composite unique (ticker, timeframe)
 - `backtest_runs` - Backtest run configurations (target %, min indicators, RSI range, MA filter, sim days)
 - `backtest_results` - Backtest simulation results (signal date, buy/sell prices, win/loss, indicator trends)
-- `intraday_prices` - Stored 5-minute bar data (ticker, datetime, OHLCV, interval) with unique index on (ticker, datetime, interval), 120-day retention
+- `intraday_prices` - Stored intraday bar data (ticker, datetime, OHLCV, interval) with unique index on (ticker, datetime, interval), 120-day retention. Intervals: 5m, 10m (aggregated from 5m), 30m (aggregated from 5m)
 - `market_risk_assessments` - Risk assessment results from classical and QML methods (risk score, level, sub-scores, details JSON)
 
 ## Project Structure
@@ -90,7 +90,8 @@ shared/
 - DELETE /api/backtest/runs/:runId - Delete a backtest run
 - GET /api/intraday/status - Stats about stored 5-minute bar data (count, tickers, date range)
 - GET /api/intraday/progress - Progress of intraday data fetch operation
-- POST /api/intraday/fetch - Start intraday data fetch (body: {mode: "daily"|"seed"})
+- POST /api/intraday/fetch - Start intraday data fetch (body: {mode: "daily"|"seed"}), auto-generates 10m/30m from 5m
+- POST /api/intraday/aggregate - Generate 10m/30m bars from existing 5m data in DB
 - GET /api/risk/latest - Latest risk assessments by both methods
 - GET /api/risk/history - Risk assessment history (with ?limit=)
 - POST /api/risk/assess - Run risk assessment (body: {method: "classical"|"qml"|"both"})
@@ -113,11 +114,12 @@ shared/
 - Ticker format: `{code}.T` (e.g., 7203.T for Toyota on TSE)
 
 ## Backtest
-- Two timeframe modes: 日足 (daily, 2y data) and 5分足 (5-minute, 60d data)
-- 5-min backtest: Yahoo Finance 5m bars, groups by trading day, signal→entry at next bar open, exit at target or EOD close
+- Four timeframe modes: 日足 (daily, 2y data), 5分足 (5m, 60d data), 10分足 (10m, 60d data), 30分足 (30m, 60d data)
+- Intraday backtest: uses DB-stored bars (interval-specific), falls back to Yahoo Finance 5m bars with on-the-fly aggregation
+- 10m/30m bars are aggregated from 5m bars using standard OHLCV method (both batch storage and live)
 - `timeframe` field in `backtest_runs` table (default "1d" for backward compat)
-- Intraday indicators computed on 5-min closes with minimum 50 bars (vs 80 for daily)
-- simDays range: daily=80-400, 5min=10-60
+- Intraday indicators computed on closes with minimum 50 bars (vs 80 for daily)
+- simDays range: daily=80-400, intraday=10-60
 
 ## Historical Price Data
 - Supported ranges: 1d, 5d, 60d, 1mo, 3mo, 6mo, 1y, 2y, 5y

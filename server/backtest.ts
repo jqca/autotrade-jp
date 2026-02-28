@@ -308,10 +308,12 @@ function aggregateIntradayBars(bars: HistoricalPrice[], minutesPer: number): His
 async function loadIntradayBars(ticker: string, simDays: number, timeframe: string): Promise<HistoricalPrice[]> {
   const fromDate = new Date(Date.now() - (simDays + 10) * 24 * 60 * 60 * 1000);
   const fromStr = fromDate.toISOString().split("T")[0];
-  const stored = await storage.getIntradayPrices(ticker, fromStr);
-  let bars5m: HistoricalPrice[];
-  if (stored.length >= 200) {
-    bars5m = stored.map(b => ({
+
+  const dbInterval = timeframe === "10m" ? "10m" : timeframe === "30m" ? "30m" : "5m";
+  const stored = await storage.getIntradayPrices(ticker, fromStr, undefined, dbInterval);
+
+  if (stored.length >= 100) {
+    return stored.map(b => ({
       date: b.datetime,
       open: b.open,
       high: b.high,
@@ -319,10 +321,9 @@ async function loadIntradayBars(ticker: string, simDays: number, timeframe: stri
       close: b.close,
       volume: b.volume,
     }));
-  } else {
-    bars5m = await fetchHistoricalPrices(ticker, "60d", "5m");
   }
 
+  const bars5m = await fetchHistoricalPrices(ticker, "60d", "5m");
   if (timeframe === "10m") return aggregateIntradayBars(bars5m, 10);
   if (timeframe === "30m") return aggregateIntradayBars(bars5m, 30);
   return bars5m;

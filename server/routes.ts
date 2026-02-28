@@ -9,7 +9,7 @@ import { importJPXStocks, fetchBatchPrices, startFetchAllPrices, getFetchAllProg
 import { startScheduler, getSchedulerStatus, setSchedulerEnabled } from "./scheduler";
 import { startIndicatorBatch, getIndicatorBatchProgress, startIntradayIndicatorBatch, getIntradayIndicatorBatchProgress } from "./technical-batch";
 import { startBacktest, getBacktestProgress, DEFAULT_PARAMS, type BacktestParams } from "./backtest";
-import { startIntradayFetch, getIntradayFetchProgress } from "./intraday-batch";
+import { startIntradayFetch, getIntradayFetchProgress, aggregateStoredIntradayData } from "./intraday-batch";
 import { runClassicalRiskAssessment, computeClassicalRisk } from "./risk-classical";
 import { runQmlRiskAssessment, computeQmlRisk } from "./risk-qml";
 import { optimizePortfolio } from "./portfolio-optimizer";
@@ -269,10 +269,9 @@ export async function registerRoutes(
       let prices;
 
       if (interval === "5m" || interval === "10m" || interval === "30m") {
-        let bars5m: { date: string; open: number; high: number; low: number; close: number; volume: number }[];
-        const stored = await storage.getIntradayPrices(ticker);
+        const stored = await storage.getIntradayPrices(ticker, undefined, undefined, interval);
         if (stored.length > 0) {
-          bars5m = stored.map(b => ({
+          prices = stored.map(b => ({
             date: b.datetime,
             open: b.open,
             high: b.high,
@@ -281,14 +280,13 @@ export async function registerRoutes(
             volume: b.volume,
           }));
         } else {
-          bars5m = await fetchHistoricalPrices(ticker, "1d", "5m");
-        }
-
-        if (interval === "5m") {
-          prices = bars5m;
-        } else {
-          const minutesPer = interval === "10m" ? 10 : 30;
-          prices = aggregateBars(bars5m, minutesPer);
+          const bars5m = await fetchHistoricalPrices(ticker, "1d", "5m");
+          if (interval === "5m") {
+            prices = bars5m;
+          } else {
+            const minutesPer = interval === "10m" ? 10 : 30;
+            prices = aggregateBars(bars5m, minutesPer);
+          }
         }
       } else if (isJQuantsConfigured() && interval === "1d") {
         try {
@@ -530,6 +528,19 @@ export async function registerRoutes(
       const mode = req.body.mode === "seed" ? "seed" : "daily";
       await startIntradayFetch(mode, 3);
       res.json({ message: `5分足データ取得を開始しました (${mode === "seed" ? "初回シード60日分" : "当日分"})` });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/intraday/aggregate", async (_req, res) => {
+    try {
+      const intradayProgress = getIntradayFetchProgress();
+      if (intradayProgress.status === "running") {
+        return res.status(409).json({ message: "既にイントラデイデータ処理が実行中です" });
+      }
+      aggregateStoredIntradayData();
+      res.json({ message: "既存5分足データから10分足・30分足データの生成を開始しました" });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

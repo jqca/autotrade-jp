@@ -186,8 +186,8 @@ export default function Backtest() {
             <Progress value={progressData.total > 0 ? (progressData.processed / progressData.total) * 100 : 0} />
             {progressData.params && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-                <Badge variant={progressData.params.timeframe === "5m" ? "default" : "outline"}>
-                  {progressData.params.timeframe === "5m" ? "5分足" : "日足"}
+                <Badge variant={progressData.params.timeframe !== "1d" ? "default" : "outline"}>
+                  {({"5m":"5分足","10m":"10分足","30m":"30分足","1d":"日足"} as Record<string,string>)[progressData.params.timeframe] || progressData.params.timeframe}
                 </Badge>
                 <Badge variant="outline">目標 {progressData.params.targetPercent}%</Badge>
                 <Badge variant="outline">指標 {progressData.params.minBuyIndicators}+</Badge>
@@ -224,7 +224,7 @@ export default function Backtest() {
             <CardContent className="space-y-6">
               <div className="space-y-3 pb-2 border-b">
                 <Label className="text-sm font-medium">時間足</Label>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <Button
                     variant={timeframe === "1d" ? "default" : "outline"}
                     size="sm"
@@ -241,11 +241,27 @@ export default function Backtest() {
                   >
                     5分足（過去60日）
                   </Button>
+                  <Button
+                    variant={timeframe === "10m" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => { setTimeframe("10m"); setSimDays(60); }}
+                    data-testid="button-timeframe-10m"
+                  >
+                    10分足（過去60日）
+                  </Button>
+                  <Button
+                    variant={timeframe === "30m" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => { setTimeframe("30m"); setSimDays(60); }}
+                    data-testid="button-timeframe-30m"
+                  >
+                    30分足（過去60日）
+                  </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {timeframe === "5m"
-                    ? "Yahoo Financeから過去60日分の5分足データを取得してデイトレシミュレーションを行います"
-                    : "過去2年分の日足データでスイングトレードシミュレーションを行います"}
+                  {timeframe === "1d"
+                    ? "過去2年分の日足データでスイングトレードシミュレーションを行います"
+                    : `過去60日分の${timeframe === "5m" ? "5" : timeframe === "10m" ? "10" : "30"}分足データでデイトレシミュレーションを行います`}
                 </p>
               </div>
 
@@ -313,9 +329,9 @@ export default function Backtest() {
                     <Slider
                       value={[simDays]}
                       onValueChange={([v]) => setSimDays(v)}
-                      min={timeframe === "5m" ? 10 : 80}
-                      max={timeframe === "5m" ? 60 : 400}
-                      step={timeframe === "5m" ? 5 : 10}
+                      min={timeframe !== "1d" ? 10 : 80}
+                      max={timeframe !== "1d" ? 60 : 400}
+                      step={timeframe !== "1d" ? 5 : 10}
                       className="flex-1"
                       data-testid="slider-sim-days"
                     />
@@ -323,8 +339,8 @@ export default function Backtest() {
                       {simDays}日
                     </Badge>
                   </div>
-                  {timeframe === "5m" && (
-                    <p className="text-xs text-muted-foreground">Yahoo Financeの5分足は最大60日分取得可能です</p>
+                  {timeframe !== "1d" && (
+                    <p className="text-xs text-muted-foreground">日中足データは最大60日分取得可能です（DB蓄積データ優先使用）</p>
                   )}
                 </div>
 
@@ -352,7 +368,7 @@ export default function Backtest() {
                     {isRunning ? "実行中..." : "この条件でバックテスト実行"}
                   </Button>
                   <div className="flex gap-2 text-xs text-muted-foreground flex-wrap">
-                    <Badge variant={timeframe === "5m" ? "default" : "outline"}>{timeframe === "5m" ? "5分足" : "日足"}</Badge>
+                    <Badge variant={timeframe !== "1d" ? "default" : "outline"}>{({"5m":"5分足","10m":"10分足","30m":"30分足","1d":"日足"} as Record<string,string>)[timeframe] || timeframe}</Badge>
                     <Badge variant="outline">目標 {targetPercent.toFixed(1)}%</Badge>
                     <Badge variant="outline">指標 {minBuyIndicators}+</Badge>
                     <Badge variant="outline">RSI {rsiMin}-{rsiMax}</Badge>
@@ -446,6 +462,44 @@ export default function Backtest() {
                     data-testid="button-preset-5m-strict"
                   >
                     5分足 厳格
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground font-medium mt-4">10分足プリセット</p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setTimeframe("10m"); setTargetPercent(0.5); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(60); }}
+                    data-testid="button-preset-10m-default"
+                  >
+                    10分足デフォルト
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setTimeframe("10m"); setTargetPercent(0.7); setMinBuyIndicators(3); setRsiMin(20); setRsiMax(30); setRequireMaBuy(true); setSimDays(60); }}
+                    data-testid="button-preset-10m-trend"
+                  >
+                    10分足 トレンドフォロー
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground font-medium mt-4">30分足プリセット</p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setTimeframe("30m"); setTargetPercent(0.7); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(60); }}
+                    data-testid="button-preset-30m-default"
+                  >
+                    30分足デフォルト
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setTimeframe("30m"); setTargetPercent(1.0); setMinBuyIndicators(3); setRsiMin(20); setRsiMax(30); setRequireMaBuy(true); setSimDays(60); }}
+                    data-testid="button-preset-30m-swing"
+                  >
+                    30分足 スイング
                   </Button>
                 </div>
               </div>

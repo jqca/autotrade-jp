@@ -109,6 +109,16 @@ export default function Dashboard() {
     },
   });
 
+  const aggregateIntraday = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/intraday/aggregate", {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/intraday/progress"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/intraday/status"] });
+    },
+  });
+
   const isLoading = stocksLoading || strategiesLoading || tradesLoading || positionsLoading;
 
   const totalValue = positions?.reduce((sum, p) => sum + p.currentPrice * p.quantity, 0) ?? 0;
@@ -376,9 +386,9 @@ export default function Dashboard() {
           <div className="flex items-center justify-between gap-2">
             <CardTitle className="text-lg flex items-center gap-2">
               <Clock className="h-5 w-5" />
-              5分足データ蓄積
+              日中足データ蓄積（5分/10分/30分）
             </CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Button
                 size="sm"
                 variant="outline"
@@ -396,6 +406,15 @@ export default function Dashboard() {
                 data-testid="button-intraday-seed"
               >
                 初回シード(60日)
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={intradayProgress?.status === "running" || aggregateIntraday.isPending}
+                onClick={() => aggregateIntraday.mutate()}
+                data-testid="button-intraday-aggregate"
+              >
+                10分/30分足生成
               </Button>
             </div>
           </div>
@@ -426,7 +445,7 @@ export default function Dashboard() {
           {intradayProgress && intradayProgress.status === "running" && (
             <div className="mt-3 pt-3 border-t space-y-1">
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{intradayProgress.mode === "seed" ? "初回シード取得中..." : "当日分取得中..."}</span>
+                <span>{intradayProgress.mode === "seed" ? "初回シード取得中..." : intradayProgress.mode === "aggregate" ? "10分/30分足生成中..." : "当日分取得中..."}</span>
                 <span>{intradayProgress.processed}/{intradayProgress.total}</span>
               </div>
               <div className="w-full bg-muted rounded-full h-1.5">

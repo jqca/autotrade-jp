@@ -53,7 +53,7 @@ export interface IStorage {
   getBacktestRunConfig(runId: string): Promise<BacktestRun | undefined>;
   getAllBacktestRunConfigs(): Promise<BacktestRun[]>;
   bulkInsertIntradayPrices(bars: InsertIntradayPrice[]): Promise<number>;
-  getIntradayPrices(ticker: string, fromDate?: string, toDate?: string): Promise<IntradayPrice[]>;
+  getIntradayPrices(ticker: string, fromDate?: string, toDate?: string, interval?: string): Promise<IntradayPrice[]>;
   getIntradayDataStats(): Promise<{ totalBars: number; distinctTickers: number; earliestDate: string | null; latestDate: string | null }>;
   cleanupOldIntradayData(retentionDays: number): Promise<number>;
   insertMarketRiskAssessment(assessment: InsertMarketRiskAssessment): Promise<void>;
@@ -338,10 +338,11 @@ export class DatabaseStorage implements IStorage {
     return inserted;
   }
 
-  async getIntradayPrices(ticker: string, fromDate?: string, toDate?: string): Promise<IntradayPrice[]> {
+  async getIntradayPrices(ticker: string, fromDate?: string, toDate?: string, interval?: string): Promise<IntradayPrice[]> {
     const conditions = [eq(intradayPrices.ticker, ticker)];
     if (fromDate) conditions.push(gte(intradayPrices.datetime, fromDate));
     if (toDate) conditions.push(lte(intradayPrices.datetime, toDate));
+    if (interval) conditions.push(eq(intradayPrices.interval, interval));
     return db.select().from(intradayPrices)
       .where(and(...conditions))
       .orderBy(intradayPrices.datetime);
