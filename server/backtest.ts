@@ -24,6 +24,15 @@ export interface BacktestParams {
   minVolume?: number;
   requireUptrend?: boolean;
   dynamicTarget?: boolean;
+  requireMacdCrossover?: boolean;
+  requireRsiReversal?: boolean;
+  requireVolumeSurge?: boolean;
+  volumeSurgeRatio?: number;
+  maxGapPercent?: number;
+  trailingStop?: boolean;
+  trailingStopPercent?: number;
+  confirmDays?: number;
+  minSignalScore?: number;
 }
 
 export const DEFAULT_PARAMS: BacktestParams = {
@@ -43,6 +52,15 @@ export const DEFAULT_PARAMS: BacktestParams = {
   minVolume: 0,
   requireUptrend: false,
   dynamicTarget: false,
+  requireMacdCrossover: false,
+  requireRsiReversal: false,
+  requireVolumeSurge: false,
+  volumeSurgeRatio: 1.5,
+  maxGapPercent: 2.0,
+  trailingStop: false,
+  trailingStopPercent: 1.5,
+  confirmDays: 1,
+  minSignalScore: 0,
 };
 
 export interface BacktestProgress {
@@ -112,6 +130,12 @@ interface DayIndicators {
   rsiValue: number | null;
   overallSignal: string;
   overallLabel: string;
+  isUptrend: boolean;
+  bbWidth: number;
+  isMacdCrossover: boolean;
+  isRsiReversal: boolean;
+  prevRsiValue: number | null;
+  signalScore: number;
 }
 
 function computeIndicatorsAtIndex(closes: number[], dayIndex: number, minBars: number = 80): DayIndicators | null {
@@ -184,10 +208,35 @@ function computeIndicatorsAtIndex(closes: number[], dayIndex: number, minBars: n
   const prevSignalVal = signalLine[n - 2];
 
   let macdTrend = "neutral";
-  if (prevMacd <= prevSignalVal && macdLine[n - 1] > signalLine[n - 1]) macdTrend = "buy";
+  const isMacdCrossover = prevMacd <= prevSignalVal && macdLine[n - 1] > signalLine[n - 1];
+  if (isMacdCrossover) macdTrend = "buy";
   else if (prevMacd >= prevSignalVal && macdLine[n - 1] < signalLine[n - 1]) macdTrend = "sell";
   else if (macdLine[n - 1] > signalLine[n - 1]) macdTrend = "buy";
   else macdTrend = "sell";
+
+  let prevRsiValue: number | null = null;
+  if (n > rsiPeriod + 2) {
+    const prevSlice = slice.slice(0, n - 1);
+    let pAvgGain = 0, pAvgLoss = 0;
+    for (let i = 1; i < prevSlice.length; i++) {
+      const diff = prevSlice[i] - prevSlice[i - 1];
+      const g = diff > 0 ? diff : 0;
+      const l = diff < 0 ? -diff : 0;
+      if (i < rsiPeriod) { pAvgGain += g; pAvgLoss += l; }
+      else if (i === rsiPeriod) {
+        pAvgGain = (pAvgGain + g) / rsiPeriod;
+        pAvgLoss = (pAvgLoss + l) / rsiPeriod;
+      } else {
+        pAvgGain = (pAvgGain * (rsiPeriod - 1) + g) / rsiPeriod;
+        pAvgLoss = (pAvgLoss * (rsiPeriod - 1) + l) / rsiPeriod;
+      }
+    }
+    const pRs = pAvgLoss === 0 ? 100 : pAvgGain / pAvgLoss;
+    prevRsiValue = Math.round((100 - 100 / (1 + pRs)) * 100) / 100;
+  }
+
+  const isRsiReversal = prevRsiValue != null && rsiValue != null
+    && prevRsiValue <= 30 && rsiValue > prevRsiValue && rsiValue <= 50;
 
   const signals = [macdTrend, rsiTrend, maTrend, bbTrend];
   const buyCount = signals.filter(s => s === "buy").length;
@@ -200,12 +249,25 @@ function computeIndicatorsAtIndex(closes: number[], dayIndex: number, minBars: n
   else if (sellCount > buyCount) { overallSignal = "sell"; overallLabel = "やや売り優勢"; }
   else { overallSignal = "neutral"; overallLabel = "様子見"; }
 
+  let signalScore = 0;
+  if (isMacdCrossover) signalScore += 30;
+  else if (macdTrend === "buy") signalScore += 10;
+  if (isRsiReversal) signalScore += 25;
+  else if (rsiTrend === "buy") signalScore += 10;
+  if (maTrend === "buy") signalScore += 20;
+  if (bbTrend === "buy") signalScore += 15;
+  if (prevMa5 != null && prevMa25 != null && prevMa5 <= prevMa25 && ma5 != null && ma25 != null && ma5 > ma25) {
+    signalScore += 10;
+  }
+
   const ma75Arr = sma(slice, 75);
   const ma75 = ma75Arr[n - 1];
   const prevMa75 = n >= 3 ? ma75Arr[n - 2] : null;
   const isUptrend = ma25 != null && ma75 != null && prevMa75 != null
     ? (closes[n - 1] > ma25 && ma25 > ma75 && ma75 >= prevMa75)
     : false;
+
+  if (isUptrend) signalScore += 10;
 
   const bbWidth = mid[n - 1] != null ? (() => {
     let sumSq = 0;
@@ -214,7 +276,7 @@ function computeIndicatorsAtIndex(closes: number[], dayIndex: number, minBars: n
     return (4 * stdDev) / mid[n - 1]! * 100;
   })() : 4;
 
-  return { macdTrend, rsiTrend, maTrend, bbTrend, rsiValue, overallSignal, overallLabel, isUptrend, bbWidth };
+  return { macdTrend, rsiTrend, maTrend, bbTrend, rsiValue, overallSignal, overallLabel, isUptrend, bbWidth, isMacdCrossover, isRsiReversal, prevRsiValue, signalScore };
 }
 
 function extractDatePart(datetime: string): string {
@@ -283,6 +345,17 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
           const startIdx = Math.max(79, closes.length - params.simDays - 1);
           const holdDays = Math.max(1, params.maxHoldDays ?? 1);
           const stopLoss = params.stopLossPercent ?? 0;
+          const confirmDays = Math.max(1, params.confirmDays ?? 1);
+          const useTrailingStop = params.trailingStop ?? false;
+          const trailingStopPct = params.trailingStopPercent ?? 1.5;
+          const maxGapPct = params.maxGapPercent ?? 2.0;
+
+          const avgVolume20 = (idx: number): number => {
+            const start = Math.max(0, idx - 20);
+            let sum = 0;
+            for (let j = start; j < idx; j++) sum += volumes[j];
+            return sum / Math.max(1, idx - start);
+          };
 
           for (let d = startIdx; d < closes.length - 1; d++) {
             if ((params.minVolume ?? 0) > 0 && volumes[d] < (params.minVolume ?? 0)) continue;
@@ -301,10 +374,37 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
             }
 
+            if (params.requireMacdCrossover && !indicators.isMacdCrossover) continue;
+
+            if (params.requireRsiReversal && !indicators.isRsiReversal) continue;
+
+            if (params.requireVolumeSurge) {
+              const avgVol = avgVolume20(d);
+              const surgeRatio = params.volumeSurgeRatio ?? 1.5;
+              if (avgVol > 0 && volumes[d] < avgVol * surgeRatio) continue;
+            }
+
+            if ((params.minSignalScore ?? 0) > 0 && indicators.signalScore < (params.minSignalScore ?? 0)) continue;
+
+            if (confirmDays > 1) {
+              let confirmed = true;
+              for (let cd = 1; cd < confirmDays; cd++) {
+                if (d - cd < 0) { confirmed = false; break; }
+                const prevInd = computeIndicatorsAtIndex(closes, d - cd);
+                if (!prevInd || prevInd.overallSignal !== "buy") { confirmed = false; break; }
+              }
+              if (!confirmed) continue;
+            }
+
             const buyDayIdx = d + 1;
             if (buyDayIdx >= closes.length) continue;
 
             const buyPrice = opens[buyDayIdx];
+
+            if (maxGapPct > 0 && maxGapPct < 100) {
+              const gapPercent = Math.abs((buyPrice - closes[d]) / closes[d]) * 100;
+              if (gapPercent > maxGapPct) continue;
+            }
 
             const recentCloses = closes.slice(Math.max(0, d - 20), d + 1);
             const volatility = recentCloses.length > 1
@@ -326,17 +426,30 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
 
             let isWin = false;
             let sellPrice = 0;
-            let maxHigh = 0;
+            let maxHigh = buyPrice;
             let sellDate = dates[buyDayIdx];
+            let trailingStopPrice = 0;
 
             const endIdx = Math.min(buyDayIdx + holdDays - 1, closes.length - 1);
             for (let k = buyDayIdx; k <= endIdx; k++) {
-              if (highs[k] > maxHigh) maxHigh = highs[k];
+              if (highs[k] > maxHigh) {
+                maxHigh = highs[k];
+                if (useTrailingStop) {
+                  trailingStopPrice = Math.round(maxHigh * (1 - trailingStopPct / 100) * 100) / 100;
+                }
+              }
 
               if (stopPrice > 0 && lows[k] <= stopPrice) {
                 isWin = false;
                 sellPrice = stopPrice;
                 sellDate = dates[k];
+                break;
+              }
+
+              if (useTrailingStop && trailingStopPrice > 0 && lows[k] <= trailingStopPrice) {
+                sellPrice = trailingStopPrice;
+                sellDate = dates[k];
+                isWin = sellPrice > buyPrice;
                 break;
               }
 
@@ -525,11 +638,43 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
               }
 
+              if (params.requireMacdCrossover && !indicators.isMacdCrossover) continue;
+              if (params.requireRsiReversal && !indicators.isRsiReversal) continue;
+              if ((params.minSignalScore ?? 0) > 0 && indicators.signalScore < (params.minSignalScore ?? 0)) continue;
+
+              if (params.requireVolumeSurge) {
+                const surgeRatio = params.volumeSurgeRatio ?? 1.5;
+                const lookback = Math.min(20, globalIdx);
+                let avgVol = 0;
+                for (let vi = globalIdx - lookback; vi < globalIdx; vi++) avgVol += bars[vi].volume;
+                avgVol = avgVol / Math.max(1, lookback);
+                if (avgVol > 0 && bars[globalIdx].volume < avgVol * surgeRatio) continue;
+              }
+
               const entryBarGlobal = globalIdx + 1;
               if (entryBarGlobal >= bars.length) continue;
 
               const entryBar = bars[entryBarGlobal];
               const buyPrice = entryBar.open;
+
+              const maxGapPctVal = params.maxGapPercent ?? 2.0;
+              if (maxGapPctVal > 0 && maxGapPctVal < 100) {
+                const gapPct = Math.abs((buyPrice - closes[globalIdx]) / closes[globalIdx]) * 100;
+                if (gapPct > maxGapPctVal) continue;
+              }
+
+              const confirmDaysVal = Math.max(1, params.confirmDays ?? 1);
+              if (confirmDaysVal > 1) {
+                let confirmed = true;
+                for (let cd = 1; cd < confirmDaysVal; cd++) {
+                  const prevIdx = globalIdx - cd;
+                  if (prevIdx < 0) { confirmed = false; break; }
+                  const prevInd = computeIndicatorsAtIndex(closes, prevIdx, 50);
+                  if (!prevInd || prevInd.overallSignal !== "buy") { confirmed = false; break; }
+                }
+                if (!confirmed) continue;
+              }
+
               const entryDay = extractDatePart(entryBar.date);
 
               const recentCloses = closes.slice(Math.max(0, globalIdx - 20), globalIdx + 1);
@@ -554,17 +699,32 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               let sellPrice = 0;
               let maxHigh = entryBar.high;
               let sellDate = entryBar.date;
+              const useTrailingStop = params.trailingStop ?? false;
+              const trailingStopPct = params.trailingStopPercent ?? 1.5;
+              let trailingStopPrice = 0;
 
               const entryDayInfo = dayOffsetMap.get(entryDay);
               if (!entryDayInfo) continue;
 
               for (let k = entryBarGlobal; k <= entryDayInfo.endIdx; k++) {
-                if (bars[k].high > maxHigh) maxHigh = bars[k].high;
+                if (bars[k].high > maxHigh) {
+                  maxHigh = bars[k].high;
+                  if (useTrailingStop) {
+                    trailingStopPrice = Math.round(maxHigh * (1 - trailingStopPct / 100) * 100) / 100;
+                  }
+                }
 
                 if (stopPrice > 0 && bars[k].low <= stopPrice) {
                   isWin = false;
                   sellPrice = stopPrice;
                   sellDate = bars[k].date;
+                  break;
+                }
+
+                if (useTrailingStop && trailingStopPrice > 0 && bars[k].low <= trailingStopPrice) {
+                  sellPrice = trailingStopPrice;
+                  sellDate = bars[k].date;
+                  isWin = sellPrice > buyPrice;
                   break;
                 }
 
@@ -945,11 +1105,43 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
               }
 
+              if (params.requireMacdCrossover && !indicators.isMacdCrossover) continue;
+              if (params.requireRsiReversal && !indicators.isRsiReversal) continue;
+              if ((params.minSignalScore ?? 0) > 0 && indicators.signalScore < (params.minSignalScore ?? 0)) continue;
+
+              if (params.requireVolumeSurge) {
+                const surgeRatio = params.volumeSurgeRatio ?? 1.5;
+                const lookback = Math.min(20, globalIdx);
+                let avgVol = 0;
+                for (let vi = globalIdx - lookback; vi < globalIdx; vi++) avgVol += bars[vi].volume;
+                avgVol = avgVol / Math.max(1, lookback);
+                if (avgVol > 0 && bars[globalIdx].volume < avgVol * surgeRatio) continue;
+              }
+
               const entryBarGlobal = globalIdx + 1;
               if (entryBarGlobal >= bars.length) continue;
 
               const entryBar = bars[entryBarGlobal];
               const buyPrice = entryBar.open;
+
+              const maxGapPctVal2 = params.maxGapPercent ?? 2.0;
+              if (maxGapPctVal2 > 0 && maxGapPctVal2 < 100) {
+                const gapPct = Math.abs((buyPrice - closes[globalIdx]) / closes[globalIdx]) * 100;
+                if (gapPct > maxGapPctVal2) continue;
+              }
+
+              const confirmDaysVal2 = Math.max(1, params.confirmDays ?? 1);
+              if (confirmDaysVal2 > 1) {
+                let confirmed = true;
+                for (let cd = 1; cd < confirmDaysVal2; cd++) {
+                  const prevIdx = globalIdx - cd;
+                  if (prevIdx < 0) { confirmed = false; break; }
+                  const prevInd = computeIndicatorsAtIndex(closes, prevIdx, 50);
+                  if (!prevInd || prevInd.overallSignal !== "buy") { confirmed = false; break; }
+                }
+                if (!confirmed) continue;
+              }
+
               const entryDay = extractDatePart(entryBar.date);
 
               const recentCloses = closes.slice(Math.max(0, globalIdx - 20), globalIdx + 1);
@@ -971,13 +1163,22 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               let sellPrice = 0;
               let maxHigh = entryBar.high;
               let sellDate = entryBar.date;
+              const useTrailingStop2 = params.trailingStop ?? false;
+              const trailingStopPct2 = params.trailingStopPercent ?? 1.5;
+              let trailingStopPrice2 = 0;
 
               const entryDayInfo = dayOffsetMap.get(entryDay);
               if (!entryDayInfo) continue;
 
               for (let k = entryBarGlobal; k <= entryDayInfo.endIdx; k++) {
-                if (bars[k].high > maxHigh) maxHigh = bars[k].high;
+                if (bars[k].high > maxHigh) {
+                  maxHigh = bars[k].high;
+                  if (useTrailingStop2) {
+                    trailingStopPrice2 = Math.round(maxHigh * (1 - trailingStopPct2 / 100) * 100) / 100;
+                  }
+                }
                 if (stopPrice > 0 && bars[k].low <= stopPrice) { isWin = false; sellPrice = stopPrice; sellDate = bars[k].date; break; }
+                if (useTrailingStop2 && trailingStopPrice2 > 0 && bars[k].low <= trailingStopPrice2) { sellPrice = trailingStopPrice2; sellDate = bars[k].date; isWin = sellPrice > buyPrice; break; }
                 if (bars[k].high >= targetPrice) { isWin = true; sellPrice = targetPrice; sellDate = bars[k].date; break; }
               }
 

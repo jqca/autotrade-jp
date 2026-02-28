@@ -487,6 +487,15 @@ export async function registerRoutes(
       const minVolume = req.body.minVolume != null ? Math.max(0, Math.round(Number(req.body.minVolume))) : 0;
       const requireUptrend = Boolean(req.body.requireUptrend);
       const dynamicTarget = Boolean(req.body.dynamicTarget);
+      const requireMacdCrossover = Boolean(req.body.requireMacdCrossover);
+      const requireRsiReversal = Boolean(req.body.requireRsiReversal);
+      const requireVolumeSurge = Boolean(req.body.requireVolumeSurge);
+      const volumeSurgeRatio = req.body.volumeSurgeRatio != null ? Math.max(1.0, Math.min(5.0, Number(req.body.volumeSurgeRatio))) : 1.5;
+      const maxGapPercent = req.body.maxGapPercent != null ? Math.max(0, Math.min(10, Number(req.body.maxGapPercent))) : 2.0;
+      const trailingStop = Boolean(req.body.trailingStop);
+      const trailingStopPercent = req.body.trailingStopPercent != null ? Math.max(0.3, Math.min(5.0, Number(req.body.trailingStopPercent))) : 1.5;
+      const confirmDays = req.body.confirmDays != null ? Math.max(1, Math.min(5, Math.round(Number(req.body.confirmDays)))) : 1;
+      const minSignalScore = req.body.minSignalScore != null ? Math.max(0, Math.min(100, Math.round(Number(req.body.minSignalScore)))) : 0;
       const params: BacktestParams = {
         targetPercent,
         minBuyIndicators,
@@ -506,6 +515,15 @@ export async function registerRoutes(
         minVolume,
         requireUptrend,
         dynamicTarget,
+        requireMacdCrossover,
+        requireRsiReversal,
+        requireVolumeSurge,
+        volumeSurgeRatio,
+        maxGapPercent,
+        trailingStop,
+        trailingStopPercent,
+        confirmDays,
+        minSignalScore,
       };
       await startBacktest(params, 3);
       res.json({ message: "バックテストを開始しました", params });

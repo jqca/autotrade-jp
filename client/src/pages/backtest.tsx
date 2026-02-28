@@ -65,6 +65,15 @@ interface BacktestParams {
   minVolume?: number;
   requireUptrend?: boolean;
   dynamicTarget?: boolean;
+  requireMacdCrossover?: boolean;
+  requireRsiReversal?: boolean;
+  requireVolumeSurge?: boolean;
+  volumeSurgeRatio?: number;
+  maxGapPercent?: number;
+  trailingStop?: boolean;
+  trailingStopPercent?: number;
+  confirmDays?: number;
+  minSignalScore?: number;
 }
 
 function TrendBadge({ trend, label }: { trend: string | null; label: string }) {
@@ -123,6 +132,20 @@ export default function Backtest() {
   const [useAi, setUseAi] = useState(false);
   const [useQuantum, setUseQuantum] = useState(false);
   const [aiThreshold, setAiThreshold] = useState(0.5);
+  const [stopLossPercent, setStopLossPercent] = useState(0);
+  const [maxHoldDays, setMaxHoldDays] = useState(1);
+  const [requireUptrend, setRequireUptrend] = useState(false);
+  const [dynamicTarget, setDynamicTarget] = useState(false);
+  const [requireMacdCrossover, setRequireMacdCrossover] = useState(false);
+  const [requireRsiReversal, setRequireRsiReversal] = useState(false);
+  const [requireVolumeSurge, setRequireVolumeSurge] = useState(false);
+  const [volumeSurgeRatio, setVolumeSurgeRatio] = useState(1.5);
+  const [maxGapPercent, setMaxGapPercent] = useState(2.0);
+  const [trailingStop, setTrailingStop] = useState(false);
+  const [trailingStopPercent, setTrailingStopPercent] = useState(1.5);
+  const [confirmDays, setConfirmDays] = useState(1);
+  const [minSignalScore, setMinSignalScore] = useState(0);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [now, setNow] = useState(Date.now());
   const { data: progressData } = useQuery<BacktestProgress>({
@@ -175,6 +198,19 @@ export default function Backtest() {
       useAi,
       useQuantum,
       aiThreshold,
+      stopLossPercent,
+      maxHoldDays,
+      requireUptrend,
+      dynamicTarget,
+      requireMacdCrossover,
+      requireRsiReversal,
+      requireVolumeSurge,
+      volumeSurgeRatio,
+      maxGapPercent,
+      trailingStop,
+      trailingStopPercent,
+      confirmDays,
+      minSignalScore,
     }),
     onSuccess: () => {
       setPolling(true);
@@ -661,6 +697,226 @@ export default function Backtest() {
                 </div>
               </div>
 
+              <div className="pt-4 border-t">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="text-xs text-muted-foreground mb-3"
+                  data-testid="button-toggle-advanced"
+                >
+                  <Settings2 className="h-3 w-3 mr-1" />
+                  {showAdvanced ? "高度なフィルターを非表示" : "高度なフィルターを表示"}
+                </Button>
+
+                {showAdvanced && (
+                  <div className="grid gap-4 sm:grid-cols-2 animate-in slide-in-from-top-2">
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">損切り (Stop Loss %)</Label>
+                      <div className="flex items-center gap-3">
+                        <Slider
+                          value={[stopLossPercent]}
+                          onValueChange={([v]) => setStopLossPercent(v)}
+                          min={0}
+                          max={10}
+                          step={0.5}
+                          className="flex-1"
+                          data-testid="slider-stop-loss"
+                        />
+                        <Badge variant="secondary" className="min-w-[50px] justify-center" data-testid="text-stop-loss">
+                          {stopLossPercent === 0 ? "なし" : `${stopLossPercent}%`}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">最大保持日数</Label>
+                      <div className="flex items-center gap-3">
+                        <Slider
+                          value={[maxHoldDays]}
+                          onValueChange={([v]) => setMaxHoldDays(v)}
+                          min={1}
+                          max={10}
+                          step={1}
+                          className="flex-1"
+                          data-testid="slider-max-hold-days"
+                        />
+                        <Badge variant="secondary" className="min-w-[50px] justify-center" data-testid="text-max-hold-days">
+                          {maxHoldDays}日
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">最小シグナルスコア</Label>
+                      <div className="flex items-center gap-3">
+                        <Slider
+                          value={[minSignalScore]}
+                          onValueChange={([v]) => setMinSignalScore(v)}
+                          min={0}
+                          max={100}
+                          step={5}
+                          className="flex-1"
+                          data-testid="slider-min-signal-score"
+                        />
+                        <Badge variant="secondary" className="min-w-[50px] justify-center" data-testid="text-min-signal-score">
+                          {minSignalScore}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">MACD/RSI/MA/BB等の複合スコア（0〜110）</p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">シグナル確認日数</Label>
+                      <div className="flex items-center gap-3">
+                        <Slider
+                          value={[confirmDays]}
+                          onValueChange={([v]) => setConfirmDays(v)}
+                          min={1}
+                          max={5}
+                          step={1}
+                          className="flex-1"
+                          data-testid="slider-confirm-days"
+                        />
+                        <Badge variant="secondary" className="min-w-[50px] justify-center" data-testid="text-confirm-days">
+                          {confirmDays}日
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">連続で買いシグナルが出た日数で確認</p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">最大ギャップ %</Label>
+                      <div className="flex items-center gap-3">
+                        <Slider
+                          value={[maxGapPercent]}
+                          onValueChange={([v]) => setMaxGapPercent(v)}
+                          min={0.5}
+                          max={10}
+                          step={0.5}
+                          className="flex-1"
+                          data-testid="slider-max-gap"
+                        />
+                        <Badge variant="secondary" className="min-w-[50px] justify-center" data-testid="text-max-gap">
+                          {maxGapPercent}%
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">翌日始値の乖離がこれ以上ならスキップ</p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">出来高急増倍率</Label>
+                      <div className="flex items-center gap-3">
+                        <Slider
+                          value={[volumeSurgeRatio]}
+                          onValueChange={([v]) => setVolumeSurgeRatio(v)}
+                          min={1.0}
+                          max={5.0}
+                          step={0.1}
+                          className="flex-1"
+                          data-testid="slider-volume-surge"
+                        />
+                        <Badge variant="secondary" className="min-w-[50px] justify-center" data-testid="text-volume-surge">
+                          {volumeSurgeRatio.toFixed(1)}x
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <Switch
+                        checked={requireMacdCrossover}
+                        onCheckedChange={setRequireMacdCrossover}
+                        data-testid="switch-macd-crossover"
+                      />
+                      <div>
+                        <Label className="text-sm font-medium">MACDクロス必須</Label>
+                        <p className="text-xs text-muted-foreground">MACDがシグナル線を上抜けした日のみ</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <Switch
+                        checked={requireRsiReversal}
+                        onCheckedChange={setRequireRsiReversal}
+                        data-testid="switch-rsi-reversal"
+                      />
+                      <div>
+                        <Label className="text-sm font-medium">RSI反転必須</Label>
+                        <p className="text-xs text-muted-foreground">RSIが30以下から反転上昇した日のみ</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <Switch
+                        checked={requireVolumeSurge}
+                        onCheckedChange={setRequireVolumeSurge}
+                        data-testid="switch-volume-surge"
+                      />
+                      <div>
+                        <Label className="text-sm font-medium">出来高急増必須</Label>
+                        <p className="text-xs text-muted-foreground">20日平均の{volumeSurgeRatio.toFixed(1)}倍以上</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <Switch
+                        checked={requireUptrend}
+                        onCheckedChange={setRequireUptrend}
+                        data-testid="switch-require-uptrend"
+                      />
+                      <div>
+                        <Label className="text-sm font-medium">上昇トレンド必須</Label>
+                        <p className="text-xs text-muted-foreground">MA25 &gt; MA75 かつ価格 &gt; MA25</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <Switch
+                        checked={dynamicTarget}
+                        onCheckedChange={setDynamicTarget}
+                        data-testid="switch-dynamic-target"
+                      />
+                      <div>
+                        <Label className="text-sm font-medium">動的利確</Label>
+                        <p className="text-xs text-muted-foreground">ボラティリティに応じて利確目標を自動調整</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <Switch
+                        checked={trailingStop}
+                        onCheckedChange={setTrailingStop}
+                        data-testid="switch-trailing-stop"
+                      />
+                      <div>
+                        <Label className="text-sm font-medium">トレーリングストップ</Label>
+                        <p className="text-xs text-muted-foreground">高値から{trailingStopPercent}%下落で利確</p>
+                      </div>
+                    </div>
+
+                    {trailingStop && (
+                      <div className="space-y-3">
+                        <Label className="text-sm font-medium">トレーリング幅 %</Label>
+                        <div className="flex items-center gap-3">
+                          <Slider
+                            value={[trailingStopPercent]}
+                            onValueChange={([v]) => setTrailingStopPercent(v)}
+                            min={0.3}
+                            max={5.0}
+                            step={0.1}
+                            className="flex-1"
+                            data-testid="slider-trailing-stop"
+                          />
+                          <Badge variant="secondary" className="min-w-[50px] justify-center" data-testid="text-trailing-stop">
+                            {trailingStopPercent.toFixed(1)}%
+                          </Badge>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="pt-4 border-t flex items-center gap-3 flex-wrap">
                 <Button
                   onClick={() => { setActiveTab("results"); runMutation.mutate(); }}
@@ -688,6 +944,15 @@ export default function Backtest() {
                   <Badge variant="outline">{simDays}日間</Badge>
                   {useAi && <Badge className="bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300">AI</Badge>}
                   {useQuantum && <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">量子</Badge>}
+                  {requireMacdCrossover && <Badge variant="outline" className="border-green-300 text-green-700 dark:text-green-400">MACDクロス</Badge>}
+                  {requireRsiReversal && <Badge variant="outline" className="border-blue-300 text-blue-700 dark:text-blue-400">RSI反転</Badge>}
+                  {requireVolumeSurge && <Badge variant="outline" className="border-orange-300 text-orange-700 dark:text-orange-400">出来高急増</Badge>}
+                  {minSignalScore > 0 && <Badge variant="outline">スコア{minSignalScore}+</Badge>}
+                  {confirmDays > 1 && <Badge variant="outline">{confirmDays}日確認</Badge>}
+                  {stopLossPercent > 0 && <Badge variant="outline" className="border-red-300 text-red-700 dark:text-red-400">SL {stopLossPercent}%</Badge>}
+                  {trailingStop && <Badge variant="outline" className="border-amber-300 text-amber-700 dark:text-amber-400">TS {trailingStopPercent}%</Badge>}
+                  {maxHoldDays > 1 && <Badge variant="outline">{maxHoldDays}日保持</Badge>}
+                  {dynamicTarget && <Badge variant="outline">動的利確</Badge>}
                 </div>
               </div>
             </CardContent>
@@ -704,7 +969,7 @@ export default function Backtest() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setTimeframe("1d"); setTargetPercent(1.0); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); setUseAi(false); setUseQuantum(false); }}
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(1.0); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); setUseAi(false); setUseQuantum(false); setStopLossPercent(0); setMaxHoldDays(1); setRequireUptrend(false); setDynamicTarget(false); setRequireMacdCrossover(false); setRequireRsiReversal(false); setRequireVolumeSurge(false); setVolumeSurgeRatio(1.5); setMaxGapPercent(2.0); setTrailingStop(false); setTrailingStopPercent(1.5); setConfirmDays(1); setMinSignalScore(0); setShowAdvanced(false); }}
                     data-testid="button-preset-default"
                   >
                     デフォルト（ルールベース）
@@ -712,7 +977,17 @@ export default function Backtest() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setTimeframe("1d"); setTargetPercent(1.0); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); setUseAi(true); setUseQuantum(true); setAiThreshold(0.5); }}
+                    className="border-amber-300 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(0.8); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); setUseAi(false); setUseQuantum(false); setStopLossPercent(2.0); setMaxHoldDays(3); setRequireUptrend(false); setDynamicTarget(true); setRequireMacdCrossover(true); setRequireRsiReversal(false); setRequireVolumeSurge(false); setVolumeSurgeRatio(1.5); setMaxGapPercent(1.5); setTrailingStop(true); setTrailingStopPercent(1.0); setConfirmDays(2); setMinSignalScore(50); setShowAdvanced(true); }}
+                    data-testid="button-preset-high-winrate"
+                  >
+                    <Trophy className="h-3 w-3 mr-1 text-amber-500" />
+                    高勝率（厳選）
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(1.0); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); setUseAi(true); setUseQuantum(true); setAiThreshold(0.5); setStopLossPercent(0); setMaxHoldDays(1); setRequireUptrend(false); setDynamicTarget(false); setRequireMacdCrossover(false); setRequireRsiReversal(false); setRequireVolumeSurge(false); setVolumeSurgeRatio(1.5); setMaxGapPercent(2.0); setTrailingStop(false); setTrailingStopPercent(1.5); setConfirmDays(1); setMinSignalScore(0); setShowAdvanced(false); }}
                     data-testid="button-preset-ai-quantum"
                   >
                     <Brain className="h-3 w-3 mr-1 text-sky-500" />
@@ -722,7 +997,7 @@ export default function Backtest() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setTimeframe("1d"); setTargetPercent(0.5); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); setUseAi(true); setUseQuantum(false); setAiThreshold(0.6); }}
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(0.5); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); setUseAi(true); setUseQuantum(false); setAiThreshold(0.6); setStopLossPercent(0); setMaxHoldDays(1); setRequireUptrend(false); setDynamicTarget(false); setRequireMacdCrossover(false); setRequireRsiReversal(false); setRequireVolumeSurge(false); setShowAdvanced(false); }}
                     data-testid="button-preset-ai-only"
                   >
                     <Brain className="h-3 w-3 mr-1 text-sky-500" />
@@ -731,7 +1006,7 @@ export default function Backtest() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setTimeframe("1d"); setTargetPercent(1.0); setMinBuyIndicators(4); setRsiMin(20); setRsiMax(30); setRequireMaBuy(true); setSimDays(200); setUseAi(false); setUseQuantum(false); }}
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(1.0); setMinBuyIndicators(4); setRsiMin(20); setRsiMax(30); setRequireMaBuy(true); setSimDays(200); setUseAi(false); setUseQuantum(false); setStopLossPercent(3.0); setMaxHoldDays(1); setRequireUptrend(true); setDynamicTarget(false); setRequireMacdCrossover(false); setRequireRsiReversal(false); setRequireVolumeSurge(false); setMaxGapPercent(1.0); setTrailingStop(false); setConfirmDays(1); setMinSignalScore(40); setShowAdvanced(true); }}
                     data-testid="button-preset-strict"
                   >
                     厳格フィルター
