@@ -122,7 +122,7 @@ export default function Backtest() {
   const [now, setNow] = useState(Date.now());
   const { data: progressData } = useQuery<BacktestProgress>({
     queryKey: ["/api/backtest/progress"],
-    refetchInterval: polling ? 2000 : false,
+    refetchInterval: polling ? 1000 : 5000,
   });
 
   useEffect(() => {
@@ -173,6 +173,7 @@ export default function Backtest() {
     }),
     onSuccess: () => {
       setPolling(true);
+      queryClient.invalidateQueries({ queryKey: ["/api/backtest/progress"] });
       toast({ title: "バックテスト開始", description: `シミュレーションを実行中です...${useAi || useQuantum ? " (AI/量子分析有効)" : ""}` });
     },
     onError: (err: any) => {
