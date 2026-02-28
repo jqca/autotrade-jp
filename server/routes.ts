@@ -482,7 +482,7 @@ export async function registerRoutes(
       const useAi = Boolean(req.body.useAi);
       const useQuantum = Boolean(req.body.useQuantum);
       const aiThreshold = req.body.aiThreshold != null ? Number(req.body.aiThreshold) : 0.5;
-      const stopLossPercent = req.body.stopLossPercent != null ? Math.max(0, Math.min(10, Number(req.body.stopLossPercent))) : 0;
+      const stopLossPercent = req.body.stopLossPercent != null ? Math.max(0, Math.min(10, Number(req.body.stopLossPercent))) : 1;
       const maxHoldDays = req.body.maxHoldDays != null ? Math.max(1, Math.min(10, Math.round(Number(req.body.maxHoldDays)))) : 1;
       const minVolume = req.body.minVolume != null ? Math.max(0, Math.round(Number(req.body.minVolume))) : 0;
       const requireUptrend = Boolean(req.body.requireUptrend);

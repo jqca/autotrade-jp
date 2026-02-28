@@ -135,7 +135,7 @@ export default function Backtest() {
   const [useAi, setUseAi] = useState(false);
   const [useQuantum, setUseQuantum] = useState(false);
   const [aiThreshold, setAiThreshold] = useState(0.5);
-  const [stopLossPercent, setStopLossPercent] = useState(0);
+  const [stopLossPercent, setStopLossPercent] = useState(1);
   const [maxHoldDays, setMaxHoldDays] = useState(1);
   const [requireUptrend, setRequireUptrend] = useState(false);
   const [dynamicTarget, setDynamicTarget] = useState(false);
