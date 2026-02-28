@@ -60,6 +60,11 @@ interface BacktestParams {
   useAi?: boolean;
   useQuantum?: boolean;
   aiThreshold?: number;
+  stopLossPercent?: number;
+  maxHoldDays?: number;
+  minVolume?: number;
+  requireUptrend?: boolean;
+  dynamicTarget?: boolean;
 }
 
 function TrendBadge({ trend, label }: { trend: string | null; label: string }) {

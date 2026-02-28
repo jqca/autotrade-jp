@@ -103,6 +103,11 @@ export const backtestRuns = pgTable("backtest_runs", {
   useAi: boolean("use_ai").notNull().default(false),
   useQuantum: boolean("use_quantum").notNull().default(false),
   aiThreshold: real("ai_threshold").notNull().default(0.5),
+  stopLossPercent: real("stop_loss_percent").notNull().default(0),
+  maxHoldDays: integer("max_hold_days").notNull().default(1),
+  minVolume: integer("min_volume").notNull().default(0),
+  requireUptrend: boolean("require_uptrend").notNull().default(false),
+  dynamicTarget: boolean("dynamic_target").notNull().default(false),
   aiQuantumSummary: text("ai_quantum_summary"),
   createdAt: timestamp("created_at").defaultNow(),
 });

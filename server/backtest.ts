@@ -19,6 +19,11 @@ export interface BacktestParams {
   useAi?: boolean;
   useQuantum?: boolean;
   aiThreshold?: number;
+  stopLossPercent?: number;
+  maxHoldDays?: number;
+  minVolume?: number;
+  requireUptrend?: boolean;
+  dynamicTarget?: boolean;
 }
 
 export const DEFAULT_PARAMS: BacktestParams = {
@@ -33,6 +38,11 @@ export const DEFAULT_PARAMS: BacktestParams = {
   useAi: false,
   useQuantum: false,
   aiThreshold: 0.5,
+  stopLossPercent: 0,
+  maxHoldDays: 1,
+  minVolume: 0,
+  requireUptrend: false,
+  dynamicTarget: false,
 };
 
 export interface BacktestProgress {
@@ -190,7 +200,21 @@ function computeIndicatorsAtIndex(closes: number[], dayIndex: number, minBars: n
   else if (sellCount > buyCount) { overallSignal = "sell"; overallLabel = "やや売り優勢"; }
   else { overallSignal = "neutral"; overallLabel = "様子見"; }
 
-  return { macdTrend, rsiTrend, maTrend, bbTrend, rsiValue, overallSignal, overallLabel };
+  const ma75Arr = sma(slice, 75);
+  const ma75 = ma75Arr[n - 1];
+  const prevMa75 = n >= 3 ? ma75Arr[n - 2] : null;
+  const isUptrend = ma25 != null && ma75 != null && prevMa75 != null
+    ? (closes[n - 1] > ma25 && ma25 > ma75 && ma75 >= prevMa75)
+    : false;
+
+  const bbWidth = mid[n - 1] != null ? (() => {
+    let sumSq = 0;
+    for (let j = n - 20; j < n; j++) sumSq += (slice[j] - mid[n - 1]!) ** 2;
+    const stdDev = Math.sqrt(sumSq / 20);
+    return (4 * stdDev) / mid[n - 1]! * 100;
+  })() : 4;
+
+  return { macdTrend, rsiTrend, maTrend, bbTrend, rsiValue, overallSignal, overallLabel, isUptrend, bbWidth };
 }
 
 function extractDatePart(datetime: string): string {
@@ -253,12 +277,20 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
           const dates = history.map(p => p.date);
           const opens = history.map(p => p.open);
           const highs = history.map(p => p.high);
+          const lows = history.map(p => p.low);
+          const volumes = history.map(p => p.volume);
 
           const startIdx = Math.max(79, closes.length - params.simDays - 1);
+          const holdDays = Math.max(1, params.maxHoldDays ?? 1);
+          const stopLoss = params.stopLossPercent ?? 0;
 
           for (let d = startIdx; d < closes.length - 1; d++) {
+            if ((params.minVolume ?? 0) > 0 && volumes[d] < (params.minVolume ?? 0)) continue;
+
             const indicators = computeIndicatorsAtIndex(closes, d);
             if (!indicators) continue;
+
+            if (params.requireUptrend && !indicators.isUptrend) continue;
 
             const buyIndicators = [indicators.macdTrend, indicators.rsiTrend, indicators.maTrend, indicators.bbTrend]
               .filter(t => t === "buy").length;
@@ -273,18 +305,62 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
             if (buyDayIdx >= closes.length) continue;
 
             const buyPrice = opens[buyDayIdx];
-            const dayHigh = highs[buyDayIdx];
-            const targetMultiplier = 1 + params.targetPercent / 100;
-            const targetPrice = Math.round(buyPrice * targetMultiplier * 100) / 100;
-            const isWin = dayHigh >= targetPrice;
-            const sellPrice = isWin ? targetPrice : closes[buyDayIdx];
-            const profitLoss = Math.round((sellPrice - buyPrice) * 100) / 100;
-            const profitLossPercent = Math.round((profitLoss / buyPrice) * 10000) / 100;
 
             const recentCloses = closes.slice(Math.max(0, d - 20), d + 1);
             const volatility = recentCloses.length > 1
               ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
               : 0.02;
+
+            let effectiveTarget = params.targetPercent;
+            if (params.dynamicTarget) {
+              const volPercent = volatility * 100;
+              effectiveTarget = Math.max(0.3, Math.min(3.0, volPercent * 0.8));
+            }
+
+            const targetMultiplier = 1 + effectiveTarget / 100;
+            const targetPrice = Math.round(buyPrice * targetMultiplier * 100) / 100;
+
+            const stopPrice = stopLoss > 0
+              ? Math.round(buyPrice * (1 - stopLoss / 100) * 100) / 100
+              : 0;
+
+            let isWin = false;
+            let sellPrice = 0;
+            let maxHigh = 0;
+            let sellDate = dates[buyDayIdx];
+
+            const endIdx = Math.min(buyDayIdx + holdDays - 1, closes.length - 1);
+            for (let k = buyDayIdx; k <= endIdx; k++) {
+              if (highs[k] > maxHigh) maxHigh = highs[k];
+
+              if (stopPrice > 0 && lows[k] <= stopPrice) {
+                isWin = false;
+                sellPrice = stopPrice;
+                sellDate = dates[k];
+                break;
+              }
+
+              if (highs[k] >= targetPrice) {
+                isWin = true;
+                sellPrice = targetPrice;
+                sellDate = dates[k];
+                break;
+              }
+
+              if (k === endIdx) {
+                sellPrice = closes[k];
+                sellDate = dates[k];
+                isWin = sellPrice > buyPrice;
+              }
+            }
+
+            if (sellPrice === 0) {
+              sellPrice = closes[endIdx];
+              sellDate = dates[endIdx];
+            }
+
+            const profitLoss = Math.round((sellPrice - buyPrice) * 100) / 100;
+            const profitLossPercent = Math.round((profitLoss / buyPrice) * 10000) / 100;
             const priceChange = d > 0 ? (closes[d] - closes[d - 1]) / closes[d - 1] : 0;
 
             allSignals.push({
@@ -293,8 +369,8 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
               signalLabel: indicators.overallLabel,
               buyDate: dates[buyDayIdx],
               buyPrice,
-              dayHigh,
-              sellDate: dates[buyDayIdx],
+              dayHigh: maxHigh,
+              sellDate,
               sellPrice,
               profitLoss,
               profitLossPercent,
@@ -427,12 +503,18 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
             const dayInfo = dayBarOffsets[dayIdx];
             const dayBars = dayMap.get(dayInfo.day)!;
 
+            const stopLoss = params.stopLossPercent ?? 0;
+
             for (let barInDay = 0; barInDay < dayBars.length - 1; barInDay++) {
               const globalIdx = dayInfo.startIdx + barInDay;
               if (globalIdx < 50) continue;
 
+              if ((params.minVolume ?? 0) > 0 && bars[globalIdx].volume < (params.minVolume ?? 0)) continue;
+
               const indicators = computeIndicatorsAtIndex(closes, globalIdx, 50);
               if (!indicators) continue;
+
+              if (params.requireUptrend && !indicators.isUptrend) continue;
 
               const buyIndicators = [indicators.macdTrend, indicators.rsiTrend, indicators.maTrend, indicators.bbTrend]
                 .filter(t => t === "buy").length;
@@ -450,8 +532,23 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               const buyPrice = entryBar.open;
               const entryDay = extractDatePart(entryBar.date);
 
-              const targetMultiplier = 1 + params.targetPercent / 100;
+              const recentCloses = closes.slice(Math.max(0, globalIdx - 20), globalIdx + 1);
+              const volatility = recentCloses.length > 1
+                ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
+                : 0.02;
+
+              let effectiveTarget = params.targetPercent;
+              if (params.dynamicTarget) {
+                const volPercent = volatility * 100;
+                effectiveTarget = Math.max(0.2, Math.min(2.0, volPercent * 0.6));
+              }
+
+              const targetMultiplier = 1 + effectiveTarget / 100;
               const targetPrice = Math.round(buyPrice * targetMultiplier * 100) / 100;
+
+              const stopPrice = stopLoss > 0
+                ? Math.round(buyPrice * (1 - stopLoss / 100) * 100) / 100
+                : 0;
 
               let isWin = false;
               let sellPrice = 0;
@@ -463,6 +560,14 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
 
               for (let k = entryBarGlobal; k <= entryDayInfo.endIdx; k++) {
                 if (bars[k].high > maxHigh) maxHigh = bars[k].high;
+
+                if (stopPrice > 0 && bars[k].low <= stopPrice) {
+                  isWin = false;
+                  sellPrice = stopPrice;
+                  sellDate = bars[k].date;
+                  break;
+                }
+
                 if (bars[k].high >= targetPrice) {
                   isWin = true;
                   sellPrice = targetPrice;
@@ -471,18 +576,14 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
                 }
               }
 
-              if (!isWin) {
+              if (sellPrice === 0) {
                 sellPrice = bars[entryDayInfo.endIdx].close;
                 sellDate = bars[entryDayInfo.endIdx].date;
+                isWin = sellPrice > buyPrice;
               }
 
               const profitLoss = Math.round((sellPrice - buyPrice) * 100) / 100;
               const profitLossPercent = Math.round((profitLoss / buyPrice) * 10000) / 100;
-
-              const recentCloses = closes.slice(Math.max(0, globalIdx - 20), globalIdx + 1);
-              const volatility = recentCloses.length > 1
-                ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
-                : 0.02;
               const priceChange = globalIdx > 0 ? (closes[globalIdx] - closes[globalIdx - 1]) / closes[globalIdx - 1] : 0;
 
               allSignals.push({
@@ -686,12 +787,20 @@ async function runDailyBacktest(params: BacktestParams, runId: string, tickers: 
           const dates = history.map(p => p.date);
           const opens = history.map(p => p.open);
           const highs = history.map(p => p.high);
+          const lows = history.map(p => p.low);
+          const volumes = history.map(p => p.volume);
 
           const startIdx = Math.max(79, closes.length - params.simDays - 1);
+          const holdDays = Math.max(1, params.maxHoldDays ?? 1);
+          const stopLoss = params.stopLossPercent ?? 0;
 
           for (let d = startIdx; d < closes.length - 1; d++) {
+            if ((params.minVolume ?? 0) > 0 && volumes[d] < (params.minVolume ?? 0)) continue;
+
             const indicators = computeIndicatorsAtIndex(closes, d);
             if (!indicators) continue;
+
+            if (params.requireUptrend && !indicators.isUptrend) continue;
 
             const buyIndicators = [indicators.macdTrend, indicators.rsiTrend, indicators.maTrend, indicators.bbTrend]
               .filter(t => t === "buy").length;
@@ -706,11 +815,36 @@ async function runDailyBacktest(params: BacktestParams, runId: string, tickers: 
             if (buyDayIdx >= closes.length) continue;
 
             const buyPrice = opens[buyDayIdx];
-            const dayHigh = highs[buyDayIdx];
-            const targetMultiplier = 1 + params.targetPercent / 100;
+
+            const recentCloses = closes.slice(Math.max(0, d - 20), d + 1);
+            const volatility = recentCloses.length > 1
+              ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
+              : 0.02;
+
+            let effectiveTarget = params.targetPercent;
+            if (params.dynamicTarget) {
+              const volPercent = volatility * 100;
+              effectiveTarget = Math.max(0.3, Math.min(3.0, volPercent * 0.8));
+            }
+
+            const targetMultiplier = 1 + effectiveTarget / 100;
             const targetPrice = Math.round(buyPrice * targetMultiplier * 100) / 100;
-            const isWin = dayHigh >= targetPrice;
-            const sellPrice = isWin ? targetPrice : closes[buyDayIdx];
+            const stopPrice = stopLoss > 0 ? Math.round(buyPrice * (1 - stopLoss / 100) * 100) / 100 : 0;
+
+            let isWin = false;
+            let sellPrice = 0;
+            let maxHigh = 0;
+            let sellDate = dates[buyDayIdx];
+
+            const endIdx = Math.min(buyDayIdx + holdDays - 1, closes.length - 1);
+            for (let k = buyDayIdx; k <= endIdx; k++) {
+              if (highs[k] > maxHigh) maxHigh = highs[k];
+              if (stopPrice > 0 && lows[k] <= stopPrice) { isWin = false; sellPrice = stopPrice; sellDate = dates[k]; break; }
+              if (highs[k] >= targetPrice) { isWin = true; sellPrice = targetPrice; sellDate = dates[k]; break; }
+              if (k === endIdx) { sellPrice = closes[k]; sellDate = dates[k]; isWin = sellPrice > buyPrice; }
+            }
+            if (sellPrice === 0) { sellPrice = closes[endIdx]; sellDate = dates[endIdx]; }
+
             const profitLoss = Math.round((sellPrice - buyPrice) * 100) / 100;
             const profitLossPercent = Math.round((profitLoss / buyPrice) * 10000) / 100;
 
@@ -720,8 +854,8 @@ async function runDailyBacktest(params: BacktestParams, runId: string, tickers: 
               signalLabel: indicators.overallLabel,
               buyDate: dates[buyDayIdx],
               buyPrice,
-              dayHigh,
-              sellDate: dates[buyDayIdx],
+              dayHigh: maxHigh,
+              sellDate,
               sellPrice,
               profitLoss,
               profitLossPercent,
@@ -789,13 +923,18 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
           for (let dayIdx = startDayIdx; dayIdx < tradingDays.length - 1; dayIdx++) {
             const dayInfo = dayBarOffsets[dayIdx];
             const dayBars = dayMap.get(dayInfo.day)!;
+            const stopLoss = params.stopLossPercent ?? 0;
 
             for (let barInDay = 0; barInDay < dayBars.length - 1; barInDay++) {
               const globalIdx = dayInfo.startIdx + barInDay;
               if (globalIdx < 50) continue;
 
+              if ((params.minVolume ?? 0) > 0 && bars[globalIdx].volume < (params.minVolume ?? 0)) continue;
+
               const indicators = computeIndicatorsAtIndex(closes, globalIdx, 50);
               if (!indicators) continue;
+
+              if (params.requireUptrend && !indicators.isUptrend) continue;
 
               const buyIndicators = [indicators.macdTrend, indicators.rsiTrend, indicators.maTrend, indicators.bbTrend]
                 .filter(t => t === "buy").length;
@@ -813,8 +952,20 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               const buyPrice = entryBar.open;
               const entryDay = extractDatePart(entryBar.date);
 
-              const targetMultiplier = 1 + params.targetPercent / 100;
+              const recentCloses = closes.slice(Math.max(0, globalIdx - 20), globalIdx + 1);
+              const volatility = recentCloses.length > 1
+                ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
+                : 0.02;
+
+              let effectiveTarget = params.targetPercent;
+              if (params.dynamicTarget) {
+                const volPercent = volatility * 100;
+                effectiveTarget = Math.max(0.2, Math.min(2.0, volPercent * 0.6));
+              }
+
+              const targetMultiplier = 1 + effectiveTarget / 100;
               const targetPrice = Math.round(buyPrice * targetMultiplier * 100) / 100;
+              const stopPrice = stopLoss > 0 ? Math.round(buyPrice * (1 - stopLoss / 100) * 100) / 100 : 0;
 
               let isWin = false;
               let sellPrice = 0;
@@ -826,17 +977,14 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
 
               for (let k = entryBarGlobal; k <= entryDayInfo.endIdx; k++) {
                 if (bars[k].high > maxHigh) maxHigh = bars[k].high;
-                if (bars[k].high >= targetPrice) {
-                  isWin = true;
-                  sellPrice = targetPrice;
-                  sellDate = bars[k].date;
-                  break;
-                }
+                if (stopPrice > 0 && bars[k].low <= stopPrice) { isWin = false; sellPrice = stopPrice; sellDate = bars[k].date; break; }
+                if (bars[k].high >= targetPrice) { isWin = true; sellPrice = targetPrice; sellDate = bars[k].date; break; }
               }
 
-              if (!isWin) {
+              if (sellPrice === 0) {
                 sellPrice = bars[entryDayInfo.endIdx].close;
                 sellDate = bars[entryDayInfo.endIdx].date;
+                isWin = sellPrice > buyPrice;
               }
 
               const profitLoss = Math.round((sellPrice - buyPrice) * 100) / 100;
