@@ -413,7 +413,13 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
             const buyDayIdx = d + 1;
             if (buyDayIdx >= closes.length) continue;
 
+            const buyDateStr = dates[buyDayIdx];
+            const buyDow = new Date(buyDateStr).getDay();
+            if (buyDow === 5) continue;
+
             const buyPrice = opens[buyDayIdx];
+
+            if (buyPrice >= highs[d]) continue;
 
             if (maxGapPct > 0 && maxGapPct < 100) {
               const gapPercent = Math.abs((buyPrice - closes[d]) / closes[d]) * 100;
@@ -1057,7 +1063,13 @@ async function runDailyBacktest(params: BacktestParams, runId: string, tickers: 
             const buyDayIdx = d + 1;
             if (buyDayIdx >= closes.length) continue;
 
+            const buyDateStr2 = dates[buyDayIdx];
+            const buyDow2 = new Date(buyDateStr2).getDay();
+            if (buyDow2 === 5) continue;
+
             const buyPrice = opens[buyDayIdx];
+
+            if (buyPrice >= highs[d]) continue;
 
             const recentCloses = closes.slice(Math.max(0, d - 20), d + 1);
             const volatility = recentCloses.length > 1

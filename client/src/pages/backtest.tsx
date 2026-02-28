@@ -125,7 +125,7 @@ export default function Backtest() {
 
   const [targetPercent, setTargetPercent] = useState(1.0);
   const [minBuyIndicators, setMinBuyIndicators] = useState(3);
-  const [rsiMin, setRsiMin] = useState(0);
+  const [rsiMin, setRsiMin] = useState(25);
   const [rsiMax, setRsiMax] = useState(30);
   const [requireMaBuy, setRequireMaBuy] = useState(false);
   const [simDays, setSimDays] = useState(200);
