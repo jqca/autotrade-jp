@@ -276,12 +276,42 @@ async function runDailyBacktest(params: BacktestParams, runId: string, tickers: 
   }
 }
 
-async function loadIntradayBars(ticker: string, simDays: number): Promise<HistoricalPrice[]> {
+function aggregateIntradayBars(bars: HistoricalPrice[], minutesPer: number): HistoricalPrice[] {
+  if (bars.length === 0 || minutesPer <= 5) return bars;
+
+  const groups = new Map<string, HistoricalPrice[]>();
+  for (const bar of bars) {
+    const d = new Date(bar.date);
+    const totalMinutes = d.getHours() * 60 + d.getMinutes();
+    const bucket = Math.floor(totalMinutes / minutesPer) * minutesPer;
+    const bucketH = Math.floor(bucket / 60);
+    const bucketM = bucket % 60;
+    const key = `${bar.date.substring(0, 11)}${String(bucketH).padStart(2, "0")}:${String(bucketM).padStart(2, "0")}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(bar);
+  }
+
+  const result: HistoricalPrice[] = [];
+  for (const [key, group] of groups) {
+    result.push({
+      date: key,
+      open: group[0].open,
+      high: Math.max(...group.map(b => b.high)),
+      low: Math.min(...group.map(b => b.low)),
+      close: group[group.length - 1].close,
+      volume: group.reduce((sum, b) => sum + b.volume, 0),
+    });
+  }
+  return result.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+async function loadIntradayBars(ticker: string, simDays: number, timeframe: string): Promise<HistoricalPrice[]> {
   const fromDate = new Date(Date.now() - (simDays + 10) * 24 * 60 * 60 * 1000);
   const fromStr = fromDate.toISOString().split("T")[0];
   const stored = await storage.getIntradayPrices(ticker, fromStr);
+  let bars5m: HistoricalPrice[];
   if (stored.length >= 200) {
-    return stored.map(b => ({
+    bars5m = stored.map(b => ({
       date: b.datetime,
       open: b.open,
       high: b.high,
@@ -289,8 +319,13 @@ async function loadIntradayBars(ticker: string, simDays: number): Promise<Histor
       close: b.close,
       volume: b.volume,
     }));
+  } else {
+    bars5m = await fetchHistoricalPrices(ticker, "60d", "5m");
   }
-  return await fetchHistoricalPrices(ticker, "60d", "5m");
+
+  if (timeframe === "10m") return aggregateIntradayBars(bars5m, 10);
+  if (timeframe === "30m") return aggregateIntradayBars(bars5m, 30);
+  return bars5m;
 }
 
 async function runIntradayBacktest(params: BacktestParams, runId: string, tickers: string[], concurrency: number): Promise<void> {
@@ -300,7 +335,7 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
     await Promise.allSettled(
       batch.map(async (ticker) => {
         try {
-          const bars = await loadIntradayBars(ticker, params.simDays);
+          const bars = await loadIntradayBars(ticker, params.simDays, params.timeframe);
           if (bars.length < 200) {
             progress.processed++;
             return;
@@ -432,7 +467,9 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
   const pricedStocks = await storage.getStocksWithPrices();
   const tickers = pricedStocks.map(s => s.ticker);
   const runId = `bt_${Date.now()}`;
-  const isIntraday = params.timeframe === "5m";
+  const isIntraday = params.timeframe === "5m" || params.timeframe === "10m" || params.timeframe === "30m";
+  const tfLabels: Record<string, string> = { "5m": "5分足", "10m": "10分足", "30m": "30分足", "1d": "日足" };
+  const tfLabel = tfLabels[params.timeframe] || params.timeframe;
 
   const runConfig: InsertBacktestRun = {
     runId,
@@ -443,7 +480,7 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
     requireMaBuy: params.requireMaBuy,
     simDays: params.simDays,
     timeframe: params.timeframe,
-    label: params.label || `${isIntraday ? "5分足" : "日足"} 目標${params.targetPercent}% 指標${params.minBuyIndicators}+ RSI${params.rsiMin}-${params.rsiMax}${params.requireMaBuy ? " MA必須" : ""}`,
+    label: params.label || `${tfLabel} 目標${params.targetPercent}% 指標${params.minBuyIndicators}+ RSI${params.rsiMin}-${params.rsiMax}${params.requireMaBuy ? " MA必須" : ""}`,
   };
   await storage.insertBacktestRun(runConfig);
 
@@ -454,11 +491,11 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
   progress.errors = 0;
   progress.startedAt = Date.now();
   progress.completedAt = null;
-  progress.message = `${isIntraday ? "5分足" : "日足"}バックテストを開始しました...`;
+  progress.message = `${tfLabel}バックテストを開始しました...`;
   progress.runId = runId;
   progress.params = params;
 
-  console.log(`[Backtest] ${tickers.length}銘柄の${isIntraday ? "5分足" : "日足"}バックテストを開始 (runId: ${runId}, params: ${JSON.stringify(params)})`);
+  console.log(`[Backtest] ${tickers.length}銘柄の${tfLabel}バックテストを開始 (runId: ${runId}, params: ${JSON.stringify(params)})`);
 
   (async () => {
     try {

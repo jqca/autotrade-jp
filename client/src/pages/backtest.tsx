@@ -63,7 +63,8 @@ function RunLabel({ run }: { run: BacktestRun }) {
     ? new Date(run.createdAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
     : "";
   const cfg = run.config;
-  const tfLabel = cfg?.timeframe === "5m" ? "5分足" : "日足";
+  const tfLabels: Record<string, string> = { "5m": "5分足", "10m": "10分足", "30m": "30分足", "1d": "日足" };
+  const tfLabel = cfg?.timeframe ? (tfLabels[cfg.timeframe] || cfg.timeframe) : "日足";
   const paramStr = cfg
     ? `${tfLabel} 目標${cfg.targetPercent}% 指標${cfg.minBuyIndicators}+ RSI${cfg.rsiMin}-${cfg.rsiMax}${cfg.requireMaBuy ? " MA必須" : ""}`
     : "";
