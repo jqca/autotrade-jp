@@ -1,4 +1,4 @@
-import { LayoutDashboard, Eye, Zap, History, Wallet, Signal, FlaskConical, ShieldAlert, Atom, Gauge, Award, BatteryCharging, LogOut, User } from "lucide-react";
+import { LayoutDashboard, Eye, Zap, History, Wallet, Signal, FlaskConical, ShieldAlert, Atom, Gauge, Award, BatteryCharging, CreditCard, LogOut, User } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -25,6 +25,7 @@ const navItems = [
   { title: "量子VaR分析", url: "/var", icon: Gauge, testId: "link-var" },
   { title: "量子ベンチマーク", url: "/benchmark", icon: Award, testId: "link-benchmark" },
   { title: "消費電力モニター", url: "/energy", icon: BatteryCharging, testId: "link-energy" },
+  { title: "クレジット・課金", url: "/billing", icon: CreditCard, testId: "link-billing" },
   { title: "取引戦略", url: "/strategies", icon: Zap, testId: "link-strategies" },
   { title: "取引履歴", url: "/trades", icon: History, testId: "link-trades" },
   { title: "ポートフォリオ", url: "/portfolio", icon: Wallet, testId: "link-portfolio" },

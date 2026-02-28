@@ -11,10 +11,11 @@ import {
   type MarketRiskAssessment, type InsertMarketRiskAssessment,
   type QuantumBenchmarkRun, type InsertQuantumBenchmarkRun,
   type EnergyLog, type InsertEnergyLog,
-  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults, backtestRuns, intradayPrices, marketRiskAssessments, quantumBenchmarkRuns, energyLogs,
+  type CreditTransaction, type InsertCreditTransaction,
+  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults, backtestRuns, intradayPrices, marketRiskAssessments, quantumBenchmarkRuns, energyLogs, creditTransactions,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, sql, like, or, ilike, count, and, gte, lte } from "drizzle-orm";
+import { eq, sql, like, or, ilike, count, and, gte, lte, desc } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -71,6 +72,11 @@ export interface IStorage {
   getEnergySummary(): Promise<{ totalAiWh: number; totalQuantumWh: number; totalCo2: number; count: number }>;
   deleteEnergyLog(id: string): Promise<void>;
   clearEnergyLogs(): Promise<void>;
+  getUserCredits(userId: string): Promise<number>;
+  addCredits(userId: string, amount: number, description: string, stripeSessionId?: string): Promise<CreditTransaction | null>;
+  deductCredits(userId: string, amount: number, description: string, taskType: string): Promise<CreditTransaction>;
+  getCreditTransactions(userId: string, limit?: number): Promise<CreditTransaction[]>;
+  updateUserStripeCustomerId(userId: string, stripeCustomerId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -456,6 +462,70 @@ export class DatabaseStorage implements IStorage {
 
   async clearEnergyLogs(): Promise<void> {
     await db.delete(energyLogs);
+  }
+
+  async getUserCredits(userId: string): Promise<number> {
+    const [user] = await db.select({ creditBalance: users.creditBalance }).from(users).where(eq(users.id, userId));
+    return user?.creditBalance ?? 0;
+  }
+
+  async addCredits(userId: string, amount: number, description: string, stripeSessionId?: string): Promise<CreditTransaction | null> {
+    if (stripeSessionId) {
+      const [existing] = await db.select({ id: creditTransactions.id })
+        .from(creditTransactions)
+        .where(eq(creditTransactions.stripeSessionId, stripeSessionId))
+        .limit(1);
+      if (existing) {
+        console.log(`[Credits] Duplicate stripeSessionId ${stripeSessionId}, skipping`);
+        return null;
+      }
+    }
+
+    await db.update(users).set({
+      creditBalance: sql`${users.creditBalance} + ${amount}`,
+    }).where(eq(users.id, userId));
+
+    const [tx] = await db.insert(creditTransactions).values({
+      userId,
+      amount,
+      type: "purchase",
+      description,
+      stripeSessionId: stripeSessionId || null,
+      taskType: null,
+    }).returning();
+    return tx;
+  }
+
+  async deductCredits(userId: string, amount: number, description: string, taskType: string): Promise<CreditTransaction> {
+    const [updated] = await db.update(users).set({
+      creditBalance: sql`${users.creditBalance} - ${amount}`,
+    }).where(and(eq(users.id, userId), sql`${users.creditBalance} >= ${amount}`)).returning({ creditBalance: users.creditBalance });
+
+    if (!updated) {
+      const currentBalance = await this.getUserCredits(userId);
+      throw new Error(`クレジット不足: 必要${amount}cr / 残高${currentBalance}cr`);
+    }
+
+    const [tx] = await db.insert(creditTransactions).values({
+      userId,
+      amount: -amount,
+      type: "usage",
+      description,
+      stripeSessionId: null,
+      taskType,
+    }).returning();
+    return tx;
+  }
+
+  async getCreditTransactions(userId: string, limit: number = 50): Promise<CreditTransaction[]> {
+    return await db.select().from(creditTransactions)
+      .where(eq(creditTransactions.userId, userId))
+      .orderBy(desc(creditTransactions.createdAt))
+      .limit(limit);
+  }
+
+  async updateUserStripeCustomerId(userId: string, stripeCustomerId: string): Promise<void> {
+    await db.update(users).set({ stripeCustomerId }).where(eq(users.id, userId));
   }
 }
 

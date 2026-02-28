@@ -222,6 +222,8 @@ export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  creditBalance: integer("credit_balance").notNull().default(0),
+  stripeCustomerId: text("stripe_customer_id"),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -231,3 +233,18 @@ export const insertUserSchema = createInsertSchema(users).pick({
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+export const creditTransactions = pgTable("credit_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  amount: integer("amount").notNull(),
+  type: text("type").notNull(),
+  description: text("description").notNull(),
+  stripeSessionId: text("stripe_session_id"),
+  taskType: text("task_type"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCreditTransactionSchema = createInsertSchema(creditTransactions).omit({ id: true, createdAt: true });
+export type CreditTransaction = typeof creditTransactions.$inferSelect;
+export type InsertCreditTransaction = z.infer<typeof insertCreditTransactionSchema>;

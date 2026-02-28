@@ -17,6 +17,23 @@ import { optimizePortfolio } from "./portfolio-optimizer";
 import { calculateVar } from "./var-calculator";
 import { runQuantumBenchmark, isBenchmarkRunning } from "./quantum-benchmark";
 import { logEnergy, estimateEnergy, getComparisonEstimate, getPowerProfiles, type ProcessorType } from "./energy-monitor";
+import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
+import { seedCreditProducts } from "./seed-credits";
+import { sql } from "drizzle-orm";
+import { db } from "./db";
+
+function isCreditError(err: any): boolean {
+  return err?.message?.includes('クレジット不足');
+}
+
+export const CREDIT_COSTS: Record<string, { cost: number; label: string }> = {
+  backtest_daily: { cost: 10, label: "バックテスト（日足）" },
+  backtest_intraday: { cost: 15, label: "バックテスト（日中足）" },
+  benchmark: { cost: 20, label: "量子ベンチマーク" },
+  risk_assessment: { cost: 5, label: "リスク評価" },
+  portfolio_optimize: { cost: 8, label: "ポートフォリオ最適化" },
+  var_analysis: { cost: 8, label: "VaR分析" },
+};
 
 interface PriceBar {
   date: string;
@@ -417,12 +434,22 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/backtest/run", async (req, res) => {
+  app.post("/api/backtest/run", requireAuth, async (req: any, res) => {
     try {
       const btProgress = getBacktestProgress();
       if (btProgress.status === "running") {
         return res.status(409).json({ message: "既にバックテストが実行中です" });
       }
+      const validTimeframesCheck = ["1d", "5m", "10m", "30m"];
+      const tfCheck = validTimeframesCheck.includes(req.body.timeframe) ? req.body.timeframe : "1d";
+      const costKey = tfCheck !== "1d" ? "backtest_intraday" : "backtest_daily";
+      const creditCost = CREDIT_COSTS[costKey].cost;
+      const userId = req.user.id;
+      const balance = await storage.getUserCredits(userId);
+      if (balance < creditCost) {
+        return res.status(402).json({ message: `クレジット不足: 必要${creditCost}cr / 残高${balance}cr`, required: creditCost, balance });
+      }
+      await storage.deductCredits(userId, creditCost, `${CREDIT_COSTS[costKey].label}実行`, costKey);
       const targetPercent = req.body.targetPercent != null ? Number(req.body.targetPercent) : DEFAULT_PARAMS.targetPercent;
       const minBuyIndicators = req.body.minBuyIndicators != null ? Number(req.body.minBuyIndicators) : DEFAULT_PARAMS.minBuyIndicators;
       const rsiMin = req.body.rsiMin != null ? Number(req.body.rsiMin) : DEFAULT_PARAMS.rsiMin;
@@ -483,6 +510,7 @@ export async function registerRoutes(
       await startBacktest(params, 3);
       res.json({ message: "バックテストを開始しました", params });
     } catch (err: any) {
+      if (isCreditError(err)) return res.status(402).json({ message: err.message });
       res.status(500).json({ message: err.message });
     }
   });
@@ -595,13 +623,19 @@ export async function registerRoutes(
     res.json(history);
   });
 
-  app.post("/api/risk/assess", async (req, res) => {
+  app.post("/api/risk/assess", requireAuth, async (req: any, res) => {
     try {
+      const creditCost = CREDIT_COSTS.risk_assessment.cost;
+      const balance = await storage.getUserCredits(req.user.id);
+      if (balance < creditCost) {
+        return res.status(402).json({ message: `クレジット不足: 必要${creditCost}cr / 残高${balance}cr`, required: creditCost, balance });
+      }
       const schema = z.object({ method: z.enum(["classical", "qml", "both"]).default("both") });
       const parsed = schema.safeParse(req.body || {});
       if (!parsed.success) {
         return res.status(400).json({ message: "method は 'classical', 'qml', 'both' のいずれかを指定してください" });
       }
+      await storage.deductCredits(req.user.id, creditCost, `${CREDIT_COSTS.risk_assessment.label}実行`, "risk_assessment");
       const method = parsed.data.method;
       const results: any = {};
 
@@ -614,6 +648,7 @@ export async function registerRoutes(
 
       res.json(results);
     } catch (err: any) {
+      if (isCreditError(err)) return res.status(402).json({ message: err.message });
       res.status(500).json({ message: err.message });
     }
   });
@@ -630,8 +665,13 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/var/calculate", async (req, res) => {
+  app.post("/api/var/calculate", requireAuth, async (req: any, res) => {
     try {
+      const creditCost = CREDIT_COSTS.var_analysis.cost;
+      const balance = await storage.getUserCredits(req.user.id);
+      if (balance < creditCost) {
+        return res.status(402).json({ message: `クレジット不足: 必要${creditCost}cr / 残高${balance}cr`, required: creditCost, balance });
+      }
       const schema = z.object({
         portfolioValue: z.number().min(10000).max(100000000).default(1000000),
         confidenceLevel: z.number().min(0.9).max(0.99).default(0.95),
@@ -644,6 +684,7 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ message: "パラメータが無効です" });
       }
+      await storage.deductCredits(req.user.id, creditCost, `${CREDIT_COSTS.var_analysis.label}実行`, "var_analysis");
       const result = await calculateVar(
         parsed.data.portfolioValue,
         parsed.data.confidenceLevel,
@@ -654,19 +695,27 @@ export async function registerRoutes(
       );
       res.json(result);
     } catch (err: any) {
+      if (isCreditError(err)) return res.status(402).json({ message: err.message });
       res.status(500).json({ message: err.message });
     }
   });
 
-  app.post("/api/benchmark/run", async (req, res) => {
+  app.post("/api/benchmark/run", requireAuth, async (req: any, res) => {
     try {
       if (isBenchmarkRunning()) {
         return res.status(409).json({ message: "ベンチマークが既に実行中です" });
       }
+      const creditCost = CREDIT_COSTS.benchmark.cost;
+      const balance = await storage.getUserCredits(req.user.id);
+      if (balance < creditCost) {
+        return res.status(402).json({ message: `クレジット不足: 必要${creditCost}cr / 残高${balance}cr`, required: creditCost, balance });
+      }
+      await storage.deductCredits(req.user.id, creditCost, `${CREDIT_COSTS.benchmark.label}実行`, "benchmark");
       const useRealData = req.body?.useRealData !== false;
       const result = await runQuantumBenchmark(useRealData);
       res.json(result);
     } catch (err: any) {
+      if (isCreditError(err)) return res.status(402).json({ message: err.message });
       res.status(500).json({ message: err.message });
     }
   });
@@ -699,8 +748,13 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/portfolio/optimize", async (req, res) => {
+  app.post("/api/portfolio/optimize", requireAuth, async (req: any, res) => {
     try {
+      const creditCost = CREDIT_COSTS.portfolio_optimize.cost;
+      const balance = await storage.getUserCredits(req.user.id);
+      if (balance < creditCost) {
+        return res.status(402).json({ message: `クレジット不足: 必要${creditCost}cr / 残高${balance}cr`, required: creditCost, balance });
+      }
       const schema = z.object({
         budget: z.number().min(10000).max(100000000).default(1000000),
         riskAversion: z.number().min(0).max(2).default(0.5),
@@ -710,9 +764,11 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ message: "パラメータが無効です。予算: 10,000〜100,000,000円、リスク回避度: 0〜2、最大銘柄数: 2〜15" });
       }
+      await storage.deductCredits(req.user.id, creditCost, `${CREDIT_COSTS.portfolio_optimize.label}実行`, "portfolio_optimize");
       const result = await optimizePortfolio(parsed.data.budget, parsed.data.riskAversion, parsed.data.maxAssets);
       res.json(result);
     } catch (err: any) {
+      if (isCreditError(err)) return res.status(402).json({ message: err.message });
       res.status(500).json({ message: err.message });
     }
   });
@@ -834,6 +890,107 @@ export async function registerRoutes(
       res.status(500).json({ message: err.message });
     }
   });
+
+  app.get("/api/billing/credits", requireAuth, async (req: any, res) => {
+    try {
+      const credits = await storage.getUserCredits(req.user.id);
+      res.json({ credits });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/billing/transactions", requireAuth, async (req: any, res) => {
+    try {
+      const limit = req.query.limit ? Number(req.query.limit) : 50;
+      const transactions = await storage.getCreditTransactions(req.user.id, limit);
+      res.json(transactions);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/billing/packages", async (_req, res) => {
+    try {
+      const stripe = await getUncachableStripeClient();
+      const products = await stripe.products.search({ query: "metadata['type']:'credit_package'" });
+
+      const packages = [];
+      for (const product of products.data) {
+        if (!product.active) continue;
+        const prices = await stripe.prices.list({ product: product.id, active: true, limit: 1 });
+        const price = prices.data[0];
+        if (!price) continue;
+
+        packages.push({
+          id: product.id,
+          name: product.name,
+          description: product.description,
+          credits: parseInt(product.metadata?.credits || '0', 10),
+          priceId: price.id,
+          amount: price.unit_amount || 0,
+          currency: price.currency,
+        });
+      }
+
+      packages.sort((a, b) => a.credits - b.credits);
+      res.json(packages);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/billing/checkout", requireAuth, async (req: any, res) => {
+    try {
+      const schema = z.object({ priceId: z.string() });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "パラメータが無効です" });
+      }
+
+      const stripe = await getUncachableStripeClient();
+
+      const price = await stripe.prices.retrieve(parsed.data.priceId, { expand: ['product'] });
+      const product = price.product as any;
+      if (!product || product.metadata?.type !== 'credit_package' || !product.metadata?.credits) {
+        return res.status(400).json({ message: "無効なクレジットパッケージです" });
+      }
+      const credits = parseInt(product.metadata.credits, 10);
+
+      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        payment_method_types: ['card'],
+        line_items: [{ price: parsed.data.priceId, quantity: 1 }],
+        success_url: `${baseUrl}/billing?success=true`,
+        cancel_url: `${baseUrl}/billing?canceled=true`,
+        metadata: {
+          userId: req.user.id,
+          credits: String(credits),
+        },
+      });
+
+      res.json({ url: session.url });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/billing/costs", (_req, res) => {
+    res.json(CREDIT_COSTS);
+  });
+
+  app.get("/api/billing/stripe-key", async (_req, res) => {
+    try {
+      const key = await getStripePublishableKey();
+      res.json({ publishableKey: key });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  seedCreditProducts().catch(err => console.error('[Seed] Credit seed error:', err));
 
   startScheduler();
 

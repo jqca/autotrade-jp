@@ -170,9 +170,22 @@ shared/
 - Server-side batch calculation: after nightly price fetch completes, all indicators are auto-computed and stored in `technical_indicators` table
 - Manual trigger also available via POST /api/indicators/batch
 
+## Billing & Credits (Stripe)
+- Stripe integration via Replit connector (stripe-replit-sync)
+- Credit-based billing: users purchase credits to run computation tasks
+- Credit packages: 100cr/¥500, 500cr/¥2000, 1000cr/¥3500 (seeded in Stripe on startup)
+- Credit costs: backtest_daily=10cr, backtest_intraday=15cr, benchmark=20cr, risk_assessment=5cr, portfolio_optimize=8cr, var_analysis=8cr
+- Webhook at `/api/stripe/webhook` registered BEFORE express.json() middleware
+- DB fields: `users.credit_balance`, `users.stripe_customer_id`, `credit_transactions` table
+- Routes: GET /api/billing/credits, GET /api/billing/transactions, GET /api/billing/packages, POST /api/billing/checkout, GET /api/billing/costs, GET /api/billing/stripe-key
+- Frontend: /billing page with balance, packages, cost table, transaction history
+- Files: server/stripeClient.ts, server/webhookHandlers.ts, server/seed-credits.ts, client/src/pages/billing.tsx
+
 ## Dependencies
 - xlsx - For parsing JPX's XLS stock listing file
 - recharts - For historical price charts
 - pennylane (Python) - Quantum machine learning framework for QML risk detection
 - numpy (Python) - Numerical computing for QML feature processing
 - scikit-learn (Python) - ML models (GradientBoosting, RandomForest) for AI vs quantum benchmark
+- stripe - Stripe SDK for payment processing
+- stripe-replit-sync - Replit Stripe integration sync helper
