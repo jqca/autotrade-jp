@@ -139,15 +139,15 @@ export default function Backtest() {
   const [maxHoldDays, setMaxHoldDays] = useState(3);
   const [requireUptrend, setRequireUptrend] = useState(false);
   const [dynamicTarget, setDynamicTarget] = useState(true);
-  const [requireMacdCrossover, setRequireMacdCrossover] = useState(true);
-  const [requireRsiReversal, setRequireRsiReversal] = useState(true);
+  const [requireMacdCrossover, setRequireMacdCrossover] = useState(false);
+  const [requireRsiReversal, setRequireRsiReversal] = useState(false);
   const [requireVolumeSurge, setRequireVolumeSurge] = useState(false);
   const [volumeSurgeRatio, setVolumeSurgeRatio] = useState(1.5);
-  const [maxGapPercent, setMaxGapPercent] = useState(2.0);
+  const [maxGapPercent, setMaxGapPercent] = useState(1.5);
   const [trailingStop, setTrailingStop] = useState(true);
   const [trailingStopPercent, setTrailingStopPercent] = useState(1.5);
   const [confirmDays, setConfirmDays] = useState(1);
-  const [minSignalScore, setMinSignalScore] = useState(30);
+  const [minSignalScore, setMinSignalScore] = useState(20);
   const [requireDailyConfirm, setRequireDailyConfirm] = useState(false);
   const [dailyMinBuyIndicators, setDailyMinBuyIndicators] = useState(2);
   const [dailyMinSignalScore, setDailyMinSignalScore] = useState(0);
@@ -1051,7 +1051,7 @@ export default function Backtest() {
                     variant="outline"
                     size="sm"
                     className="border-amber-300 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/20"
-                    onClick={() => { setTimeframe("1d"); setTargetPercent(0.8); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); setUseAi(false); setUseQuantum(false); setStopLossPercent(2.0); setMaxHoldDays(3); setRequireUptrend(false); setDynamicTarget(true); setRequireMacdCrossover(true); setRequireRsiReversal(false); setRequireVolumeSurge(false); setVolumeSurgeRatio(1.5); setMaxGapPercent(1.5); setTrailingStop(true); setTrailingStopPercent(1.0); setConfirmDays(2); setMinSignalScore(50); setShowAdvanced(true); }}
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(0.8); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); setUseAi(false); setUseQuantum(false); setStopLossPercent(1.0); setMaxHoldDays(3); setRequireUptrend(false); setDynamicTarget(true); setRequireMacdCrossover(false); setRequireRsiReversal(false); setRequireVolumeSurge(false); setVolumeSurgeRatio(1.5); setMaxGapPercent(1.5); setTrailingStop(true); setTrailingStopPercent(1.5); setConfirmDays(1); setMinSignalScore(20); setShowAdvanced(true); }}
                     data-testid="button-preset-high-winrate"
                   >
                     <Trophy className="h-3 w-3 mr-1 text-amber-500" />
@@ -1079,7 +1079,7 @@ export default function Backtest() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setTimeframe("1d"); setTargetPercent(1.0); setMinBuyIndicators(4); setRsiMin(20); setRsiMax(30); setRequireMaBuy(true); setSimDays(200); setUseAi(false); setUseQuantum(false); setStopLossPercent(3.0); setMaxHoldDays(1); setRequireUptrend(true); setDynamicTarget(false); setRequireMacdCrossover(false); setRequireRsiReversal(false); setRequireVolumeSurge(false); setMaxGapPercent(1.0); setTrailingStop(false); setConfirmDays(1); setMinSignalScore(40); setShowAdvanced(true); }}
+                    onClick={() => { setTimeframe("1d"); setTargetPercent(1.0); setMinBuyIndicators(4); setRsiMin(15); setRsiMax(30); setRequireMaBuy(false); setSimDays(200); setUseAi(false); setUseQuantum(false); setStopLossPercent(1.0); setMaxHoldDays(3); setRequireUptrend(false); setDynamicTarget(true); setRequireMacdCrossover(false); setRequireRsiReversal(false); setRequireVolumeSurge(false); setMaxGapPercent(1.5); setTrailingStop(true); setTrailingStopPercent(1.5); setConfirmDays(1); setMinSignalScore(30); setShowAdvanced(true); }}
                     data-testid="button-preset-strict"
                   >
                     厳格フィルター
@@ -1133,7 +1133,7 @@ export default function Backtest() {
                     variant="outline"
                     size="sm"
                     className="border-indigo-300 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
-                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.3); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(60); setUseAi(false); setUseQuantum(false); setRequireDailyConfirm(true); setDailyMinBuyIndicators(2); setDailyMinSignalScore(30); setStopLossPercent(1.0); setDynamicTarget(true); setMinSignalScore(30); setShowAdvanced(true); }}
+                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.3); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(60); setUseAi(false); setUseQuantum(false); setRequireDailyConfirm(true); setDailyMinBuyIndicators(2); setDailyMinSignalScore(15); setStopLossPercent(1.0); setDynamicTarget(true); setRequireMacdCrossover(false); setRequireRsiReversal(false); setMinSignalScore(15); setTrailingStop(true); setTrailingStopPercent(1.5); setMaxHoldDays(3); setShowAdvanced(true); }}
                     data-testid="button-preset-5m-daily"
                   >
                     <Activity className="h-3 w-3 mr-1 text-indigo-500" />
