@@ -990,6 +990,45 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/settings", requireAuth, async (_req, res) => {
+    try {
+      const settings = await storage.getAllSettings();
+      res.json(settings);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/settings/:key", requireAuth, async (req, res) => {
+    try {
+      const value = await storage.getSetting(req.params.key);
+      if (value === null) {
+        return res.status(404).json({ message: "設定が見つかりません" });
+      }
+      res.json({ key: req.params.key, value });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.put("/api/settings/:key", requireAuth, async (req: any, res) => {
+    try {
+      const settingsSchema = z.object({
+        value: z.string(),
+        label: z.string(),
+        description: z.string().optional(),
+      });
+      const parsed = settingsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "パラメータが無効です" });
+      }
+      const setting = await storage.setSetting(req.params.key, parsed.data.value, parsed.data.label, parsed.data.description);
+      res.json(setting);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   seedCreditProducts().catch(err => console.error('[Seed] Credit seed error:', err));
 
   startScheduler();

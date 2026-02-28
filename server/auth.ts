@@ -64,6 +64,12 @@ export function setupAuth(app: Express) {
       const hashedPassword = await bcrypt.hash(password, 10);
       const user = await storage.createUser({ username, password: hashedPassword });
 
+      const initialCreditsStr = await storage.getSetting("initial_credits");
+      const initialCredits = parseInt(initialCreditsStr || "0", 10);
+      if (initialCredits > 0) {
+        await storage.addCredits(user.id, initialCredits, `新規登録ボーナス（${initialCredits}クレジット）`);
+      }
+
       req.session.userId = user.id;
       req.session.username = user.username;
 
@@ -122,6 +128,7 @@ export function setupAuth(app: Express) {
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (req.session.userId) {
+    (req as any).user = { id: req.session.userId, username: req.session.username };
     return next();
   }
   return res.status(401).json({ message: "ログインが必要です" });

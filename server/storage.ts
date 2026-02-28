@@ -12,7 +12,8 @@ import {
   type QuantumBenchmarkRun, type InsertQuantumBenchmarkRun,
   type EnergyLog, type InsertEnergyLog,
   type CreditTransaction, type InsertCreditTransaction,
-  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults, backtestRuns, intradayPrices, marketRiskAssessments, quantumBenchmarkRuns, energyLogs, creditTransactions,
+  type AppSetting,
+  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults, backtestRuns, intradayPrices, marketRiskAssessments, quantumBenchmarkRuns, energyLogs, creditTransactions, appSettings,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, sql, like, or, ilike, count, and, gte, lte, desc } from "drizzle-orm";
@@ -77,6 +78,9 @@ export interface IStorage {
   deductCredits(userId: string, amount: number, description: string, taskType: string): Promise<CreditTransaction>;
   getCreditTransactions(userId: string, limit?: number): Promise<CreditTransaction[]>;
   updateUserStripeCustomerId(userId: string, stripeCustomerId: string): Promise<void>;
+  getSetting(key: string): Promise<string | null>;
+  setSetting(key: string, value: string, label: string, description?: string): Promise<AppSetting>;
+  getAllSettings(): Promise<AppSetting[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -526,6 +530,25 @@ export class DatabaseStorage implements IStorage {
 
   async updateUserStripeCustomerId(userId: string, stripeCustomerId: string): Promise<void> {
     await db.update(users).set({ stripeCustomerId }).where(eq(users.id, userId));
+  }
+
+  async getSetting(key: string): Promise<string | null> {
+    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+    return setting?.value ?? null;
+  }
+
+  async setSetting(key: string, value: string, label: string, description?: string): Promise<AppSetting> {
+    const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+    if (existing) {
+      const [updated] = await db.update(appSettings).set({ value, label, description: description ?? existing.description, updatedAt: new Date() }).where(eq(appSettings.key, key)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(appSettings).values({ key, value, label, description: description ?? null }).returning();
+    return created;
+  }
+
+  async getAllSettings(): Promise<AppSetting[]> {
+    return await db.select().from(appSettings).orderBy(appSettings.key);
   }
 }
 

@@ -23,6 +23,7 @@ import VarAnalysis from "@/pages/var-analysis";
 import QuantumBenchmark from "@/pages/quantum-benchmark";
 import EnergyMonitor from "@/pages/energy-monitor";
 import Billing from "@/pages/billing";
+import SettingsPage from "@/pages/settings";
 import AuthPage from "@/pages/auth-page";
 
 function Router() {
@@ -39,6 +40,7 @@ function Router() {
       <Route path="/benchmark" component={QuantumBenchmark} />
       <Route path="/energy" component={EnergyMonitor} />
       <Route path="/billing" component={Billing} />
+      <Route path="/settings" component={SettingsPage} />
       <Route path="/strategies" component={Strategies} />
       <Route path="/trades" component={Trades} />
       <Route path="/portfolio" component={Portfolio} />

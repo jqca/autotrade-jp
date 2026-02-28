@@ -177,9 +177,12 @@ shared/
 - Credit costs: backtest_daily=10cr, backtest_intraday=15cr, benchmark=20cr, risk_assessment=5cr, portfolio_optimize=8cr, var_analysis=8cr
 - Webhook at `/api/stripe/webhook` registered BEFORE express.json() middleware
 - DB fields: `users.credit_balance`, `users.stripe_customer_id`, `credit_transactions` table
+- Initial credits: new users receive configurable credits on registration (default: 50cr)
 - Routes: GET /api/billing/credits, GET /api/billing/transactions, GET /api/billing/packages, POST /api/billing/checkout, GET /api/billing/costs, GET /api/billing/stripe-key
-- Frontend: /billing page with balance, packages, cost table, transaction history
-- Files: server/stripeClient.ts, server/webhookHandlers.ts, server/seed-credits.ts, client/src/pages/billing.tsx
+- Settings routes: GET /api/settings, GET /api/settings/:key, PUT /api/settings/:key
+- Frontend: /billing page with balance, packages, cost table, transaction history; /settings page for app configuration
+- DB table `app_settings`: key-value store for app-wide settings (initial_credits, etc.)
+- Files: server/stripeClient.ts, server/webhookHandlers.ts, server/seed-credits.ts, client/src/pages/billing.tsx, client/src/pages/settings.tsx
 
 ## Dependencies
 - xlsx - For parsing JPX's XLS stock listing file
