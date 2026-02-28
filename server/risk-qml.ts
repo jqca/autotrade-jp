@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import path from "path";
 import { storage } from "./storage";
 import type { TechnicalIndicator, Stock } from "@shared/schema";
+import { logEnergy } from "./energy-monitor";
 
 export interface QmlRiskResult {
   riskScore: number;
@@ -138,7 +139,9 @@ export async function computeQmlRisk(): Promise<QmlRiskResult> {
 }
 
 export async function runQmlRiskAssessment(): Promise<QmlRiskResult> {
+  const startMs = Date.now();
   const result = await computeQmlRisk();
+  const durationMs = Date.now() - startMs;
   if (!result.error) {
     await storage.insertMarketRiskAssessment({
       method: "qml",
@@ -156,6 +159,7 @@ export async function runQmlRiskAssessment(): Promise<QmlRiskResult> {
         features: result.features,
       }),
     });
+    logEnergy("risk", "量子リスク評価 (QML変分回路)", "QPU+CRYO", durationMs, 0.7, { method: "qml", nQubits: result.nQubits }).catch(() => {});
   }
   return result;
 }

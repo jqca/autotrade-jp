@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import path from "path";
 import { storage } from "./storage";
 import { fetchHistoricalPrices } from "./yahoo-finance";
+import { logEnergy } from "./energy-monitor";
 
 export interface VarClassicalResult {
   var: number;
@@ -163,6 +164,7 @@ export async function calculateVar(
   });
 
   try {
+    const varStartMs = Date.now();
     const result = await runPythonVarCalculation({
       returns,
       portfolioValue,
@@ -171,10 +173,14 @@ export async function calculateVar(
       nSimulations,
       nQubits,
     });
+    const varDurationMs = Date.now() - varStartMs;
 
     if (result.error) {
       throw new Error(result.error);
     }
+
+    logEnergy("var", "古典VaR推定 (モンテカルロ)", "CPU", varDurationMs * 0.4, 0.8, { method: "MonteCarlo", nSimulations }).catch(() => {});
+    logEnergy("var", "量子VaR推定 (振幅推定)", "QPU+CRYO", varDurationMs * 0.6, 0.7, { method: "AmplitudeEstimation", nQubits }).catch(() => {});
 
     return {
       ...result,

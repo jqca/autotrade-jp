@@ -3,6 +3,7 @@ import path from "path";
 import { storage } from "./storage";
 import { fetchHistoricalPrices } from "./yahoo-finance";
 import type { TechnicalIndicator, Stock } from "@shared/schema";
+import { logEnergy } from "./energy-monitor";
 
 export interface PortfolioAsset {
   ticker: string;
@@ -378,6 +379,8 @@ export async function optimizePortfolio(
     assets[i].expectedReturn = expectedReturns[i] * 252 * 100;
   }
 
+  const optimizeStartMs = Date.now();
+  const classicalStartMs = Date.now();
   const classicalResult = classicalMarkowitz(expectedReturns, covMatrix, assets.map(a => a.currentPrice), budget, riskAversion);
   const classical = buildPortfolioResult(
     "classical",
@@ -388,9 +391,11 @@ export async function optimizePortfolio(
     covMatrix,
     budget
   );
+  const classicalDurationMs = Date.now() - classicalStartMs;
 
   let quantum: OptimizationResult;
   let qaoaDetails: QaoaDetails;
+  let qaoaDurationMs = 0;
 
   try {
     const qaoaInput = {
@@ -401,7 +406,9 @@ export async function optimizePortfolio(
       qaoaLayers: 2,
     };
 
+    const qaoaStartMs = Date.now();
     const qaoaResult = await runQaoaPython(qaoaInput);
+    qaoaDurationMs = Date.now() - qaoaStartMs;
 
     if (qaoaResult.error) {
       throw new Error(qaoaResult.error);
@@ -439,6 +446,12 @@ export async function optimizePortfolio(
       qaoaMethod: "error: " + err.message,
       topSolutions: [],
     };
+  }
+
+  const totalDuration = Date.now() - optimizeStartMs;
+  logEnergy("portfolio", "古典ポートフォリオ最適化 (Markowitz)", "CPU", totalDuration - qaoaDurationMs, 0.7, { method: "Markowitz", nAssets: assets.length }).catch(() => {});
+  if (qaoaDurationMs > 0) {
+    logEnergy("portfolio", "量子ポートフォリオ最適化 (QAOA)", "QPU+CRYO", qaoaDurationMs, 0.7, { method: "QAOA", nAssets: assets.length }).catch(() => {});
   }
 
   return { classical, quantum, qaoaDetails, candidates: assets, covMatrix };

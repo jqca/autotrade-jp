@@ -984,11 +984,14 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
 
         progress.signals = savedCount;
       } else {
+        const backtestStartMs = Date.now();
         if (isIntraday) {
           await runIntradayBacktest(params, runId, tickers, concurrency);
         } else {
           await runDailyBacktest(params, runId, tickers, concurrency);
         }
+        const backtestDurationMs = Date.now() - backtestStartMs;
+        logEnergy("backtest", isIntraday ? "日中バックテスト (テクニカル分析)" : "日次バックテスト (テクニカル分析)", "CPU", backtestDurationMs, 0.6, { mode: isIntraday ? "intraday" : "daily", tickers: tickers.length }).catch(() => {});
       }
 
       progress.status = "completed";

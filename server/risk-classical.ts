@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import type { TechnicalIndicator, Stock } from "@shared/schema";
+import { logEnergy } from "./energy-monitor";
 
 export interface ClassicalRiskResult {
   riskScore: number;
@@ -147,7 +148,9 @@ export async function computeClassicalRisk(): Promise<ClassicalRiskResult> {
 }
 
 export async function runClassicalRiskAssessment(): Promise<ClassicalRiskResult> {
+  const startMs = Date.now();
   const result = await computeClassicalRisk();
+  const durationMs = Date.now() - startMs;
   await storage.insertMarketRiskAssessment({
     method: "classical",
     riskScore: result.riskScore,
@@ -159,5 +162,6 @@ export async function runClassicalRiskAssessment(): Promise<ClassicalRiskResult>
     correlationScore: result.correlationScore,
     details: JSON.stringify(result.details),
   });
+  logEnergy("risk", "古典リスク評価 (重み付けスコアリング)", "CPU", durationMs, 0.6, { method: "classical" }).catch(() => {});
   return result;
 }
