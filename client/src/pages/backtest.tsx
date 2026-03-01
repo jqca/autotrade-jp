@@ -84,9 +84,11 @@ interface BacktestParams {
   initialCapital?: number;
 }
 
-function TrendBadge({ trend, label }: { trend: string | null; label: string }) {
-  const variant = trend === "buy" ? "default" : trend === "sell" ? "destructive" : "secondary";
-  return <Badge variant={variant} className="text-xs">{label}</Badge>;
+function TrendBadge({ trend, label, active = true }: { trend: string | null; label: string; active?: boolean }) {
+  const variant = active
+    ? (trend === "buy" ? "default" : trend === "sell" ? "destructive" : "secondary")
+    : "outline";
+  return <Badge variant={variant} className={`text-xs ${!active ? "opacity-40" : ""}`}>{label}</Badge>;
 }
 
 function RunLabel({ run }: { run: BacktestRun }) {
@@ -1718,10 +1720,18 @@ export default function Backtest() {
 
                         <div className="flex items-center gap-4 flex-wrap">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <TrendBadge trend={r.macdTrend} label="MACD" />
-                            <TrendBadge trend={r.rsiTrend} label={`RSI${r.rsiValue != null ? ` ${r.rsiValue.toFixed(0)}` : ""}`} />
-                            <TrendBadge trend={r.maTrend} label="MA" />
-                            <TrendBadge trend={r.bbTrend} label="BB" />
+                            {(() => {
+                              const ri = activeRunConfig?.requiredIndicators as string[] | undefined;
+                              const hasRI = ri && ri.length > 0;
+                              return (
+                                <>
+                                  <TrendBadge trend={r.macdTrend} label="MACD" active={!hasRI || ri!.includes("macd")} />
+                                  <TrendBadge trend={r.rsiTrend} label={`RSI${r.rsiValue != null ? ` ${r.rsiValue.toFixed(0)}` : ""}`} active={!hasRI || ri!.includes("rsi")} />
+                                  <TrendBadge trend={r.maTrend} label="MA" active={!hasRI || ri!.includes("ma")} />
+                                  <TrendBadge trend={r.bbTrend} label="BB" active={!hasRI || ri!.includes("bb")} />
+                                </>
+                              );
+                            })()}
                           </div>
                           <div className={`text-right min-w-[80px] ${r.profitLossPercent >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
                             <p className="font-bold text-sm" data-testid={`text-pl-${r.id}`}>
