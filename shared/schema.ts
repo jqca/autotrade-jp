@@ -119,6 +119,7 @@ export const backtestRuns = pgTable("backtest_runs", {
   requireUptrend: boolean("require_uptrend").notNull().default(false),
   dynamicTarget: boolean("dynamic_target").notNull().default(false),
   initialCapital: integer("initial_capital").notNull().default(1000000),
+  requiredIndicators: text("required_indicators").array(),
   aiQuantumSummary: text("ai_quantum_summary"),
   createdAt: timestamp("created_at").defaultNow(),
 });

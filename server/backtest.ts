@@ -1875,6 +1875,7 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
     useQuantum: params.useQuantum ?? false,
     aiThreshold: params.aiThreshold ?? 0.5,
     initialCapital,
+    requiredIndicators: params.requiredIndicators ?? null,
   };
   await storage.insertBacktestRun(runConfig);
 
