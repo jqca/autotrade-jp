@@ -464,7 +464,7 @@ export async function registerRoutes(
       }
       await storage.deductCredits(userId, creditCost, `${CREDIT_COSTS[costKey].label}実行`, costKey);
       const targetPercent = req.body.targetPercent != null ? Number(req.body.targetPercent) : DEFAULT_PARAMS.targetPercent;
-      const minBuyIndicators = req.body.minBuyIndicators != null ? Number(req.body.minBuyIndicators) : DEFAULT_PARAMS.minBuyIndicators;
+      const minBuyIndicators = req.body.minBuyIndicators != null ? Math.max(0, Math.min(4, Math.round(Number(req.body.minBuyIndicators)))) : DEFAULT_PARAMS.minBuyIndicators;
       const rsiMin = req.body.rsiMin != null ? Number(req.body.rsiMin) : DEFAULT_PARAMS.rsiMin;
       const rsiMax = req.body.rsiMax != null ? Number(req.body.rsiMax) : DEFAULT_PARAMS.rsiMax;
       const simDays = req.body.simDays != null ? Number(req.body.simDays) : DEFAULT_PARAMS.simDays;
@@ -472,8 +472,8 @@ export async function registerRoutes(
       if (targetPercent <= 0 || targetPercent > 10) {
         return res.status(400).json({ message: "利確目標は0.1%〜10%の範囲で指定してください" });
       }
-      if (minBuyIndicators < 2 || minBuyIndicators > 4) {
-        return res.status(400).json({ message: "最低買い指標数は2〜4の範囲で指定してください" });
+      if (minBuyIndicators < 0 || minBuyIndicators > 4) {
+        return res.status(400).json({ message: "最低買い指標数は0〜4の範囲で指定してください" });
       }
       if (rsiMin > rsiMax) {
         return res.status(400).json({ message: "RSI下限は上限以下にしてください" });

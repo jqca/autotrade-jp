@@ -705,7 +705,7 @@ export default function Backtest() {
                     <Slider
                       value={[minBuyIndicators]}
                       onValueChange={([v]) => setMinBuyIndicators(v)}
-                      min={2}
+                      min={0}
                       max={4}
                       step={1}
                       className="flex-1"
@@ -715,7 +715,13 @@ export default function Backtest() {
                       {minBuyIndicators}/4
                     </Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground">MACD/RSI/MA/BBのうち何個以上が「買い」でエントリー</p>
+                  <p className="text-xs text-muted-foreground">MACD/RSI/MA/BBのうち何個以上が「買い」でエントリー（0=制限なし）</p>
+                  <div className="text-xs text-muted-foreground space-y-1 pl-2 border-l-2 border-muted">
+                    <p><span className="font-medium text-foreground">MACD</span>: MACDラインがシグナル線より上（クロス時+30pt）</p>
+                    <p><span className="font-medium text-foreground">RSI</span>: RSI値が30以下（売られすぎ＝反発期待）</p>
+                    <p><span className="font-medium text-foreground">MA</span>: MA5がMA25をゴールデンクロス、または価格&gt;MA5&gt;MA25の上昇配列</p>
+                    <p><span className="font-medium text-foreground">BB</span>: 価格がボリンジャーバンド下限以下（反発期待）</p>
+                  </div>
                 </div>
 
                 <div className="space-y-3">
