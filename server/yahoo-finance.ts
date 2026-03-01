@@ -20,15 +20,19 @@ function toJSTString(ts: number, intraday: boolean): string {
   return `${y}-${mo}-${d}T${h}:${mi}`;
 }
 
+export function tickerToYahooSymbol(ticker: string): string {
+  if (/^[0-9]{4}$/.test(ticker)) {
+    return `${ticker}.T`;
+  }
+  return ticker;
+}
+
 export async function fetchHistoricalPrices(
   ticker: string,
   range: string = "6mo",
   interval: string = "1d"
 ): Promise<HistoricalPrice[]> {
-  if (!/^[0-9A-Za-z]{4}$/.test(ticker)) {
-    throw new Error("Invalid ticker format. Expected 4-character TSE code.");
-  }
-  const symbol = encodeURIComponent(`${ticker}.T`);
+  const symbol = encodeURIComponent(tickerToYahooSymbol(ticker));
   const url = `https://query2.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}`;
 
   const res = await fetch(url, {

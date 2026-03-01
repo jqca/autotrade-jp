@@ -8,6 +8,7 @@ export const stocks = pgTable("stocks", {
   ticker: text("ticker").notNull().unique(),
   name: text("name").notNull(),
   sector: text("sector").notNull(),
+  market: text("market").notNull().default("JP"),
   currentPrice: real("current_price").notNull(),
   previousClose: real("previous_close").notNull(),
   dayHigh: real("day_high").notNull(),

@@ -33,6 +33,7 @@ export default function Watchlist() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [page, setPage] = useState(0);
   const [showSearch, setShowSearch] = useState(false);
+  const [marketFilter, setMarketFilter] = useState<"all" | "JP" | "US">("all");
   const { toast } = useToast();
 
   const debounceTimer = useCallback(
@@ -58,8 +59,9 @@ export default function Watchlist() {
     queryKey: ["/api/stocks?watched"],
   });
 
+  const marketParam = marketFilter !== "all" ? `&market=${marketFilter}` : "";
   const { data: searchResult, isLoading: searchLoading } = useQuery<SearchResult>({
-    queryKey: [`/api/stocks?search=1&q=${encodeURIComponent(debouncedQuery)}&limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`],
+    queryKey: [`/api/stocks?search=1&q=${encodeURIComponent(debouncedQuery)}&limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}${marketParam}`],
     enabled: showSearch,
   });
 
@@ -125,10 +127,16 @@ export default function Watchlist() {
   });
 
   const [fetchAllRunning, setFetchAllRunning] = useState(false);
+  const [fetchUSRunning, setFetchUSRunning] = useState(false);
 
   const { data: fetchProgress } = useQuery<FetchAllProgress>({
     queryKey: ["/api/fetch-all-prices/progress"],
     refetchInterval: fetchAllRunning ? 2000 : false,
+  });
+
+  const { data: fetchUSProgress } = useQuery<FetchAllProgress>({
+    queryKey: ["/api/fetch-us-prices/progress"],
+    refetchInterval: fetchUSRunning ? 2000 : false,
   });
 
   useEffect(() => {
@@ -143,6 +151,17 @@ export default function Watchlist() {
     }
   }, [fetchProgress?.status]);
 
+  useEffect(() => {
+    if (fetchUSProgress?.status === "running") {
+      setFetchUSRunning(true);
+    } else if (fetchUSProgress?.status === "completed" || fetchUSProgress?.status === "error") {
+      if (fetchUSRunning) {
+        setFetchUSRunning(false);
+        queryClient.invalidateQueries({ queryKey: ["/api/stocks"] });
+      }
+    }
+  }, [fetchUSProgress?.status]);
+
   const startFetchAll = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", "/api/fetch-all-prices");
@@ -150,10 +169,40 @@ export default function Watchlist() {
     onSuccess: () => {
       setFetchAllRunning(true);
       queryClient.invalidateQueries({ queryKey: ["/api/fetch-all-prices/progress"] });
-      toast({ title: "全銘柄株価取得開始", description: "バックグラウンドで株価を取得しています..." });
+      toast({ title: "全銘柄株価取得開始", description: "バックグラウンドで日本株の株価を取得しています..." });
     },
     onError: (error: any) => {
       toast({ title: "エラー", description: error.message || "株価取得の開始に失敗しました", variant: "destructive" });
+    },
+  });
+
+  const importUSStocksMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/import-us-stocks");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/stocks"] });
+      toast({ title: "米国株インポート完了", description: `${data.imported}銘柄をインポートしました` });
+      setShowSearch(true);
+      setMarketFilter("US");
+    },
+    onError: () => {
+      toast({ title: "エラー", description: "米国株のインポートに失敗しました", variant: "destructive" });
+    },
+  });
+
+  const startFetchUS = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/fetch-us-prices");
+    },
+    onSuccess: () => {
+      setFetchUSRunning(true);
+      queryClient.invalidateQueries({ queryKey: ["/api/fetch-us-prices/progress"] });
+      toast({ title: "米国株価取得開始", description: "バックグラウンドで米国株の株価を取得しています..." });
+    },
+    onError: (error: any) => {
+      toast({ title: "エラー", description: error.message || "米国株価取得の開始に失敗しました", variant: "destructive" });
     },
   });
 
@@ -175,33 +224,54 @@ export default function Watchlist() {
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">ウォッチリスト</h1>
-          <p className="text-muted-foreground">日本株の株価をモニタリング</p>
+          <p className="text-muted-foreground">日本株・米国株の株価をモニタリング</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button onClick={() => simulatePrices.mutate()} disabled={simulatePrices.isPending} variant="outline" data-testid="button-simulate-prices">
             <RefreshCw className={`h-4 w-4 mr-2 ${simulatePrices.isPending ? "animate-spin" : ""}`} />
             価格シミュレーション
           </Button>
-          <Button onClick={() => importStocks.mutate()} disabled={importStocks.isPending} data-testid="button-import-stocks">
+          <Button onClick={() => importStocks.mutate()} disabled={importStocks.isPending} variant="outline" data-testid="button-import-jp-stocks">
             {importStocks.isPending ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
               <Download className="h-4 w-4 mr-2" />
             )}
-            全銘柄インポート
+            日本株インポート
+          </Button>
+          <Button onClick={() => importUSStocksMutation.mutate()} disabled={importUSStocksMutation.isPending} variant="outline" data-testid="button-import-us-stocks">
+            {importUSStocksMutation.isPending ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
+            米国株インポート
           </Button>
           <Button
             onClick={() => startFetchAll.mutate()}
             disabled={startFetchAll.isPending || fetchAllRunning}
             variant="default"
-            data-testid="button-fetch-all-prices"
+            data-testid="button-fetch-jp-prices"
           >
             {fetchAllRunning ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
               <Zap className="h-4 w-4 mr-2" />
             )}
-            全銘柄株価取得
+            日本株価取得
+          </Button>
+          <Button
+            onClick={() => startFetchUS.mutate()}
+            disabled={startFetchUS.isPending || fetchUSRunning}
+            variant="default"
+            data-testid="button-fetch-us-prices"
+          >
+            {fetchUSRunning ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Zap className="h-4 w-4 mr-2" />
+            )}
+            米国株価取得
           </Button>
         </div>
       </div>
@@ -211,7 +281,7 @@ export default function Watchlist() {
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center justify-between gap-2 mb-2">
               <span className="text-sm font-medium">
-                {fetchAllRunning ? "株価取得中..." : fetchProgress.status === "completed" ? "株価取得完了" : "エラー"}
+                {fetchAllRunning ? "日本株価取得中..." : fetchProgress.status === "completed" ? "日本株価取得完了" : "エラー"}
               </span>
               <span className="text-xs text-muted-foreground">
                 {fetchProgress.processed.toLocaleString("ja-JP")} / {fetchProgress.total.toLocaleString("ja-JP")}
@@ -224,6 +294,29 @@ export default function Watchlist() {
             <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
               <span>{fetchProgress.message}</span>
               <span>成功: {fetchProgress.updated.toLocaleString("ja-JP")} / エラー: {fetchProgress.errors.toLocaleString("ja-JP")}</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {fetchUSProgress && fetchUSProgress.status !== "idle" && (
+        <Card data-testid="card-us-fetch-progress">
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className="text-sm font-medium">
+                {fetchUSRunning ? "米国株価取得中..." : fetchUSProgress.status === "completed" ? "米国株価取得完了" : "エラー"}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {fetchUSProgress.processed.toLocaleString("ja-JP")} / {fetchUSProgress.total.toLocaleString("ja-JP")}
+              </span>
+            </div>
+            <Progress
+              value={fetchUSProgress.total > 0 ? (fetchUSProgress.processed / fetchUSProgress.total) * 100 : 0}
+              className="h-2 mb-2"
+            />
+            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>{fetchUSProgress.message}</span>
+              <span>成功: {fetchUSProgress.updated.toLocaleString("ja-JP")} / エラー: {fetchUSProgress.errors.toLocaleString("ja-JP")}</span>
             </div>
           </CardContent>
         </Card>
@@ -262,6 +355,19 @@ export default function Watchlist() {
         {showSearch && (
           <>
             <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                {(["all", "JP", "US"] as const).map((m) => (
+                  <Button
+                    key={m}
+                    variant={marketFilter === m ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => { setMarketFilter(m); setPage(0); }}
+                    data-testid={`button-market-${m.toLowerCase()}`}
+                  >
+                    {m === "all" ? "全て" : m === "JP" ? "🇯🇵 日本株" : "🇺🇸 米国株"}
+                  </Button>
+                ))}
+              </div>
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -348,6 +454,8 @@ function StockCard({ stock, onToggleWatch }: { stock: Stock; onToggleWatch: any 
   const change = hasPrice ? stock.currentPrice - stock.previousClose : 0;
   const changePercent = hasPrice ? (change / stock.previousClose) * 100 : 0;
   const isUp = change >= 0;
+  const isUS = (stock as any).market === "US";
+  const currency = isUS ? "$" : "¥";
 
   return (
     <Card className="hover-elevate" data-testid={`card-stock-${stock.ticker}`}>
@@ -356,6 +464,7 @@ function StockCard({ stock, onToggleWatch }: { stock: Stock; onToggleWatch: any 
           <div>
             <div className="flex items-center gap-2">
               <span className="font-bold text-base">{stock.ticker}</span>
+              {isUS && <Badge variant="outline" className="text-xs border-blue-400 text-blue-600">US</Badge>}
               <Badge variant="secondary" className="text-xs">{stock.sector}</Badge>
             </div>
             <p className="text-sm text-muted-foreground mt-0.5">{stock.name}</p>
@@ -379,9 +488,9 @@ function StockCard({ stock, onToggleWatch }: { stock: Stock; onToggleWatch: any 
             <div className="flex items-end justify-between gap-2">
               <div>
                 <p className="text-2xl font-bold" data-testid={`text-price-${stock.ticker}`}>
-                  {stock.currentPrice.toLocaleString("ja-JP")}
+                  {isUS ? `$${stock.currentPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `¥${stock.currentPrice.toLocaleString("ja-JP")}`}
                 </p>
-                <p className="text-xs text-muted-foreground">円</p>
+                <p className="text-xs text-muted-foreground">{isUS ? "USD" : "円"}</p>
               </div>
               <div className="text-right">
                 <div className={`flex items-center gap-1 text-sm font-medium ${isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>

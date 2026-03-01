@@ -1,7 +1,7 @@
-# AutoTrade JP - Japanese Stock Automated Trading App
+# AutoTrade JP - Stock Automated Trading App
 
 ## Overview
-AutoTrade JP is a simulated automated trading platform for the 3,771 TSE-listed Japanese stocks. It allows users to monitor stock prices, develop and backtest automated trading strategies, view trade history, and manage their investment portfolio. The project aims to integrate advanced AI and Quantum Machine Learning (QML) techniques for market risk assessment, portfolio optimization, and VaR analysis, providing a competitive edge in stock market analysis and strategy development. The platform also includes an energy monitor to track the environmental impact of computational tasks.
+AutoTrade JP is a simulated automated trading platform supporting both TSE-listed Japanese stocks (~3,771) and major US stocks (~133). It allows users to monitor stock prices, develop and backtest automated trading strategies, view trade history, and manage their investment portfolio. The project aims to integrate advanced AI and Quantum Machine Learning (QML) techniques for market risk assessment, portfolio optimization, and VaR analysis, providing a competitive edge in stock market analysis and strategy development. The platform also includes an energy monitor to track the environmental impact of computational tasks.
 
 ## User Preferences
 I want iterative development.
@@ -23,7 +23,7 @@ The application features a React + TypeScript frontend built with Vite, styled u
     -   **Quantum Portfolio Optimization:** Compares classical Markowitz optimization with QAOA for optimal stock selection.
     -   **Quantum VaR Analysis:** Compares classical Monte Carlo with Quantum Monte Carlo (amplitude estimation) for Value at Risk calculation.
 -   **Portfolio & Trade History:** Manages current holdings, tracks profit/loss, and maintains a complete log of all trades.
--   **Data Management:** Includes features for importing JPX official stock data and batch fetching real prices from Yahoo Finance.
+-   **Data Management:** Includes features for importing JPX official stock data and US stock data, with batch fetching real prices from Yahoo Finance. Stocks table has a `market` column ("JP" or "US").
 -   **Energy Monitor:** Tracks and displays power consumption and CO₂ emissions for computational tasks, especially AI/Quantum operations.
 
 **Technical Implementations:**

@@ -6,7 +6,7 @@ import { requireAuth } from "./auth";
 import { z } from "zod";
 import { fetchHistoricalPrices } from "./yahoo-finance";
 import { fetchJQuantsHistorical, fetchJQuantsLatestPrices, isJQuantsConfigured } from "./jquants";
-import { importJPXStocks, fetchBatchPrices, startFetchAllPrices, getFetchAllProgress, startFetchFundamentals, getFundamentalsFetchProgress } from "./import-stocks";
+import { importJPXStocks, fetchBatchPrices, startFetchAllPrices, getFetchAllProgress, startFetchFundamentals, getFundamentalsFetchProgress, importUSStocks, startFetchUSPrices, getUSFetchProgress } from "./import-stocks";
 import { startScheduler, getSchedulerStatus, setSchedulerEnabled } from "./scheduler";
 import { startIndicatorBatch, getIndicatorBatchProgress, startIntradayIndicatorBatch, getIntradayIndicatorBatchProgress } from "./technical-batch";
 import { startBacktest, getBacktestProgress, cancelBacktest, DEFAULT_PARAMS, type BacktestParams, computeIndicatorsAtIndex } from "./backtest";
@@ -91,9 +91,10 @@ export async function registerRoutes(
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
     const offset = parseInt(req.query.offset as string) || 0;
     const search = req.query.search as string;
+    const market = req.query.market as string | undefined;
 
     if (search !== undefined || req.query.q !== undefined) {
-      const result = await storage.searchStocks(query, limit, offset);
+      const result = await storage.searchStocks(query, limit, offset, market);
       res.json(result);
     } else if (req.query.watched !== undefined) {
       const watched = await storage.getWatchedStocks();
@@ -336,6 +337,28 @@ export async function registerRoutes(
     } catch (error: any) {
       res.status(500).json({ message: error.message || "Failed to import stocks" });
     }
+  });
+
+  app.post("/api/import-us-stocks", async (_req, res) => {
+    try {
+      const result = await importUSStocks();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message || "Failed to import US stocks" });
+    }
+  });
+
+  app.post("/api/fetch-us-prices", async (_req, res) => {
+    try {
+      await startFetchUSPrices(3);
+      res.json({ message: "米国株価取得を開始しました" });
+    } catch (error: any) {
+      res.status(409).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/fetch-us-prices/progress", async (_req, res) => {
+    res.json(getUSFetchProgress());
   });
 
   app.post("/api/fetch-prices", async (req, res) => {

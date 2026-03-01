@@ -54,10 +54,10 @@ export interface IStorage {
     marketCapCategory?: string | null;
   }): Promise<void>;
   bulkUpsertStocks(stockList: InsertStock[]): Promise<number>;
-  searchStocks(query: string, limit: number, offset: number): Promise<{ stocks: Stock[]; total: number }>;
+  searchStocks(query: string, limit: number, offset: number, market?: string): Promise<{ stocks: Stock[]; total: number }>;
   getWatchedStocks(): Promise<Stock[]>;
   getStocksWithPrices(): Promise<Stock[]>;
-  getAllStockTickers(): Promise<string[]>;
+  getAllStockTickers(market?: string): Promise<string[]>;
   upsertTechnicalIndicator(indicator: InsertTechnicalIndicator): Promise<void>;
   getTechnicalIndicator(ticker: string, timeframe?: string): Promise<TechnicalIndicator | undefined>;
   getAllTechnicalIndicators(timeframe?: string): Promise<TechnicalIndicator[]>;
@@ -259,6 +259,7 @@ export class DatabaseStorage implements IStorage {
         set: {
           name: sql`excluded.name`,
           sector: sql`excluded.sector`,
+          market: sql`excluded.market`,
         },
       });
       inserted += batch.length;
@@ -266,15 +267,19 @@ export class DatabaseStorage implements IStorage {
     return inserted;
   }
 
-  async searchStocks(query: string, limit: number, offset: number): Promise<{ stocks: Stock[]; total: number }> {
+  async searchStocks(query: string, limit: number, offset: number, market?: string): Promise<{ stocks: Stock[]; total: number }> {
     const pattern = `%${query}%`;
-    const whereClause = query
+    const searchFilter = query
       ? or(
           ilike(stocks.ticker, pattern),
           ilike(stocks.name, pattern),
           ilike(stocks.sector, pattern)
         )
       : undefined;
+    const marketFilter = market ? eq(stocks.market, market) : undefined;
+    const whereClause = searchFilter && marketFilter
+      ? and(searchFilter, marketFilter)
+      : searchFilter || marketFilter;
 
     const [totalResult] = await db
       .select({ count: count() })
@@ -298,8 +303,9 @@ export class DatabaseStorage implements IStorage {
   async getStocksWithPrices(): Promise<Stock[]> {
     return db.select().from(stocks).where(sql`${stocks.currentPrice} > 0`);
   }
-  async getAllStockTickers(): Promise<string[]> {
-    const rows = await db.select({ ticker: stocks.ticker }).from(stocks);
+  async getAllStockTickers(market?: string): Promise<string[]> {
+    const whereClause = market ? eq(stocks.market, market) : undefined;
+    const rows = await db.select({ ticker: stocks.ticker }).from(stocks).where(whereClause);
     return rows.map(r => r.ticker);
   }
 
