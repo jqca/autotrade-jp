@@ -1685,8 +1685,8 @@ export default function Backtest() {
                         stroke="hsl(var(--primary))"
                         fill="url(#capitalGrad)"
                         strokeWidth={2}
-                        dot={{ r: 2, fill: "hsl(var(--primary))" }}
-                        activeDot={{ r: 4 }}
+                        dot={false}
+                        activeDot={false}
                       />
                     </AreaChart>
                   </ResponsiveContainer>
