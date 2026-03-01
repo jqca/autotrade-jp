@@ -42,6 +42,7 @@ export interface BacktestParams {
   rsiExcludeMin?: number;
   rsiExcludeMax?: number;
   minBarVolume?: number;
+  minVolatility?: number;
 }
 
 const INDICATOR_MAP: Record<string, (ind: ReturnType<typeof computeIndicators>) => boolean> = {
@@ -97,6 +98,7 @@ export const DEFAULT_PARAMS: BacktestParams = {
   rsiExcludeMin: 50,
   rsiExcludeMax: 60,
   minBarVolume: 10,
+  minVolatility: 0.5,
 };
 
 export interface BacktestProgress {
@@ -488,6 +490,7 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
             const volatility = recentCloses.length > 1
               ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
               : 0.02;
+            if ((params.minVolatility ?? 0) > 0 && volatility * 100 < (params.minVolatility ?? 0)) continue;
 
             const recent5 = closes.slice(Math.max(0, d - 4), d + 1);
             if (recent5.length >= 3) {
@@ -842,6 +845,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               const volatility = recentCloses.length > 1
                 ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
                 : 0.02;
+              if ((params.minVolatility ?? 0) > 0 && volatility * 100 < (params.minVolatility ?? 0)) continue;
 
               let effectiveTarget = params.targetPercent;
               if (params.dynamicTarget) {
@@ -1218,6 +1222,7 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
             const volatility = recentCloses.length > 1
               ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
               : 0.02;
+            if ((params.minVolatility ?? 0) > 0 && volatility * 100 < (params.minVolatility ?? 0)) continue;
 
             const recent5 = closes.slice(Math.max(0, d - 4), d + 1);
             if (recent5.length >= 3) {
@@ -1441,6 +1446,7 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               const volatility = recentCloses.length > 1
                 ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
                 : 0.02;
+              if ((params.minVolatility ?? 0) > 0 && volatility * 100 < (params.minVolatility ?? 0)) continue;
 
               let effectiveTarget = params.targetPercent;
               if (params.dynamicTarget) {
@@ -1586,6 +1592,7 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
             const volatility = recentCloses.length > 1
               ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
               : 0.02;
+            if ((params.minVolatility ?? 0) > 0 && volatility * 100 < (params.minVolatility ?? 0)) continue;
 
             const recent5 = closes.slice(Math.max(0, d - 4), d + 1);
             if (recent5.length >= 3) {
@@ -1806,6 +1813,7 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               const volatility = recentCloses.length > 1
                 ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
                 : 0.02;
+              if ((params.minVolatility ?? 0) > 0 && volatility * 100 < (params.minVolatility ?? 0)) continue;
 
               let effectiveTarget = params.targetPercent;
               if (params.dynamicTarget) {

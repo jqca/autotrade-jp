@@ -244,6 +244,7 @@ export default function Backtest() {
       rsiExcludeMin: 50,
       rsiExcludeMax: 60,
       minBarVolume: 10,
+      minVolatility: 0.5,
     }),
     onSuccess: () => {
       setPolling(true);
