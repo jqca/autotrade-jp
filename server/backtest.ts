@@ -64,7 +64,7 @@ export const DEFAULT_PARAMS: BacktestParams = {
   targetPercent: 1.0,
   minBuyIndicators: 3,
   rsiMin: 0,
-  rsiMax: 30,
+  rsiMax: 75,
   requireMaBuy: false,
   simDays: 200,
   timeframe: "1d",

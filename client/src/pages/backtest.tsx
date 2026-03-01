@@ -135,7 +135,7 @@ export default function Backtest() {
   const [targetPercent, setTargetPercent] = useState(1.0);
   const [requiredIndicators, setRequiredIndicators] = useState<string[]>(["macd", "ma"]);
   const [rsiMin, setRsiMin] = useState(25);
-  const [rsiMax, setRsiMax] = useState(30);
+  const [rsiMax, setRsiMax] = useState(75);
   const [simDays, setSimDays] = useState(200);
   const [timeframe, setTimeframe] = useState("1d");
   const [startDate, setStartDate] = useState("");
