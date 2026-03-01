@@ -36,6 +36,7 @@ export interface BacktestParams {
   requireDailyConfirm?: boolean;
   dailyMinBuyIndicators?: number;
   dailyMinSignalScore?: number;
+  initialCapital?: number;
 }
 
 export const DEFAULT_PARAMS: BacktestParams = {
@@ -67,6 +68,7 @@ export const DEFAULT_PARAMS: BacktestParams = {
   requireDailyConfirm: true,
   dailyMinBuyIndicators: 2,
   dailyMinSignalScore: 0,
+  initialCapital: 1000000,
 };
 
 export interface BacktestProgress {
@@ -83,6 +85,8 @@ export interface BacktestProgress {
   phase?: string;
   aiFiltered?: number;
   quantumSelected?: number;
+  skippedByCapital?: number;
+  capitalRemaining?: number;
 }
 
 const progress: BacktestProgress = {
@@ -341,6 +345,8 @@ interface SignalCandidate {
   quantumSelected?: boolean;
   quantumMethod?: string;
   varEstimate?: number | null;
+  capitalBefore?: number;
+  capitalAfter?: number;
 }
 
 async function collectDailySignals(params: BacktestParams, tickers: string[], concurrency: number): Promise<SignalCandidate[]> {
@@ -996,6 +1002,66 @@ async function runAiQuantumPipeline(signals: SignalCandidate[], params: Backtest
   });
 }
 
+const UNIT_SHARES = 100;
+
+function simulateCapital(signals: SignalCandidate[], initialCapital: number): { executed: SignalCandidate[]; skipped: number; finalCapital: number } {
+  if (initialCapital <= 0) {
+    for (const s of signals) {
+      s.capitalBefore = undefined;
+      s.capitalAfter = undefined;
+    }
+    return { executed: signals, skipped: 0, finalCapital: 0 };
+  }
+
+  signals.sort((a, b) => a.buyDate.localeCompare(b.buyDate));
+
+  let cash = initialCapital;
+  const openPositions: { ticker: string; buyDate: string; sellDate: string; buyCost: number; sellProceeds: number }[] = [];
+  const executed: SignalCandidate[] = [];
+  let skipped = 0;
+
+  for (const signal of signals) {
+    const closedBefore: number[] = [];
+    for (let i = openPositions.length - 1; i >= 0; i--) {
+      const pos = openPositions[i];
+      if (pos.sellDate <= signal.buyDate) {
+        cash += pos.sellProceeds;
+        closedBefore.push(i);
+      }
+    }
+    for (const idx of closedBefore.sort((a, b) => b - a)) {
+      openPositions.splice(idx, 1);
+    }
+
+    const buyCost = Math.round(signal.buyPrice * UNIT_SHARES);
+    if (cash < buyCost) {
+      skipped++;
+      continue;
+    }
+
+    signal.capitalBefore = Math.round(cash);
+    cash -= buyCost;
+
+    const sellProceeds = Math.round(signal.sellPrice * UNIT_SHARES);
+    openPositions.push({
+      ticker: signal.ticker,
+      buyDate: signal.buyDate,
+      sellDate: signal.sellDate,
+      buyCost,
+      sellProceeds,
+    });
+
+    signal.capitalAfter = Math.round(cash + openPositions.reduce((sum, p) => sum + p.sellProceeds, 0));
+    executed.push(signal);
+  }
+
+  for (const pos of openPositions) {
+    cash += pos.sellProceeds;
+  }
+
+  return { executed, skipped, finalCapital: Math.round(cash) };
+}
+
 async function saveSignals(signals: SignalCandidate[], runId: string, params: BacktestParams): Promise<void> {
   const useAiQuantum = params.useAi || params.useQuantum;
 
@@ -1027,6 +1093,8 @@ async function saveSignals(signals: SignalCandidate[], runId: string, params: Ba
       quantumSelected: s.quantumSelected ?? null,
       quantumMethod: s.quantumMethod ?? null,
       varEstimate: s.varEstimate ?? null,
+      capitalBefore: s.capitalBefore ?? null,
+      capitalAfter: s.capitalAfter ?? null,
       runId,
     };
 
@@ -1034,7 +1102,363 @@ async function saveSignals(signals: SignalCandidate[], runId: string, params: Ba
   }
 }
 
-async function runDailyBacktest(params: BacktestParams, runId: string, tickers: string[], concurrency: number): Promise<void> {
+async function collectDailySignalsDirect(params: BacktestParams, tickers: string[], concurrency: number): Promise<SignalCandidate[]> {
+  const allSignals: SignalCandidate[] = [];
+  const useTrailingStop = params.trailingStop ?? false;
+  const trailingStopPct = params.trailingStopPercent ?? 1.5;
+
+  for (let i = 0; i < tickers.length; i += concurrency) {
+    if (isCancelled()) break;
+    const batch = tickers.slice(i, i + concurrency);
+
+    await Promise.allSettled(
+      batch.map(async (ticker) => {
+        try {
+          const history = await fetchHistoricalPrices(ticker, "2y", "1d");
+          if (history.length < 280) {
+            progress.processed++;
+            return;
+          }
+
+          const closes = history.map(p => p.close);
+          const dates = history.map(p => p.date);
+          const opens = history.map(p => p.open);
+          const highs = history.map(p => p.high);
+          const lows = history.map(p => p.low);
+          const volumes = history.map(p => p.volume);
+
+          const startIdx = Math.max(79, closes.length - params.simDays - 1);
+          const holdDays = Math.max(1, params.maxHoldDays ?? 1);
+          const stopLoss = params.stopLossPercent ?? 0;
+
+          for (let d = startIdx; d < closes.length - 1; d++) {
+            if ((params.minVolume ?? 0) > 0 && volumes[d] < (params.minVolume ?? 0)) continue;
+
+            const indicators = computeIndicatorsAtIndex(closes, d);
+            if (!indicators) continue;
+
+            if (params.requireUptrend && !indicators.isUptrend) continue;
+
+            const buyIndicators = [indicators.macdTrend, indicators.rsiTrend, indicators.maTrend, indicators.bbTrend]
+              .filter(t => t === "buy").length;
+
+            if (indicators.overallSignal !== "buy" || buyIndicators < params.minBuyIndicators) continue;
+            if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
+            if (indicators.rsiValue != null) {
+              if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
+            }
+
+            const buyDayIdx = d + 1;
+            if (buyDayIdx >= closes.length) continue;
+
+            const buyDateStr2 = dates[buyDayIdx];
+            const buyDow2 = new Date(buyDateStr2).getDay();
+            if (buyDow2 === 5) continue;
+
+            const buyPrice = opens[buyDayIdx];
+
+            if (buyPrice >= highs[d]) continue;
+
+            const recentCloses = closes.slice(Math.max(0, d - 20), d + 1);
+            const volatility = recentCloses.length > 1
+              ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
+              : 0.02;
+
+            const recent5 = closes.slice(Math.max(0, d - 4), d + 1);
+            if (recent5.length >= 3) {
+              let downDays = 0;
+              for (let r = 1; r < recent5.length; r++) {
+                if (recent5[r] < recent5[r - 1]) downDays++;
+              }
+              if (downDays >= recent5.length - 1) continue;
+            }
+
+            let effectiveTarget = params.targetPercent;
+            if (params.dynamicTarget) {
+              const volPercent = volatility * 100;
+              const minTarget = stopLoss > 0 ? stopLoss * 1.5 : 0.5;
+              effectiveTarget = Math.max(minTarget, Math.min(5.0, volPercent * 1.2));
+            }
+
+            const targetMultiplier = 1 + effectiveTarget / 100;
+            const targetPrice = Math.round(buyPrice * targetMultiplier * 100) / 100;
+            const stopPrice = stopLoss > 0 ? Math.round(buyPrice * (1 - stopLoss / 100) * 100) / 100 : 0;
+
+            let isWin = false;
+            let sellPrice = 0;
+            let maxHigh = buyPrice;
+            let sellDate = dates[buyDayIdx];
+            let trailingStopPrice2 = 0;
+
+            const endIdx = Math.min(buyDayIdx + holdDays - 1, closes.length - 1);
+            for (let k = buyDayIdx; k <= endIdx; k++) {
+              if (highs[k] >= targetPrice) { isWin = true; sellPrice = targetPrice; sellDate = dates[k]; break; }
+              if (highs[k] > maxHigh) {
+                maxHigh = highs[k];
+                if (useTrailingStop) {
+                  trailingStopPrice2 = Math.round(maxHigh * (1 - trailingStopPct / 100) * 100) / 100;
+                }
+              }
+              if (stopPrice > 0 && lows[k] <= stopPrice) { isWin = false; sellPrice = stopPrice; sellDate = dates[k]; break; }
+              if (useTrailingStop && trailingStopPrice2 > 0 && trailingStopPrice2 > buyPrice && lows[k] <= trailingStopPrice2) { sellPrice = trailingStopPrice2; sellDate = dates[k]; isWin = true; break; }
+              if (k === endIdx) { sellPrice = closes[k]; sellDate = dates[k]; isWin = sellPrice > buyPrice; }
+            }
+            if (sellPrice === 0) { sellPrice = closes[endIdx]; sellDate = dates[endIdx]; }
+
+            const profitLoss = Math.round((sellPrice - buyPrice) * 100) / 100;
+            const profitLossPercent = Math.round((profitLoss / buyPrice) * 10000) / 100;
+
+            allSignals.push({
+              ticker,
+              signalDate: dates[d],
+              signalLabel: indicators.overallLabel,
+              buyDate: dates[buyDayIdx],
+              buyPrice,
+              dayHigh: maxHigh,
+              sellDate,
+              sellPrice,
+              profitLoss,
+              profitLossPercent,
+              isWin,
+              macdTrend: indicators.macdTrend,
+              rsiTrend: indicators.rsiTrend,
+              maTrend: indicators.maTrend,
+              bbTrend: indicators.bbTrend,
+              rsiValue: indicators.rsiValue,
+              volatility,
+              priceChange: d > 0 ? (closes[d] - closes[d - 1]) / closes[d - 1] : 0,
+            });
+            progress.signals++;
+          }
+        } catch {
+          progress.errors++;
+        }
+        progress.processed++;
+      })
+    );
+
+    progress.message = `${progress.processed}/${progress.total} 処理済み (${progress.signals}件シグナル検出)`;
+
+    if (i + concurrency < tickers.length) {
+      await new Promise(r => setTimeout(r, 300));
+    }
+  }
+
+  return allSignals;
+}
+
+async function collectIntradaySignalsDirect(params: BacktestParams, tickers: string[], concurrency: number): Promise<SignalCandidate[]> {
+  const allSignals: SignalCandidate[] = [];
+
+  for (let i = 0; i < tickers.length; i += concurrency) {
+    if (isCancelled()) break;
+    const batch = tickers.slice(i, i + concurrency);
+
+    await Promise.allSettled(
+      batch.map(async (ticker) => {
+        try {
+          const bars = await loadIntradayBars(ticker, params.simDays, params.timeframe, params.startDate, params.endDate);
+          if (bars.length < 200) {
+            progress.processed++;
+            return;
+          }
+
+          bars.sort((a, b) => a.date.localeCompare(b.date));
+
+          const useDailyConfirm2 = params.requireDailyConfirm ?? false;
+          let dailyCtx2: Map<string, DailyContext> | null = null;
+          if (useDailyConfirm2) {
+            dailyCtx2 = await buildDailyContext(ticker);
+          }
+
+          const dayMap = groupBarsByDay(bars);
+          const tradingDays = Array.from(dayMap.keys()).sort();
+
+          const closes = bars.map(b => b.close);
+
+          let barOffset = 0;
+          const dayBarOffsets: { day: string; startIdx: number; endIdx: number }[] = [];
+          const dayOffsetMap = new Map<string, { startIdx: number; endIdx: number }>();
+          for (const day of tradingDays) {
+            const dayBars = dayMap.get(day)!;
+            const info = { startIdx: barOffset, endIdx: barOffset + dayBars.length - 1 };
+            dayBarOffsets.push({ day, ...info });
+            dayOffsetMap.set(day, info);
+            barOffset += dayBars.length;
+          }
+
+          const simDays = Math.min(params.simDays, tradingDays.length);
+          const startDayIdx = Math.max(0, tradingDays.length - simDays - 1);
+
+          for (let dayIdx = startDayIdx; dayIdx < tradingDays.length - 1; dayIdx++) {
+            const dayInfo = dayBarOffsets[dayIdx];
+            const dayBars = dayMap.get(dayInfo.day)!;
+
+            if (useDailyConfirm2 && dailyCtx2) {
+              const dc = dailyCtx2.get(dayInfo.day);
+              if (!dc) continue;
+              const dailyMinBuy = params.dailyMinBuyIndicators ?? 2;
+              if (dc.buyIndicatorCount < dailyMinBuy) continue;
+              const dailyMinScore = params.dailyMinSignalScore ?? 0;
+              if (dailyMinScore > 0 && dc.signalScore < dailyMinScore) continue;
+            }
+
+            const stopLoss = params.stopLossPercent ?? 0;
+
+            for (let barInDay = 0; barInDay < dayBars.length - 1; barInDay++) {
+              const globalIdx = dayInfo.startIdx + barInDay;
+              if (globalIdx < 50) continue;
+
+              if ((params.minVolume ?? 0) > 0 && bars[globalIdx].volume < (params.minVolume ?? 0)) continue;
+
+              const indicators = computeIndicatorsAtIndex(closes, globalIdx, 50);
+              if (!indicators) continue;
+
+              if (params.requireUptrend && !indicators.isUptrend) continue;
+
+              const buyIndicators = [indicators.macdTrend, indicators.rsiTrend, indicators.maTrend, indicators.bbTrend]
+                .filter(t => t === "buy").length;
+
+              if (indicators.overallSignal !== "buy" || buyIndicators < params.minBuyIndicators) continue;
+              if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
+              if (indicators.rsiValue != null) {
+                if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
+              }
+
+              if (indicators.maTrend === "sell") {
+                if (!indicators.isMacdCrossover && !indicators.isRsiReversal) continue;
+              }
+
+              if (params.requireMacdCrossover && !indicators.isMacdCrossover) continue;
+              if (params.requireRsiReversal && !indicators.isRsiReversal) continue;
+              if ((params.minSignalScore ?? 0) > 0 && indicators.signalScore < (params.minSignalScore ?? 0)) continue;
+
+              if (params.requireVolumeSurge) {
+                const surgeRatio = params.volumeSurgeRatio ?? 1.5;
+                const lookback = Math.min(20, globalIdx);
+                let avgVol = 0;
+                for (let vi = globalIdx - lookback; vi < globalIdx; vi++) avgVol += bars[vi].volume;
+                avgVol = avgVol / Math.max(1, lookback);
+                if (avgVol > 0 && bars[globalIdx].volume < avgVol * surgeRatio) continue;
+              }
+
+              const entryBarGlobal = globalIdx + 1;
+              if (entryBarGlobal >= bars.length) continue;
+
+              const entryBar = bars[entryBarGlobal];
+              const buyPrice = entryBar.open;
+
+              const maxGapPctVal2 = params.maxGapPercent ?? 2.0;
+              if (maxGapPctVal2 > 0 && maxGapPctVal2 < 100) {
+                const gapPct = Math.abs((buyPrice - closes[globalIdx]) / closes[globalIdx]) * 100;
+                if (gapPct > maxGapPctVal2) continue;
+              }
+
+              const confirmDaysVal2 = Math.max(1, params.confirmDays ?? 1);
+              if (confirmDaysVal2 > 1) {
+                let confirmed = true;
+                for (let cd = 1; cd < confirmDaysVal2; cd++) {
+                  const prevIdx = globalIdx - cd;
+                  if (prevIdx < 0) { confirmed = false; break; }
+                  const prevInd = computeIndicatorsAtIndex(closes, prevIdx, 50);
+                  if (!prevInd || prevInd.overallSignal !== "buy") { confirmed = false; break; }
+                }
+                if (!confirmed) continue;
+              }
+
+              const entryDay = extractDatePart(entryBar.date);
+
+              const recentCloses = closes.slice(Math.max(0, globalIdx - 20), globalIdx + 1);
+              const volatility = recentCloses.length > 1
+                ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
+                : 0.02;
+
+              let effectiveTarget = params.targetPercent;
+              if (params.dynamicTarget) {
+                const volPercent = volatility * 100;
+                const minTarget = stopLoss > 0 ? stopLoss * 1.5 : 0.3;
+                effectiveTarget = Math.max(minTarget, Math.min(3.0, volPercent * 0.8));
+              }
+
+              const targetMultiplier = 1 + effectiveTarget / 100;
+              const targetPrice = Math.round(buyPrice * targetMultiplier * 100) / 100;
+              const stopPrice = stopLoss > 0 ? Math.round(buyPrice * (1 - stopLoss / 100) * 100) / 100 : 0;
+
+              let isWin = false;
+              let sellPrice = 0;
+              let maxHigh = entryBar.high;
+              let sellDate = entryBar.date;
+              const useTrailingStop2 = params.trailingStop ?? false;
+              const trailingStopPct2 = params.trailingStopPercent ?? 1.5;
+              let trailingStopPrice2 = 0;
+
+              const entryDayInfo = dayOffsetMap.get(entryDay);
+              if (!entryDayInfo) continue;
+
+              for (let k = entryBarGlobal; k <= entryDayInfo.endIdx; k++) {
+                if (bars[k].high >= targetPrice) { isWin = true; sellPrice = targetPrice; sellDate = bars[k].date; break; }
+                if (bars[k].high > maxHigh) {
+                  maxHigh = bars[k].high;
+                  if (useTrailingStop2) {
+                    trailingStopPrice2 = Math.round(maxHigh * (1 - trailingStopPct2 / 100) * 100) / 100;
+                  }
+                }
+                if (stopPrice > 0 && bars[k].low <= stopPrice) { isWin = false; sellPrice = stopPrice; sellDate = bars[k].date; break; }
+                if (useTrailingStop2 && trailingStopPrice2 > 0 && trailingStopPrice2 > buyPrice && bars[k].low <= trailingStopPrice2) { sellPrice = trailingStopPrice2; sellDate = bars[k].date; isWin = true; break; }
+              }
+
+              if (sellPrice === 0) {
+                sellPrice = bars[entryDayInfo.endIdx].close;
+                sellDate = bars[entryDayInfo.endIdx].date;
+                isWin = sellPrice > buyPrice;
+              }
+
+              const profitLoss = Math.round((sellPrice - buyPrice) * 100) / 100;
+              const profitLossPercent = Math.round((profitLoss / buyPrice) * 10000) / 100;
+
+              allSignals.push({
+                ticker,
+                signalDate: bars[globalIdx].date,
+                signalLabel: indicators.overallLabel,
+                buyDate: entryBar.date,
+                buyPrice,
+                dayHigh: maxHigh,
+                sellDate,
+                sellPrice,
+                profitLoss,
+                profitLossPercent,
+                isWin,
+                macdTrend: indicators.macdTrend,
+                rsiTrend: indicators.rsiTrend,
+                maTrend: indicators.maTrend,
+                bbTrend: indicators.bbTrend,
+                rsiValue: indicators.rsiValue,
+                volatility,
+                priceChange: globalIdx > 0 ? (closes[globalIdx] - closes[globalIdx - 1]) / closes[globalIdx - 1] : 0,
+              });
+              progress.signals++;
+
+              break;
+            }
+          }
+        } catch {
+          progress.errors++;
+        }
+        progress.processed++;
+      })
+    );
+
+    progress.message = `${progress.processed}/${progress.total} 処理済み (${progress.signals}件シグナル検出)`;
+
+    if (i + concurrency < tickers.length) {
+      await new Promise(r => setTimeout(r, 800));
+    }
+  }
+
+  return allSignals;
+}
+
+async function _unused_runDailyBacktest(params: BacktestParams, runId: string, tickers: string[], concurrency: number): Promise<void> {
   for (let i = 0; i < tickers.length; i += concurrency) {
     if (isCancelled()) break;
     const batch = tickers.slice(i, i + concurrency);
@@ -1394,10 +1818,13 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
   const useAiQuantum = params.useAi || params.useQuantum;
   const tfLabels: Record<string, string> = { "5m": "5分足", "10m": "10分足", "30m": "30分足", "1d": "日足" };
   const tfLabel = tfLabels[params.timeframe] || params.timeframe;
+  const initialCapital = params.initialCapital ?? 1000000;
 
   const aiQuantumLabel = useAiQuantum
     ? ` [${params.useAi ? "AI" : ""}${params.useAi && params.useQuantum ? "+" : ""}${params.useQuantum ? "量子" : ""}]`
     : "";
+
+  const capitalLabel = initialCapital > 0 ? ` 資金${(initialCapital / 10000).toFixed(0)}万円` : "";
 
   const runConfig: InsertBacktestRun = {
     runId,
@@ -1408,10 +1835,11 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
     requireMaBuy: params.requireMaBuy,
     simDays: params.simDays,
     timeframe: params.timeframe,
-    label: params.label || `${tfLabel} 目標${params.targetPercent}% 指標${params.minBuyIndicators}+ RSI${params.rsiMin}-${params.rsiMax}${params.requireMaBuy ? " MA必須" : ""}${aiQuantumLabel}${params.startDate || params.endDate ? ` ${params.startDate || ""}〜${params.endDate || ""}` : ""}`,
+    label: params.label || `${tfLabel} 目標${params.targetPercent}% 指標${params.minBuyIndicators}+ RSI${params.rsiMin}-${params.rsiMax}${params.requireMaBuy ? " MA必須" : ""}${aiQuantumLabel}${capitalLabel}${params.startDate || params.endDate ? ` ${params.startDate || ""}〜${params.endDate || ""}` : ""}`,
     useAi: params.useAi ?? false,
     useQuantum: params.useQuantum ?? false,
     aiThreshold: params.aiThreshold ?? 0.5,
+    initialCapital,
   };
   await storage.insertBacktestRun(runConfig);
 
@@ -1423,76 +1851,91 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
   progress.errors = 0;
   progress.startedAt = Date.now();
   progress.completedAt = null;
-  progress.message = `${tfLabel}バックテストを開始しました...`;
+  progress.message = `${tfLabel}バックテストを開始しました... (初期資金: ${(initialCapital / 10000).toFixed(0)}万円)`;
   progress.runId = runId;
   progress.params = params;
-  progress.phase = useAiQuantum ? "scan" : undefined;
+  progress.phase = useAiQuantum ? "scan" : "scan";
   progress.aiFiltered = undefined;
   progress.quantumSelected = undefined;
+  progress.skippedByCapital = undefined;
+  progress.capitalRemaining = undefined;
 
-  console.log(`[Backtest] ${tickers.length}銘柄の${tfLabel}バックテストを開始 (runId: ${runId}, AI: ${params.useAi}, 量子: ${params.useQuantum}, params: ${JSON.stringify(params)})`);
+  console.log(`[Backtest] ${tickers.length}銘柄の${tfLabel}バックテストを開始 (runId: ${runId}, 初期資金: ${initialCapital}円, AI: ${params.useAi}, 量子: ${params.useQuantum})`);
 
   (async () => {
     try {
-      if (useAiQuantum) {
-        progress.phase = "scan";
-        progress.message = `Phase1: シグナルスキャン中...`;
+      const backtestStartMs = Date.now();
 
-        let allSignals: SignalCandidate[];
+      progress.phase = "scan";
+      progress.message = `Phase1: シグナルスキャン中...`;
+
+      let allSignals: SignalCandidate[];
+      if (useAiQuantum) {
         if (isIntraday) {
           allSignals = await collectIntradaySignals(params, tickers, concurrency);
         } else {
           allSignals = await collectDailySignals(params, tickers, concurrency);
         }
-
-        const totalRawSignals = allSignals.length;
-
-        if (allSignals.length > 0) {
-          progress.phase = "ai_quantum";
-          progress.message = `Phase2: AI/量子処理中 (${totalRawSignals}件のシグナルを分析)...`;
-
-          try {
-            const { processed, summary } = await runAiQuantumPipeline(allSignals, params);
-            allSignals = processed;
-
-            const aiPassed = allSignals.filter(s => s.ai_passed !== false).length;
-            const quantumSel = allSignals.filter(s => s.quantumSelected !== false).length;
-            progress.aiFiltered = totalRawSignals - aiPassed;
-            progress.quantumSelected = quantumSel;
-
-            const summaryJson = JSON.stringify(summary);
-            try {
-              await storage.updateBacktestRunSummary(runId, summaryJson);
-            } catch (e) {
-              console.error("[Backtest] AI/量子サマリー保存エラー:", e);
-            }
-          } catch (err: any) {
-            console.error("[Backtest] AI/量子パイプラインエラー:", err.message);
-            progress.message = `AI/量子処理エラー: ${err.message} — ルールベースで保存します`;
-          }
-        }
-
-        progress.phase = "save";
-        progress.message = `Phase3: 結果保存中...`;
-        await saveSignals(allSignals, runId, params);
-
-        const savedCount = allSignals.filter(s => {
-          if (params.useAi && s.ai_passed === false) return false;
-          if (params.useQuantum && s.quantumSelected === false) return false;
-          return true;
-        }).length;
-
-        progress.signals = savedCount;
       } else {
-        const backtestStartMs = Date.now();
         if (isIntraday) {
-          await runIntradayBacktest(params, runId, tickers, concurrency);
+          allSignals = await collectIntradaySignalsDirect(params, tickers, concurrency);
         } else {
-          await runDailyBacktest(params, runId, tickers, concurrency);
+          allSignals = await collectDailySignalsDirect(params, tickers, concurrency);
         }
-        const backtestDurationMs = Date.now() - backtestStartMs;
-        logEnergy("backtest", isIntraday ? "日中バックテスト (テクニカル分析)" : "日次バックテスト (テクニカル分析)", "CPU", backtestDurationMs, 0.6, { mode: isIntraday ? "intraday" : "daily", tickers: tickers.length }).catch(() => {});
       }
+
+      const totalRawSignals = allSignals.length;
+
+      if (useAiQuantum && allSignals.length > 0) {
+        progress.phase = "ai_quantum";
+        progress.message = `Phase2: AI/量子処理中 (${totalRawSignals}件のシグナルを分析)...`;
+
+        try {
+          const { processed, summary } = await runAiQuantumPipeline(allSignals, params);
+          allSignals = processed;
+
+          const aiPassed = allSignals.filter(s => s.ai_passed !== false).length;
+          const quantumSel = allSignals.filter(s => s.quantumSelected !== false).length;
+          progress.aiFiltered = totalRawSignals - aiPassed;
+          progress.quantumSelected = quantumSel;
+
+          allSignals = allSignals.filter(s => {
+            if (params.useAi && s.ai_passed === false) return false;
+            if (params.useQuantum && s.quantumSelected === false) return false;
+            return true;
+          });
+
+          const summaryJson = JSON.stringify(summary);
+          try {
+            await storage.updateBacktestRunSummary(runId, summaryJson);
+          } catch (e) {
+            console.error("[Backtest] AI/量子サマリー保存エラー:", e);
+          }
+        } catch (err: any) {
+          console.error("[Backtest] AI/量子パイプラインエラー:", err.message);
+          progress.message = `AI/量子処理エラー: ${err.message} — ルールベースで保存します`;
+        }
+      }
+
+      if (initialCapital > 0 && allSignals.length > 0) {
+        progress.phase = "capital";
+        progress.message = `資金シミュレーション中 (${allSignals.length}件, 初期${(initialCapital / 10000).toFixed(0)}万円)...`;
+
+        const { executed, skipped, finalCapital } = simulateCapital(allSignals, initialCapital);
+        allSignals = executed;
+        progress.skippedByCapital = skipped;
+        progress.capitalRemaining = finalCapital;
+
+        console.log(`[Backtest] 資金シミュレーション: ${executed.length}件実行, ${skipped}件スキップ（資金不足）, 最終資金: ${finalCapital}円`);
+      }
+
+      progress.phase = "save";
+      progress.message = `結果保存中 (${allSignals.length}件)...`;
+      await saveSignals(allSignals, runId, params);
+      progress.signals = allSignals.length;
+
+      const backtestDurationMs = Date.now() - backtestStartMs;
+      logEnergy("backtest", isIntraday ? "日中バックテスト (テクニカル分析)" : "日次バックテスト (テクニカル分析)", "CPU", backtestDurationMs, 0.6, { mode: isIntraday ? "intraday" : "daily", tickers: tickers.length }).catch(() => {});
 
       progress.completedAt = Date.now();
       progress.phase = undefined;
@@ -1507,7 +1950,10 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
         const aiQuantumInfo = useAiQuantum
           ? ` (AI除外: ${progress.aiFiltered ?? 0}件, 量子選択: ${progress.quantumSelected ?? "-"}件)`
           : "";
-        progress.message = `完了: ${progress.processed}銘柄処理, ${progress.signals}件シグナル${aiQuantumInfo} (${elapsed}秒)`;
+        const capitalInfo = initialCapital > 0
+          ? ` (資金不足スキップ: ${progress.skippedByCapital ?? 0}件, 最終資金: ${((progress.capitalRemaining ?? initialCapital) / 10000).toFixed(0)}万円)`
+          : "";
+        progress.message = `完了: ${progress.processed}銘柄処理, ${progress.signals}件シグナル${aiQuantumInfo}${capitalInfo} (${elapsed}秒)`;
         console.log(`[Backtest] ${progress.message}`);
       }
     } catch (err: any) {

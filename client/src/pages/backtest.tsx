@@ -44,6 +44,8 @@ interface BacktestProgress {
   phase?: string;
   aiFiltered?: number;
   quantumSelected?: number;
+  skippedByCapital?: number;
+  capitalRemaining?: number;
 }
 
 interface BacktestParams {
@@ -77,6 +79,7 @@ interface BacktestParams {
   requireDailyConfirm?: boolean;
   dailyMinBuyIndicators?: number;
   dailyMinSignalScore?: number;
+  initialCapital?: number;
 }
 
 function TrendBadge({ trend, label }: { trend: string | null; label: string }) {
@@ -105,6 +108,7 @@ function PhaseIndicator({ phase }: { phase?: string }) {
   const labels: Record<string, { label: string; icon: typeof Brain }> = {
     scan: { label: "シグナルスキャン", icon: Activity },
     ai_quantum: { label: "AI/量子分析", icon: Brain },
+    capital: { label: "資金シミュレーション", icon: Banknote },
     save: { label: "結果保存", icon: CheckCircle },
   };
   const info = labels[phase] || { label: phase, icon: Activity };
@@ -152,6 +156,7 @@ export default function Backtest() {
   const [requireDailyConfirm, setRequireDailyConfirm] = useState(true);
   const [dailyMinBuyIndicators, setDailyMinBuyIndicators] = useState(2);
   const [dailyMinSignalScore, setDailyMinSignalScore] = useState(0);
+  const [initialCapital, setInitialCapital] = useState(1000000);
   const [showAdvanced, setShowAdvanced] = useState(true);
 
   const [now, setNow] = useState(Date.now());
@@ -227,6 +232,7 @@ export default function Backtest() {
       requireDailyConfirm,
       dailyMinBuyIndicators,
       dailyMinSignalScore,
+      initialCapital,
     }),
     onSuccess: () => {
       setPolling(true);
@@ -275,7 +281,13 @@ export default function Backtest() {
     const avgProfitYen = Math.round(totalProfitYen / results.length);
     const maxWinYen = Math.round(Math.max(...results.map(r => r.profitLoss * UNIT_SHARES)));
     const maxLossYen = Math.round(Math.min(...results.map(r => r.profitLoss * UNIT_SHARES)));
-    return { wins, losses, winRate, avgPL, total: results.length, profitFactor, hasAi, hasQuantum, totalProfitYen, totalInvestment, avgProfitYen, maxWinYen, maxLossYen };
+    const hasCapitalTracking = results.some(r => r.capitalBefore != null);
+    const capitalStart = hasCapitalTracking ? results[0]?.capitalBefore ?? null : null;
+    const capitalEnd = hasCapitalTracking ? results[results.length - 1]?.capitalAfter ?? null : null;
+    const capitalReturn = capitalStart != null && capitalEnd != null && capitalStart > 0
+      ? Math.round(((capitalEnd - capitalStart) / capitalStart) * 10000) / 100
+      : null;
+    return { wins, losses, winRate, avgPL, total: results.length, profitFactor, hasAi, hasQuantum, totalProfitYen, totalInvestment, avgProfitYen, maxWinYen, maxLossYen, hasCapitalTracking, capitalStart, capitalEnd, capitalReturn };
   }, [results]);
 
   const comparisonData = useMemo(() => {
@@ -393,8 +405,8 @@ export default function Backtest() {
                 </div>
               </div>
 
-              {(progressData.aiFiltered != null || progressData.quantumSelected != null) && (
-                <div className="flex items-center gap-4 text-xs border-t pt-3">
+              {(progressData.aiFiltered != null || progressData.quantumSelected != null || progressData.skippedByCapital != null) && (
+                <div className="flex items-center gap-4 text-xs border-t pt-3 flex-wrap">
                   {progressData.aiFiltered != null && (
                     <div className="flex items-center gap-1.5">
                       <Brain className="h-3 w-3 text-sky-500" />
@@ -405,6 +417,18 @@ export default function Backtest() {
                     <div className="flex items-center gap-1.5">
                       <Atom className="h-3 w-3 text-purple-500" />
                       <span>量子選択: {progressData.quantumSelected}件</span>
+                    </div>
+                  )}
+                  {progressData.skippedByCapital != null && (
+                    <div className="flex items-center gap-1.5">
+                      <Banknote className="h-3 w-3 text-amber-500" />
+                      <span>資金不足スキップ: {progressData.skippedByCapital}件</span>
+                    </div>
+                  )}
+                  {progressData.capitalRemaining != null && (
+                    <div className="flex items-center gap-1.5">
+                      <Banknote className="h-3 w-3 text-emerald-500" />
+                      <span>最終資金: {(progressData.capitalRemaining / 10000).toFixed(1)}万円</span>
                     </div>
                   )}
                 </div>
@@ -439,6 +463,11 @@ export default function Backtest() {
                     )}
                     {progressData.params.useQuantum && (
                       <Badge className="text-[10px] h-5 bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300" data-testid="badge-progress-quantum">量子</Badge>
+                    )}
+                    {progressData.params.initialCapital && progressData.params.initialCapital > 0 && (
+                      <Badge variant="outline" className="text-[10px] h-5 border-emerald-300 text-emerald-700 dark:text-emerald-400" data-testid="badge-progress-capital">
+                        資金{(progressData.params.initialCapital / 10000).toFixed(0)}万
+                      </Badge>
                     )}
                   </div>
                 )}
@@ -727,6 +756,28 @@ export default function Backtest() {
                   {timeframe !== "1d" && (
                     <p className="text-xs text-muted-foreground">日中足データは最大60日分取得可能です（DB蓄積データ優先使用）</p>
                   )}
+                </div>
+
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium flex items-center gap-1.5">
+                    <Banknote className="h-4 w-4 text-emerald-600" />
+                    初期資金
+                  </Label>
+                  <div className="flex items-center gap-3">
+                    <Slider
+                      value={[initialCapital / 10000]}
+                      onValueChange={([v]) => setInitialCapital(v * 10000)}
+                      min={10}
+                      max={1000}
+                      step={10}
+                      className="flex-1"
+                      data-testid="slider-initial-capital"
+                    />
+                    <Badge variant="secondary" className="min-w-[70px] justify-center" data-testid="text-initial-capital">
+                      {(initialCapital / 10000).toFixed(0)}万円
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">手元資金。資金不足の場合は買いシグナルがあってもスキップされます</p>
                 </div>
 
                 <div className="flex items-center gap-3 sm:col-span-2">
@@ -1427,7 +1478,7 @@ export default function Backtest() {
             </Card>
           )}
 
-          {stats && (
+          {stats && (<>
             <div className="grid gap-3 grid-cols-2 sm:grid-cols-5">
               <Card data-testid="card-win-count">
                 <CardContent className="pt-4 pb-3 px-4">
@@ -1491,7 +1542,66 @@ export default function Backtest() {
                 </CardContent>
               </Card>
             </div>
-          )}
+
+            {stats.hasCapitalTracking && stats.capitalStart != null && (
+              <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
+                <Card data-testid="card-capital-start">
+                  <CardContent className="pt-4 pb-3 px-4">
+                    <div className="flex items-center gap-2">
+                      <Banknote className="h-5 w-5 text-blue-500" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">初期資金</p>
+                        <p className="text-lg font-bold tabular-nums" data-testid="text-capital-start">
+                          {(stats.capitalStart / 10000).toFixed(0)}万円
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card data-testid="card-capital-end">
+                  <CardContent className="pt-4 pb-3 px-4">
+                    <div className="flex items-center gap-2">
+                      <Banknote className={`h-5 w-5 ${(stats.capitalEnd ?? 0) >= stats.capitalStart ? "text-emerald-500" : "text-red-500"}`} />
+                      <div>
+                        <p className="text-xs text-muted-foreground">最終資金</p>
+                        <p className={`text-lg font-bold tabular-nums ${(stats.capitalEnd ?? 0) >= stats.capitalStart ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`} data-testid="text-capital-end">
+                          {stats.capitalEnd != null ? `${(stats.capitalEnd / 10000).toFixed(1)}万円` : "-"}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card data-testid="card-capital-profit">
+                  <CardContent className="pt-4 pb-3 px-4">
+                    <div className="flex items-center gap-2">
+                      {stats.totalProfitYen >= 0
+                        ? <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                        : <TrendingDown className="h-5 w-5 text-red-500" />}
+                      <div>
+                        <p className="text-xs text-muted-foreground">総損益（円）</p>
+                        <p className={`text-lg font-bold tabular-nums ${stats.totalProfitYen >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`} data-testid="text-capital-profit">
+                          {stats.totalProfitYen >= 0 ? "+" : ""}{stats.totalProfitYen.toLocaleString("ja-JP")}円
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card data-testid="card-capital-return">
+                  <CardContent className="pt-4 pb-3 px-4">
+                    <div className="flex items-center gap-2">
+                      <BarChart3 className={`h-5 w-5 ${(stats.capitalReturn ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`} />
+                      <div>
+                        <p className="text-xs text-muted-foreground">資金収益率</p>
+                        <p className={`text-lg font-bold tabular-nums ${(stats.capitalReturn ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`} data-testid="text-capital-return">
+                          {stats.capitalReturn != null ? `${stats.capitalReturn >= 0 ? "+" : ""}${stats.capitalReturn}%` : "-"}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </>)}
 
           <div className="flex items-center gap-3 flex-wrap">
             {runs && runs.length > 0 && (

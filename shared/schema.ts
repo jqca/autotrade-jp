@@ -118,6 +118,7 @@ export const backtestRuns = pgTable("backtest_runs", {
   minVolume: integer("min_volume").notNull().default(0),
   requireUptrend: boolean("require_uptrend").notNull().default(false),
   dynamicTarget: boolean("dynamic_target").notNull().default(false),
+  initialCapital: integer("initial_capital").notNull().default(1000000),
   aiQuantumSummary: text("ai_quantum_summary"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -149,6 +150,8 @@ export const backtestResults = pgTable("backtest_results", {
   quantumSelected: boolean("quantum_selected"),
   quantumMethod: text("quantum_method"),
   varEstimate: real("var_estimate"),
+  capitalBefore: real("capital_before"),
+  capitalAfter: real("capital_after"),
   runId: text("run_id").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
