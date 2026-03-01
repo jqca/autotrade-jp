@@ -248,14 +248,26 @@ function computeIndicatorsAtIndex(closes: number[], dayIndex: number, minBars: n
   const emaSlow = ema(slice, 26);
   const macdLine = emaFast.map((f, i) => f - emaSlow[i]);
   const signalLine = ema(macdLine, 9);
+
+  const hist = macdLine.map((m, i) => m - signalLine[i]);
+  const histCurr = hist[n - 1];
+  const histPrev = hist[n - 2];
+  const histPrev2 = n >= 3 ? hist[n - 3] : histPrev;
+
   const prevMacd = macdLine[n - 2];
   const prevSignalVal = signalLine[n - 2];
+  const isMacdCrossover = prevMacd <= prevSignalVal && macdLine[n - 1] > signalLine[n - 1];
+
+  const isHistTurningUp = histPrev2 < 0 && histPrev > histPrev2;
+  const isHistCrossZero = histPrev <= 0 && histCurr > 0;
+  const isHistExpanding = histCurr > 0 && histCurr > histPrev;
 
   let macdTrend = "neutral";
-  const isMacdCrossover = prevMacd <= prevSignalVal && macdLine[n - 1] > signalLine[n - 1];
-  if (isMacdCrossover) macdTrend = "buy";
+  if (isMacdCrossover || isHistCrossZero) macdTrend = "buy";
+  else if (isHistTurningUp && histCurr > histPrev) macdTrend = "buy";
+  else if (isHistExpanding) macdTrend = "buy";
+  else if (histCurr < 0 && histCurr < histPrev) macdTrend = "sell";
   else if (prevMacd >= prevSignalVal && macdLine[n - 1] < signalLine[n - 1]) macdTrend = "sell";
-  else if (macdLine[n - 1] > signalLine[n - 1]) macdTrend = "buy";
   else macdTrend = "sell";
 
   let prevRsiValue: number | null = null;
@@ -294,7 +306,9 @@ function computeIndicatorsAtIndex(closes: number[], dayIndex: number, minBars: n
   else { overallSignal = "neutral"; overallLabel = "様子見"; }
 
   let signalScore = 0;
-  if (isMacdCrossover) signalScore += 30;
+  if (isMacdCrossover || isHistCrossZero) signalScore += 30;
+  else if (isHistTurningUp && histCurr > histPrev) signalScore += 20;
+  else if (isHistExpanding) signalScore += 15;
   else if (macdTrend === "buy") signalScore += 10;
   if (isRsiReversal) signalScore += 25;
   else if (rsiTrend === "buy") signalScore += 10;
