@@ -78,7 +78,7 @@ export const DEFAULT_PARAMS: BacktestParams = {
   aiThreshold: 0.5,
   stopLossPercent: 0,
   maxHoldDays: 1,
-  minVolume: 100000,
+  minVolume: 1000,
   requireUptrend: false,
   dynamicTarget: false,
   requireMacdCrossover: false,
@@ -96,7 +96,7 @@ export const DEFAULT_PARAMS: BacktestParams = {
   initialCapital: 1000000,
   rsiExcludeMin: 50,
   rsiExcludeMax: 60,
-  minBarVolume: 1000,
+  minBarVolume: 10,
 };
 
 export interface BacktestProgress {
@@ -422,7 +422,7 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
           };
 
           for (let d = startIdx; d < closes.length - 1; d++) {
-            if ((params.minVolume ?? 0) > 0 && volumes[d] < (params.minVolume ?? 0)) continue;
+            if ((params.minVolume ?? 0) > 0 && Math.floor(volumes[d] / 100) < (params.minVolume ?? 0)) continue;
 
             const indicators = computeIndicatorsAtIndex(closes, d);
             if (!indicators) continue;
@@ -774,8 +774,8 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               const globalIdx = dayInfo.startIdx + barInDay;
               if (globalIdx < 50) continue;
 
-              if ((params.minVolume ?? 0) > 0 && bars[globalIdx].volume < (params.minVolume ?? 0)) continue;
-              if ((params.minBarVolume ?? 0) > 0 && bars[globalIdx].volume < (params.minBarVolume ?? 0)) continue;
+              if ((params.minVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minVolume ?? 0)) continue;
+              if ((params.minBarVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minBarVolume ?? 0)) continue;
 
               const indicators = computeIndicatorsAtIndex(closes, globalIdx, 50);
               if (!indicators) continue;
@@ -1185,7 +1185,7 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
           const stopLoss = params.stopLossPercent ?? 0;
 
           for (let d = startIdx; d < closes.length - 1; d++) {
-            if ((params.minVolume ?? 0) > 0 && volumes[d] < (params.minVolume ?? 0)) continue;
+            if ((params.minVolume ?? 0) > 0 && Math.floor(volumes[d] / 100) < (params.minVolume ?? 0)) continue;
 
             const indicators = computeIndicatorsAtIndex(closes, d);
             if (!indicators) continue;
@@ -1373,8 +1373,8 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               const globalIdx = dayInfo.startIdx + barInDay;
               if (globalIdx < 50) continue;
 
-              if ((params.minVolume ?? 0) > 0 && bars[globalIdx].volume < (params.minVolume ?? 0)) continue;
-              if ((params.minBarVolume ?? 0) > 0 && bars[globalIdx].volume < (params.minBarVolume ?? 0)) continue;
+              if ((params.minVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minVolume ?? 0)) continue;
+              if ((params.minBarVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minBarVolume ?? 0)) continue;
 
               const indicators = computeIndicatorsAtIndex(closes, globalIdx, 50);
               if (!indicators) continue;
@@ -1553,7 +1553,7 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
           const stopLoss = params.stopLossPercent ?? 0;
 
           for (let d = startIdx; d < closes.length - 1; d++) {
-            if ((params.minVolume ?? 0) > 0 && volumes[d] < (params.minVolume ?? 0)) continue;
+            if ((params.minVolume ?? 0) > 0 && Math.floor(volumes[d] / 100) < (params.minVolume ?? 0)) continue;
 
             const indicators = computeIndicatorsAtIndex(closes, d);
             if (!indicators) continue;
@@ -1738,8 +1738,8 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               const globalIdx = dayInfo.startIdx + barInDay;
               if (globalIdx < 50) continue;
 
-              if ((params.minVolume ?? 0) > 0 && bars[globalIdx].volume < (params.minVolume ?? 0)) continue;
-              if ((params.minBarVolume ?? 0) > 0 && bars[globalIdx].volume < (params.minBarVolume ?? 0)) continue;
+              if ((params.minVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minVolume ?? 0)) continue;
+              if ((params.minBarVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minBarVolume ?? 0)) continue;
 
               const indicators = computeIndicatorsAtIndex(closes, globalIdx, 50);
               if (!indicators) continue;
