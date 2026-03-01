@@ -258,14 +258,18 @@ function computeIndicatorsAtIndex(closes: number[], dayIndex: number, minBars: n
   const prevSignalVal = signalLine[n - 2];
   const isMacdCrossover = prevMacd <= prevSignalVal && macdLine[n - 1] > signalLine[n - 1];
 
-  const isHistTurningUp = histPrev2 < 0 && histPrev > histPrev2;
   const isHistCrossZero = histPrev <= 0 && histCurr > 0;
-  const isHistExpanding = histCurr > 0 && histCurr > histPrev;
+  const isHistTurningUp = histPrev2 < 0 && histPrev > histPrev2 && histCurr > histPrev;
+  const isHistExpanding = histCurr > 0 && histCurr > histPrev && histPrev > 0;
+  const isHistShrinking = histPrev2 > 0 && histPrev > 0 && histPrev < histPrev2;
+  const isHistShrinkingSharply = isHistShrinking && histPrev2 > 0 && (histPrev / histPrev2) < 0.5;
 
   let macdTrend = "neutral";
-  if (isMacdCrossover || isHistCrossZero) macdTrend = "buy";
-  else if (isHistTurningUp && histCurr > histPrev) macdTrend = "buy";
-  else if (isHistExpanding) macdTrend = "buy";
+  if (isHistShrinkingSharply) macdTrend = "sell";
+  else if (isHistShrinking && histCurr <= histPrev) macdTrend = "sell";
+  else if (isMacdCrossover || isHistCrossZero) macdTrend = "buy";
+  else if (isHistTurningUp) macdTrend = "buy";
+  else if (isHistExpanding && !isHistShrinking) macdTrend = "buy";
   else if (histCurr < 0 && histCurr < histPrev) macdTrend = "sell";
   else if (prevMacd >= prevSignalVal && macdLine[n - 1] < signalLine[n - 1]) macdTrend = "sell";
   else macdTrend = "sell";
@@ -306,8 +310,10 @@ function computeIndicatorsAtIndex(closes: number[], dayIndex: number, minBars: n
   else { overallSignal = "neutral"; overallLabel = "様子見"; }
 
   let signalScore = 0;
-  if (isMacdCrossover || isHistCrossZero) signalScore += 30;
-  else if (isHistTurningUp && histCurr > histPrev) signalScore += 20;
+  if (isHistShrinkingSharply) signalScore -= 25;
+  else if (isHistShrinking && histCurr <= histPrev) signalScore -= 15;
+  else if (isMacdCrossover || isHistCrossZero) signalScore += 30;
+  else if (isHistTurningUp) signalScore += 20;
   else if (isHistExpanding) signalScore += 15;
   else if (macdTrend === "buy") signalScore += 10;
   if (isRsiReversal) signalScore += 25;
