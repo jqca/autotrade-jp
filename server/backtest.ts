@@ -41,6 +41,7 @@ export interface BacktestParams {
   market?: string;
   rsiExcludeMin?: number;
   rsiExcludeMax?: number;
+  minBarVolume?: number;
 }
 
 const INDICATOR_MAP: Record<string, (ind: ReturnType<typeof computeIndicators>) => boolean> = {
@@ -95,6 +96,7 @@ export const DEFAULT_PARAMS: BacktestParams = {
   initialCapital: 1000000,
   rsiExcludeMin: 50,
   rsiExcludeMax: 60,
+  minBarVolume: 1000,
 };
 
 export interface BacktestProgress {
@@ -773,6 +775,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               if (globalIdx < 50) continue;
 
               if ((params.minVolume ?? 0) > 0 && bars[globalIdx].volume < (params.minVolume ?? 0)) continue;
+              if ((params.minBarVolume ?? 0) > 0 && bars[globalIdx].volume < (params.minBarVolume ?? 0)) continue;
 
               const indicators = computeIndicatorsAtIndex(closes, globalIdx, 50);
               if (!indicators) continue;
@@ -1371,6 +1374,7 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               if (globalIdx < 50) continue;
 
               if ((params.minVolume ?? 0) > 0 && bars[globalIdx].volume < (params.minVolume ?? 0)) continue;
+              if ((params.minBarVolume ?? 0) > 0 && bars[globalIdx].volume < (params.minBarVolume ?? 0)) continue;
 
               const indicators = computeIndicatorsAtIndex(closes, globalIdx, 50);
               if (!indicators) continue;
@@ -1735,6 +1739,7 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               if (globalIdx < 50) continue;
 
               if ((params.minVolume ?? 0) > 0 && bars[globalIdx].volume < (params.minVolume ?? 0)) continue;
+              if ((params.minBarVolume ?? 0) > 0 && bars[globalIdx].volume < (params.minBarVolume ?? 0)) continue;
 
               const indicators = computeIndicatorsAtIndex(closes, globalIdx, 50);
               if (!indicators) continue;

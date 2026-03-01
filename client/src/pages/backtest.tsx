@@ -243,6 +243,7 @@ export default function Backtest() {
       market,
       rsiExcludeMin: 50,
       rsiExcludeMax: 60,
+      minBarVolume: 1000,
     }),
     onSuccess: () => {
       setPolling(true);
