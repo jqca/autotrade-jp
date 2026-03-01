@@ -512,6 +512,7 @@ export async function registerRoutes(
       const requireDailyConfirm = Boolean(req.body.requireDailyConfirm);
       const dailyMinBuyIndicators = req.body.dailyMinBuyIndicators != null ? Math.max(1, Math.min(4, Math.round(Number(req.body.dailyMinBuyIndicators)))) : 2;
       const dailyMinSignalScore = req.body.dailyMinSignalScore != null ? Math.max(0, Math.min(100, Math.round(Number(req.body.dailyMinSignalScore)))) : 0;
+      const initialCapital = req.body.initialCapital != null ? Math.max(0, Math.round(Number(req.body.initialCapital))) : 1000000;
       const params: BacktestParams = {
         targetPercent,
         minBuyIndicators,
@@ -543,6 +544,7 @@ export async function registerRoutes(
         requireDailyConfirm,
         dailyMinBuyIndicators,
         dailyMinSignalScore,
+        initialCapital,
       };
       await startBacktest(params, 3);
       res.json({ message: "バックテストを開始しました", params });
