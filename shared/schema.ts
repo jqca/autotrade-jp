@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, real, timestamp, boolean, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, real, timestamp, boolean, uniqueIndex, bigint } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -14,6 +14,16 @@ export const stocks = pgTable("stocks", {
   dayLow: real("day_low").notNull(),
   volume: integer("volume").notNull().default(0),
   isWatched: boolean("is_watched").notNull().default(false),
+  unitShares: integer("unit_shares").notNull().default(100),
+  marketCap: bigint("market_cap", { mode: "number" }),
+  sharesOutstanding: bigint("shares_outstanding", { mode: "number" }),
+  per: real("per"),
+  pbr: real("pbr"),
+  eps: real("eps"),
+  dividendYield: real("dividend_yield"),
+  fiftyTwoWeekHigh: real("fifty_two_week_high"),
+  fiftyTwoWeekLow: real("fifty_two_week_low"),
+  marketCapCategory: text("market_cap_category"),
 });
 
 export const strategies = pgTable("strategies", {

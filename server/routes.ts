@@ -6,7 +6,7 @@ import { requireAuth } from "./auth";
 import { z } from "zod";
 import { fetchHistoricalPrices } from "./yahoo-finance";
 import { fetchJQuantsHistorical, fetchJQuantsLatestPrices, isJQuantsConfigured } from "./jquants";
-import { importJPXStocks, fetchBatchPrices, startFetchAllPrices, getFetchAllProgress } from "./import-stocks";
+import { importJPXStocks, fetchBatchPrices, startFetchAllPrices, getFetchAllProgress, startFetchFundamentals, getFundamentalsFetchProgress } from "./import-stocks";
 import { startScheduler, getSchedulerStatus, setSchedulerEnabled } from "./scheduler";
 import { startIndicatorBatch, getIndicatorBatchProgress, startIntradayIndicatorBatch, getIntradayIndicatorBatchProgress } from "./technical-batch";
 import { startBacktest, getBacktestProgress, cancelBacktest, DEFAULT_PARAMS, type BacktestParams } from "./backtest";
@@ -371,6 +371,19 @@ export async function registerRoutes(
 
   app.get("/api/fetch-all-prices/progress", async (_req, res) => {
     res.json(getFetchAllProgress());
+  });
+
+  app.post("/api/fetch-fundamentals", requireAuth, async (_req: any, res) => {
+    try {
+      await startFetchFundamentals(3);
+      res.json({ message: "ファンダメンタル情報取得を開始しました" });
+    } catch (error: any) {
+      res.status(409).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/fetch-fundamentals/progress", async (_req, res) => {
+    res.json(getFundamentalsFetchProgress());
   });
 
   app.get("/api/scheduler", async (_req, res) => {

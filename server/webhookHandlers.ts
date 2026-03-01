@@ -20,6 +20,12 @@ export class WebhookHandlers {
 
       if (event.type === 'checkout.session.completed') {
         const session = event.data.object;
+
+        if (session.payment_status !== 'paid') {
+          console.log(`[Stripe] Session ${session.id} not paid (status: ${session.payment_status}), skipping`);
+          return;
+        }
+
         const userId = session.metadata?.userId;
         const credits = parseInt(session.metadata?.credits || '0', 10);
 

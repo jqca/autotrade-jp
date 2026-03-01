@@ -41,6 +41,18 @@ export interface IStorage {
   deletePosition(ticker: string): Promise<void>;
   getStockCount(): Promise<number>;
   updatePreviousClose(ticker: string, previousClose: number): Promise<void>;
+  updateStockFundamentals(ticker: string, data: {
+    marketCap?: number | null;
+    sharesOutstanding?: number | null;
+    per?: number | null;
+    pbr?: number | null;
+    eps?: number | null;
+    dividendYield?: number | null;
+    fiftyTwoWeekHigh?: number | null;
+    fiftyTwoWeekLow?: number | null;
+    unitShares?: number;
+    marketCapCategory?: string | null;
+  }): Promise<void>;
   bulkUpsertStocks(stockList: InsertStock[]): Promise<number>;
   searchStocks(query: string, limit: number, offset: number): Promise<{ stocks: Stock[]; total: number }>;
   getWatchedStocks(): Promise<Stock[]>;
@@ -207,6 +219,34 @@ export class DatabaseStorage implements IStorage {
 
   async updatePreviousClose(ticker: string, previousClose: number): Promise<void> {
     await db.update(stocks).set({ previousClose }).where(eq(stocks.ticker, ticker));
+  }
+
+  async updateStockFundamentals(ticker: string, data: {
+    marketCap?: number | null;
+    sharesOutstanding?: number | null;
+    per?: number | null;
+    pbr?: number | null;
+    eps?: number | null;
+    dividendYield?: number | null;
+    fiftyTwoWeekHigh?: number | null;
+    fiftyTwoWeekLow?: number | null;
+    unitShares?: number;
+    marketCapCategory?: string | null;
+  }): Promise<void> {
+    const updateData: any = {};
+    if (data.marketCap !== undefined) updateData.marketCap = data.marketCap;
+    if (data.sharesOutstanding !== undefined) updateData.sharesOutstanding = data.sharesOutstanding;
+    if (data.per !== undefined) updateData.per = data.per;
+    if (data.pbr !== undefined) updateData.pbr = data.pbr;
+    if (data.eps !== undefined) updateData.eps = data.eps;
+    if (data.dividendYield !== undefined) updateData.dividendYield = data.dividendYield;
+    if (data.fiftyTwoWeekHigh !== undefined) updateData.fiftyTwoWeekHigh = data.fiftyTwoWeekHigh;
+    if (data.fiftyTwoWeekLow !== undefined) updateData.fiftyTwoWeekLow = data.fiftyTwoWeekLow;
+    if (data.unitShares !== undefined) updateData.unitShares = data.unitShares;
+    if (data.marketCapCategory !== undefined) updateData.marketCapCategory = data.marketCapCategory;
+    if (Object.keys(updateData).length > 0) {
+      await db.update(stocks).set(updateData).where(eq(stocks.ticker, ticker));
+    }
   }
 
   async bulkUpsertStocks(stockList: InsertStock[]): Promise<number> {

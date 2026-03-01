@@ -111,7 +111,7 @@ export async function fetchBatchPrices(tickers: string[]): Promise<number> {
 
 async function fetchSinglePrice(ticker: string): Promise<number> {
   const symbol = encodeURIComponent(`${ticker}.T`);
-  const url = `https://query2.finance.yahoo.com/v8/finance/chart/${symbol}?range=1d&interval=1d`;
+  const url = `https://query2.finance.yahoo.com/v8/finance/chart/${symbol}?range=5d&interval=1d`;
 
   const res = await fetch(url, {
     headers: {
@@ -136,6 +136,17 @@ async function fetchSinglePrice(ticker: string): Promise<number> {
     if (previousClose > 0) {
       await storage.updatePreviousClose(ticker, previousClose);
     }
+
+    const fiftyTwoWeekHigh = meta.fiftyTwoWeekHigh || null;
+    const fiftyTwoWeekLow = meta.fiftyTwoWeekLow || null;
+
+    if (fiftyTwoWeekHigh || fiftyTwoWeekLow) {
+      await storage.updateStockFundamentals(ticker, {
+        fiftyTwoWeekHigh,
+        fiftyTwoWeekLow,
+      });
+    }
+
     return 1;
   }
   return 0;
@@ -233,6 +244,153 @@ export async function startFetchAllPrices(concurrency: number = 3, onComplete?: 
       if (onComplete && progress.updated > 0) {
         onComplete();
       }
+    }
+  })();
+}
+
+function classifyMarketCap(marketCap: number | null | undefined): string | null {
+  if (!marketCap) return null;
+  const oku = marketCap / 100000000;
+  if (oku >= 10000) return "大型 (1兆円以上)";
+  if (oku >= 3000) return "中大型 (3000億〜1兆円)";
+  if (oku >= 1000) return "中型 (1000億〜3000億円)";
+  if (oku >= 300) return "小型 (300億〜1000億円)";
+  if (oku >= 100) return "小型 (100億〜300億円)";
+  return "マイクロ (100億円未満)";
+}
+
+export interface FundamentalsFetchProgress {
+  status: "idle" | "running" | "completed" | "error";
+  total: number;
+  processed: number;
+  updated: number;
+  errors: number;
+  startedAt: number | null;
+  completedAt: number | null;
+  message: string;
+}
+
+const fundamentalsProgress: FundamentalsFetchProgress = {
+  status: "idle", total: 0, processed: 0, updated: 0, errors: 0,
+  startedAt: null, completedAt: null, message: "",
+};
+
+export function getFundamentalsFetchProgress(): FundamentalsFetchProgress {
+  return { ...fundamentalsProgress };
+}
+
+async function fetchSingleFundamentals(ticker: string): Promise<number> {
+  const symbol = encodeURIComponent(`${ticker}.T`);
+  const url = `https://query2.finance.yahoo.com/v8/finance/chart/${symbol}?range=5d&interval=1d`;
+
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    },
+  });
+
+  if (!res.ok) return 0;
+
+  const data = await res.json();
+  const meta = data.chart?.result?.[0]?.meta;
+  if (!meta) return 0;
+
+  const currentPrice = meta.regularMarketPrice;
+  if (!currentPrice || currentPrice <= 0) return 0;
+
+  const fiftyTwoWeekHigh = meta.fiftyTwoWeekHigh || null;
+  const fiftyTwoWeekLow = meta.fiftyTwoWeekLow || null;
+
+  let marketCap: number | null = null;
+  let sharesOutstanding: number | null = null;
+  if (meta.regularMarketVolume && fiftyTwoWeekHigh) {
+    try {
+      const summaryUrl = `https://query2.finance.yahoo.com/v6/finance/quote?symbols=${symbol}`;
+      const summaryRes = await fetch(summaryUrl, {
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+      });
+      if (summaryRes.ok) {
+        const summaryData = await summaryRes.json();
+        const quote = summaryData.quoteResponse?.result?.[0];
+        if (quote) {
+          marketCap = quote.marketCap || null;
+          sharesOutstanding = quote.sharesOutstanding || null;
+        }
+      }
+    } catch {}
+  }
+
+  const marketCapCategory = classifyMarketCap(marketCap);
+
+  await storage.updateStockFundamentals(ticker, {
+    fiftyTwoWeekHigh,
+    fiftyTwoWeekLow,
+    marketCap,
+    sharesOutstanding,
+    unitShares: 100,
+    marketCapCategory,
+  });
+
+  return 1;
+}
+
+export async function startFetchFundamentals(concurrency: number = 3): Promise<void> {
+  if (fundamentalsProgress.status === "running") {
+    throw new Error("Already running");
+  }
+
+  const tickers = await storage.getAllStockTickers();
+
+  fundamentalsProgress.status = "running";
+  fundamentalsProgress.total = tickers.length;
+  fundamentalsProgress.processed = 0;
+  fundamentalsProgress.updated = 0;
+  fundamentalsProgress.errors = 0;
+  fundamentalsProgress.startedAt = Date.now();
+  fundamentalsProgress.completedAt = null;
+  fundamentalsProgress.message = "ファンダメンタル情報取得を開始...";
+
+  (async () => {
+    try {
+      for (let i = 0; i < tickers.length; i += concurrency) {
+        const batch = tickers.slice(i, i + concurrency);
+
+        const results = await Promise.allSettled(
+          batch.map(async (ticker) => {
+            try {
+              return await fetchSingleFundamentals(ticker);
+            } catch {
+              return 0;
+            }
+          })
+        );
+
+        for (const r of results) {
+          fundamentalsProgress.processed++;
+          if (r.status === "fulfilled" && r.value > 0) {
+            fundamentalsProgress.updated++;
+          } else if (r.status === "rejected") {
+            fundamentalsProgress.errors++;
+          }
+        }
+
+        fundamentalsProgress.message = `${fundamentalsProgress.processed}/${fundamentalsProgress.total} 処理済み (${fundamentalsProgress.updated}件取得)`;
+
+        if (i + concurrency < tickers.length) {
+          await new Promise(r => setTimeout(r, 200));
+        }
+      }
+
+      fundamentalsProgress.status = "completed";
+      fundamentalsProgress.completedAt = Date.now();
+      const elapsed = Math.round((fundamentalsProgress.completedAt - fundamentalsProgress.startedAt!) / 1000);
+      fundamentalsProgress.message = `完了: ${fundamentalsProgress.updated}/${fundamentalsProgress.total}件のファンダメンタル情報を取得 (${elapsed}秒)`;
+      console.log(fundamentalsProgress.message);
+    } catch (err: any) {
+      fundamentalsProgress.status = "error";
+      fundamentalsProgress.completedAt = Date.now();
+      fundamentalsProgress.message = `エラー: ${err.message}`;
+      console.error("Fetch fundamentals error:", err);
     }
   })();
 }

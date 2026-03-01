@@ -12,7 +12,7 @@ import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   PlayCircle, StopCircle, Trophy, TrendingDown, BarChart3, Trash2, Loader2,
-  CheckCircle, XCircle, Settings2, GitCompare, List,
+  CheckCircle, XCircle, Settings2, GitCompare, List, Banknote, TrendingUp,
   Clock, AlertTriangle, Activity, Zap, Brain, Atom, Shield,
 } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
@@ -259,6 +259,7 @@ export default function Backtest() {
 
   const stats = useMemo(() => {
     if (!results || results.length === 0) return null;
+    const UNIT_SHARES = 100;
     const wins = results.filter(r => r.isWin).length;
     const losses = results.length - wins;
     const winRate = Math.round((wins / results.length) * 10000) / 100;
@@ -269,7 +270,12 @@ export default function Backtest() {
     const profitFactor = totalLossPL > 0 ? Math.round((totalWinPL / totalLossPL) * 100) / 100 : totalWinPL > 0 ? Infinity : 0;
     const hasAi = results.some(r => r.aiScore != null);
     const hasQuantum = results.some(r => r.quantumSelected != null);
-    return { wins, losses, winRate, avgPL, total: results.length, profitFactor, hasAi, hasQuantum };
+    const totalProfitYen = Math.round(results.reduce((sum, r) => sum + r.profitLoss * UNIT_SHARES, 0));
+    const totalInvestment = Math.round(results.reduce((sum, r) => sum + r.buyPrice * UNIT_SHARES, 0));
+    const avgProfitYen = Math.round(totalProfitYen / results.length);
+    const maxWinYen = Math.round(Math.max(...results.map(r => r.profitLoss * UNIT_SHARES)));
+    const maxLossYen = Math.round(Math.min(...results.map(r => r.profitLoss * UNIT_SHARES)));
+    return { wins, losses, winRate, avgPL, total: results.length, profitFactor, hasAi, hasQuantum, totalProfitYen, totalInvestment, avgProfitYen, maxWinYen, maxLossYen };
   }, [results]);
 
   const comparisonData = useMemo(() => {
