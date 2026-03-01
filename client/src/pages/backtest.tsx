@@ -133,7 +133,7 @@ export default function Backtest() {
   const { toast } = useToast();
 
   const [targetPercent, setTargetPercent] = useState(1.0);
-  const [requiredIndicators, setRequiredIndicators] = useState<string[]>(["macd", "ma"]);
+  const [requiredIndicators, setRequiredIndicators] = useState<string[]>(["macd"]);
   const [rsiMin, setRsiMin] = useState(25);
   const [rsiMax, setRsiMax] = useState(75);
   const [simDays, setSimDays] = useState(200);
@@ -147,7 +147,7 @@ export default function Backtest() {
   const [maxHoldDays, setMaxHoldDays] = useState(3);
   const [minVolume, setMinVolume] = useState(100000);
   const [requireUptrend, setRequireUptrend] = useState(false);
-  const [dynamicTarget, setDynamicTarget] = useState(true);
+  const [dynamicTarget, setDynamicTarget] = useState(false);
   const [requireMacdCrossover, setRequireMacdCrossover] = useState(false);
   const [requireRsiReversal, setRequireRsiReversal] = useState(false);
   const [requireVolumeSurge, setRequireVolumeSurge] = useState(false);
@@ -157,7 +157,7 @@ export default function Backtest() {
   const [trailingStopPercent, setTrailingStopPercent] = useState(1.5);
   const [confirmDays, setConfirmDays] = useState(1);
   const [minSignalScore, setMinSignalScore] = useState(20);
-  const [requireDailyConfirm, setRequireDailyConfirm] = useState(true);
+  const [requireDailyConfirm, setRequireDailyConfirm] = useState(false);
   const [dailyMinBuyIndicators, setDailyMinBuyIndicators] = useState(2);
   const [dailyMinSignalScore, setDailyMinSignalScore] = useState(0);
   const [initialCapital, setInitialCapital] = useState(1000000);
