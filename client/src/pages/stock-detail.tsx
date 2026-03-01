@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, TrendingUp, TrendingDown, BarChart3, ArrowUpCircle, ArrowDownCircle, MinusCircle } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, BarChart3, ArrowUpCircle, ArrowDownCircle, MinusCircle, Info } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useState, useMemo } from "react";
 import {
   ResponsiveContainer,
@@ -294,6 +295,111 @@ export default function StockDetail() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {stock && (
+        <Card data-testid="card-stock-overview">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Info className="h-5 w-5 text-primary" />
+              銘柄の概要
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableBody>
+                <TableRow>
+                  <TableCell className="font-medium text-muted-foreground w-[180px]">銘柄コード</TableCell>
+                  <TableCell className="font-mono" data-testid="text-overview-ticker">{stock.ticker}</TableCell>
+                  <TableCell className="font-medium text-muted-foreground w-[180px]">銘柄名</TableCell>
+                  <TableCell data-testid="text-overview-name">{stock.name}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium text-muted-foreground">業種</TableCell>
+                  <TableCell data-testid="text-overview-sector">{stock.sector}</TableCell>
+                  <TableCell className="font-medium text-muted-foreground">単元株数</TableCell>
+                  <TableCell className="font-mono" data-testid="text-overview-unit-shares">{stock.unitShares?.toLocaleString("ja-JP") ?? "-"} 株</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium text-muted-foreground">現在値</TableCell>
+                  <TableCell className="font-mono">{stock.currentPrice.toLocaleString("ja-JP")} 円</TableCell>
+                  <TableCell className="font-medium text-muted-foreground">前日終値</TableCell>
+                  <TableCell className="font-mono">{stock.previousClose.toLocaleString("ja-JP")} 円</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium text-muted-foreground">日中高値</TableCell>
+                  <TableCell className="font-mono">{stock.dayHigh.toLocaleString("ja-JP")} 円</TableCell>
+                  <TableCell className="font-medium text-muted-foreground">日中安値</TableCell>
+                  <TableCell className="font-mono">{stock.dayLow.toLocaleString("ja-JP")} 円</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium text-muted-foreground">出来高</TableCell>
+                  <TableCell className="font-mono">{stock.volume.toLocaleString("ja-JP")} 株</TableCell>
+                  <TableCell className="font-medium text-muted-foreground">最低投資金額</TableCell>
+                  <TableCell className="font-mono" data-testid="text-overview-min-investment">
+                    {(stock.currentPrice * (stock.unitShares ?? 100)).toLocaleString("ja-JP")} 円
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium text-muted-foreground">52週高値</TableCell>
+                  <TableCell className="font-mono" data-testid="text-overview-52w-high">
+                    {stock.fiftyTwoWeekHigh != null ? `${stock.fiftyTwoWeekHigh.toLocaleString("ja-JP")} 円` : "-"}
+                  </TableCell>
+                  <TableCell className="font-medium text-muted-foreground">52週安値</TableCell>
+                  <TableCell className="font-mono" data-testid="text-overview-52w-low">
+                    {stock.fiftyTwoWeekLow != null ? `${stock.fiftyTwoWeekLow.toLocaleString("ja-JP")} 円` : "-"}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium text-muted-foreground">時価総額</TableCell>
+                  <TableCell className="font-mono" data-testid="text-overview-market-cap">
+                    {stock.marketCap != null
+                      ? stock.marketCap >= 1_000_000_000_000
+                        ? `${(stock.marketCap / 1_000_000_000_000).toFixed(2)} 兆円`
+                        : stock.marketCap >= 100_000_000
+                          ? `${(stock.marketCap / 100_000_000).toFixed(0)} 億円`
+                          : `${stock.marketCap.toLocaleString("ja-JP")} 円`
+                      : "-"}
+                  </TableCell>
+                  <TableCell className="font-medium text-muted-foreground">時価総額区分</TableCell>
+                  <TableCell data-testid="text-overview-market-cap-category">
+                    {stock.marketCapCategory ?? "-"}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium text-muted-foreground">発行済株式数</TableCell>
+                  <TableCell className="font-mono" data-testid="text-overview-shares-outstanding">
+                    {stock.sharesOutstanding != null ? `${stock.sharesOutstanding.toLocaleString("ja-JP")} 株` : "-"}
+                  </TableCell>
+                  <TableCell className="font-medium text-muted-foreground">PER（株価収益率）</TableCell>
+                  <TableCell className="font-mono" data-testid="text-overview-per">
+                    {stock.per != null ? `${stock.per.toFixed(2)} 倍` : "-"}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium text-muted-foreground">PBR（株価純資産倍率）</TableCell>
+                  <TableCell className="font-mono" data-testid="text-overview-pbr">
+                    {stock.pbr != null ? `${stock.pbr.toFixed(2)} 倍` : "-"}
+                  </TableCell>
+                  <TableCell className="font-medium text-muted-foreground">EPS（1株益）</TableCell>
+                  <TableCell className="font-mono" data-testid="text-overview-eps">
+                    {stock.eps != null ? `${stock.eps.toFixed(2)} 円` : "-"}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium text-muted-foreground">配当利回り</TableCell>
+                  <TableCell className="font-mono" data-testid="text-overview-dividend-yield">
+                    {stock.dividendYield != null ? `${stock.dividendYield.toFixed(2)} %` : "-"}
+                  </TableCell>
+                  <TableCell className="font-medium text-muted-foreground">前日比</TableCell>
+                  <TableCell className={`font-mono ${isUp ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
+                    {isUp ? "+" : ""}{change.toFixed(0)} 円 ({isUp ? "+" : ""}{changePercent.toFixed(2)}%)
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
 
       <Card>
