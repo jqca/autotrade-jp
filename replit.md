@@ -17,7 +17,7 @@ The application features a React + TypeScript frontend built with Vite, styled u
 -   **Dashboard:** Provides an overview of portfolio performance, recent trades, and market summaries.
 -   **Watchlist & Stock Detail:** Enables monitoring of Japanese stocks with simulated real-time price updates, historical data visualization, and comprehensive technical indicator analysis (MACD, RSI, Moving Averages, Bollinger Bands).
 -   **Signals & Strategies:** Users can identify buy/sell signals based on technical indicators and create automated trading rules.
--   **Backtest Engine:** Supports multi-timeframe backtesting (daily, 5m, 10m, 30m) with extensive configurable parameters and integration of AI/Quantum models for enhanced analysis. Default minimum volume filter is 100,000 shares to exclude illiquid stocks.
+-   **Backtest Engine:** Supports multi-timeframe backtesting (daily, 5m, 10m, 30m) with market selection (JP/US) and extensive configurable parameters. JP stocks use 100-share lots with JPY capital; US stocks use 1-share lots with USD capital. Integrates AI/Quantum models for enhanced analysis. Default minimum volume filter is 100,000 shares.
 -   **Advanced Analytics (AI/QML):**
     -   **Risk Alert:** Detects market anomalies using both classical methods and QML with PennyLane.
     -   **Quantum Portfolio Optimization:** Compares classical Markowitz optimization with QAOA for optimal stock selection.

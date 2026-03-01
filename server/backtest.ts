@@ -38,6 +38,7 @@ export interface BacktestParams {
   dailyMinBuyIndicators?: number;
   dailyMinSignalScore?: number;
   initialCapital?: number;
+  market?: string;
 }
 
 const INDICATOR_MAP: Record<string, (ind: ReturnType<typeof computeIndicators>) => boolean> = {
@@ -1043,9 +1044,11 @@ async function runAiQuantumPipeline(signals: SignalCandidate[], params: Backtest
   });
 }
 
-const UNIT_SHARES = 100;
+const UNIT_SHARES_JP = 100;
+const UNIT_SHARES_US = 1;
 
-function simulateCapital(signals: SignalCandidate[], initialCapital: number): { executed: SignalCandidate[]; skipped: number; finalCapital: number } {
+function simulateCapital(signals: SignalCandidate[], initialCapital: number, market?: string): { executed: SignalCandidate[]; skipped: number; finalCapital: number } {
+  const unitShares = market === "US" ? UNIT_SHARES_US : UNIT_SHARES_JP;
   if (initialCapital <= 0) {
     for (const s of signals) {
       s.capitalBefore = undefined;
@@ -1074,7 +1077,7 @@ function simulateCapital(signals: SignalCandidate[], initialCapital: number): { 
       openPositions.splice(idx, 1);
     }
 
-    const buyCost = Math.round(signal.buyPrice * UNIT_SHARES);
+    const buyCost = Math.round(signal.buyPrice * unitShares);
     if (cash < buyCost) {
       skipped++;
       continue;
@@ -1083,7 +1086,7 @@ function simulateCapital(signals: SignalCandidate[], initialCapital: number): { 
     signal.capitalBefore = Math.round(cash);
     cash -= buyCost;
 
-    const sellProceeds = Math.round(signal.sellPrice * UNIT_SHARES);
+    const sellProceeds = Math.round(signal.sellPrice * unitShares);
     openPositions.push({
       ticker: signal.ticker,
       buyDate: signal.buyDate,
@@ -1878,7 +1881,8 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
     throw new Error("既にバックテストが実行中です");
   }
 
-  const pricedStocks = await storage.getStocksWithPrices();
+  const marketFilter = params.market === "US" ? "US" : params.market === "JP" ? "JP" : undefined;
+  const pricedStocks = await storage.getStocksWithPrices(marketFilter);
   const tickers = pricedStocks.map(s => s.ticker);
   const runId = `bt_${Date.now()}`;
   const isIntraday = params.timeframe === "5m" || params.timeframe === "10m" || params.timeframe === "30m";
@@ -1886,12 +1890,16 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
   const tfLabels: Record<string, string> = { "5m": "5分足", "10m": "10分足", "30m": "30分足", "1d": "日足" };
   const tfLabel = tfLabels[params.timeframe] || params.timeframe;
   const initialCapital = params.initialCapital ?? 1000000;
+  const marketLabel = marketFilter === "US" ? " US米国株" : marketFilter === "JP" ? " JP日本株" : " 全市場";
+  const currencyUnit = marketFilter === "US" ? "USD" : "JPY";
 
   const aiQuantumLabel = useAiQuantum
     ? ` [${params.useAi ? "AI" : ""}${params.useAi && params.useQuantum ? "+" : ""}${params.useQuantum ? "量子" : ""}]`
     : "";
 
-  const capitalLabel = initialCapital > 0 ? ` 資金${(initialCapital / 10000).toFixed(0)}万円` : "";
+  const capitalLabel = initialCapital > 0
+    ? currencyUnit === "USD" ? ` 資金$${initialCapital.toLocaleString()}` : ` 資金${(initialCapital / 10000).toFixed(0)}万円`
+    : "";
 
   const runConfig: InsertBacktestRun = {
     runId,
@@ -1902,7 +1910,7 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
     requireMaBuy: params.requireMaBuy,
     simDays: params.simDays,
     timeframe: params.timeframe,
-    label: params.label || `${tfLabel} 目標${params.targetPercent}% ${params.requiredIndicators?.length ? "必須:" + params.requiredIndicators.map(i => i.toUpperCase()).join("/") : "指標" + params.minBuyIndicators + "+"} RSI${params.rsiMin}-${params.rsiMax}${params.requireMaBuy ? " MA必須" : ""}${aiQuantumLabel}${capitalLabel}${params.startDate || params.endDate ? ` ${params.startDate || ""}〜${params.endDate || ""}` : ""}`,
+    label: params.label || `${tfLabel}${marketLabel} 目標${params.targetPercent}% ${params.requiredIndicators?.length ? "必須:" + params.requiredIndicators.map(i => i.toUpperCase()).join("/") : "指標" + params.minBuyIndicators + "+"} RSI${params.rsiMin}-${params.rsiMax}${params.requireMaBuy ? " MA必須" : ""}${aiQuantumLabel}${capitalLabel}${params.startDate || params.endDate ? ` ${params.startDate || ""}〜${params.endDate || ""}` : ""}`,
     useAi: params.useAi ?? false,
     useQuantum: params.useQuantum ?? false,
     aiThreshold: params.aiThreshold ?? 0.5,
@@ -1919,7 +1927,7 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
   progress.errors = 0;
   progress.startedAt = Date.now();
   progress.completedAt = null;
-  progress.message = `${tfLabel}バックテストを開始しました... (初期資金: ${(initialCapital / 10000).toFixed(0)}万円)`;
+  progress.message = `${tfLabel}バックテストを開始しました... (初期資金: ${currencyUnit === "USD" ? `$${initialCapital.toLocaleString()}` : `${(initialCapital / 10000).toFixed(0)}万円`})`;
   progress.runId = runId;
   progress.params = params;
   progress.phase = useAiQuantum ? "scan" : "scan";
@@ -1987,9 +1995,9 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
 
       if (initialCapital > 0 && allSignals.length > 0) {
         progress.phase = "capital";
-        progress.message = `資金シミュレーション中 (${allSignals.length}件, 初期${(initialCapital / 10000).toFixed(0)}万円)...`;
+        progress.message = `資金シミュレーション中 (${allSignals.length}件, 初期${currencyUnit === "USD" ? `$${initialCapital.toLocaleString()}` : `${(initialCapital / 10000).toFixed(0)}万円`})...`;
 
-        const { executed, skipped, finalCapital } = simulateCapital(allSignals, initialCapital);
+        const { executed, skipped, finalCapital } = simulateCapital(allSignals, initialCapital, params.market);
         allSignals = executed;
         progress.skippedByCapital = skipped;
         progress.capitalRemaining = finalCapital;
@@ -2019,7 +2027,7 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
           ? ` (AI除外: ${progress.aiFiltered ?? 0}件, 量子選択: ${progress.quantumSelected ?? "-"}件)`
           : "";
         const capitalInfo = initialCapital > 0
-          ? ` (資金不足スキップ: ${progress.skippedByCapital ?? 0}件, 最終資金: ${((progress.capitalRemaining ?? initialCapital) / 10000).toFixed(0)}万円)`
+          ? ` (資金不足スキップ: ${progress.skippedByCapital ?? 0}件, 最終資金: ${currencyUnit === "USD" ? `$${(progress.capitalRemaining ?? initialCapital).toLocaleString()}` : `${((progress.capitalRemaining ?? initialCapital) / 10000).toFixed(0)}万円`})`
           : "";
         progress.message = `完了: ${progress.processed}銘柄処理, ${progress.signals}件シグナル${aiQuantumInfo}${capitalInfo} (${elapsed}秒)`;
         console.log(`[Backtest] ${progress.message}`);

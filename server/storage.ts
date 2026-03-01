@@ -56,7 +56,7 @@ export interface IStorage {
   bulkUpsertStocks(stockList: InsertStock[]): Promise<number>;
   searchStocks(query: string, limit: number, offset: number, market?: string): Promise<{ stocks: Stock[]; total: number }>;
   getWatchedStocks(): Promise<Stock[]>;
-  getStocksWithPrices(): Promise<Stock[]>;
+  getStocksWithPrices(market?: string): Promise<Stock[]>;
   getAllStockTickers(market?: string): Promise<string[]>;
   upsertTechnicalIndicator(indicator: InsertTechnicalIndicator): Promise<void>;
   getTechnicalIndicator(ticker: string, timeframe?: string): Promise<TechnicalIndicator | undefined>;
@@ -300,7 +300,10 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(stocks).where(eq(stocks.isWatched, true));
   }
 
-  async getStocksWithPrices(): Promise<Stock[]> {
+  async getStocksWithPrices(market?: string): Promise<Stock[]> {
+    if (market) {
+      return db.select().from(stocks).where(and(sql`${stocks.currentPrice} > 0`, eq(stocks.market, market)));
+    }
     return db.select().from(stocks).where(sql`${stocks.currentPrice} > 0`);
   }
   async getAllStockTickers(market?: string): Promise<string[]> {

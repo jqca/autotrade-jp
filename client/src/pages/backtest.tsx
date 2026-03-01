@@ -83,6 +83,7 @@ interface BacktestParams {
   dailyMinBuyIndicators?: number;
   dailyMinSignalScore?: number;
   initialCapital?: number;
+  market?: string;
 }
 
 function TrendBadge({ trend, label, active = true }: { trend: string | null; label: string; active?: boolean }) {
@@ -161,6 +162,7 @@ export default function Backtest() {
   const [dailyMinBuyIndicators, setDailyMinBuyIndicators] = useState(2);
   const [dailyMinSignalScore, setDailyMinSignalScore] = useState(0);
   const [initialCapital, setInitialCapital] = useState(1000000);
+  const [market, setMarket] = useState<string>("JP");
   const [showAdvanced, setShowAdvanced] = useState(true);
 
   const [now, setNow] = useState(Date.now());
@@ -238,6 +240,7 @@ export default function Backtest() {
       dailyMinBuyIndicators,
       dailyMinSignalScore,
       initialCapital,
+      market,
     }),
     onSuccess: () => {
       setPolling(true);
@@ -270,7 +273,9 @@ export default function Backtest() {
 
   const stats = useMemo(() => {
     if (!results || results.length === 0) return null;
-    const UNIT_SHARES = 100;
+    const runCfg = runs?.find(r => r.runId === activeRunId)?.config;
+    const isUS = runCfg?.label?.includes("米国株") ?? false;
+    const UNIT_SHARES = isUS ? 1 : 100;
     const wins = results.filter(r => r.isWin).length;
     const losses = results.length - wins;
     const winRate = Math.round((wins / results.length) * 10000) / 100;
@@ -292,8 +297,8 @@ export default function Backtest() {
     const capitalReturn = capitalStart != null && capitalEnd != null && capitalStart > 0
       ? Math.round(((capitalEnd - capitalStart) / capitalStart) * 10000) / 100
       : null;
-    return { wins, losses, winRate, avgPL, total: results.length, profitFactor, hasAi, hasQuantum, totalProfitYen, totalInvestment, avgProfitYen, maxWinYen, maxLossYen, hasCapitalTracking, capitalStart, capitalEnd, capitalReturn };
-  }, [results]);
+    return { wins, losses, winRate, avgPL, total: results.length, profitFactor, hasAi, hasQuantum, totalProfitYen, totalInvestment, avgProfitYen, maxWinYen, maxLossYen, hasCapitalTracking, capitalStart, capitalEnd, capitalReturn, isUS };
+  }, [results, runs, activeRunId]);
 
   const comparisonData = useMemo(() => {
     if (!runs || runs.length < 2) return null;
@@ -454,7 +459,7 @@ export default function Backtest() {
                   {progressData.capitalRemaining != null && (
                     <div className="flex items-center gap-1.5">
                       <Banknote className="h-3 w-3 text-emerald-500" />
-                      <span>最終資金: {(progressData.capitalRemaining / 10000).toFixed(1)}万円</span>
+                      <span>最終資金: {progressData.params?.market === "US" ? `$${progressData.capitalRemaining.toLocaleString("en-US")}` : `${(progressData.capitalRemaining / 10000).toFixed(1)}万円`}</span>
                     </div>
                   )}
                 </div>
@@ -480,6 +485,9 @@ export default function Backtest() {
                 </div>
                 {progressData.params && (
                   <div className="flex items-center gap-1.5 flex-wrap justify-end" data-testid="progress-params-badges">
+                    <Badge variant="outline" className="text-[10px] h-5" data-testid="badge-progress-market">
+                      {progressData.params.market === "US" ? "US米国株" : "JP日本株"}
+                    </Badge>
                     <Badge variant={progressData.params.timeframe !== "1d" ? "default" : "outline"} className="text-[10px] h-5" data-testid="badge-progress-timeframe">
                       {({"5m":"5分足","10m":"10分足","30m":"30分足","1d":"日足"} as Record<string,string>)[progressData.params.timeframe] || progressData.params.timeframe}
                     </Badge>
@@ -619,6 +627,32 @@ export default function Backtest() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
+              <div className="space-y-3 pb-2 border-b">
+                <Label className="text-sm font-medium">対象市場</Label>
+                <div className="flex gap-2 flex-wrap">
+                  <Button
+                    variant={market === "JP" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => { setMarket("JP"); setInitialCapital(1000000); setMinVolume(100000); }}
+                    data-testid="button-market-jp"
+                  >
+                    JP 日本株（TSE）
+                  </Button>
+                  <Button
+                    variant={market === "US" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => { setMarket("US"); setInitialCapital(10000); setMinVolume(100000); }}
+                    data-testid="button-market-us"
+                  >
+                    US 米国株（NYSE/NASDAQ）
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {market === "JP"
+                    ? "TSE上場の日本株を対象にバックテストを行います（売買単位: 100株）"
+                    : "NYSE/NASDAQ上場の米国株を対象にバックテストを行います（売買単位: 1株）"}
+                </p>
+              </div>
               <div className="space-y-3 pb-2 border-b">
                 <Label className="text-sm font-medium">時間足</Label>
                 <div className="flex gap-2 flex-wrap">
@@ -809,18 +843,37 @@ export default function Backtest() {
                     初期資金
                   </Label>
                   <div className="flex items-center gap-3">
-                    <Slider
-                      value={[initialCapital / 10000]}
-                      onValueChange={([v]) => setInitialCapital(v * 10000)}
-                      min={10}
-                      max={1000}
-                      step={10}
-                      className="flex-1"
-                      data-testid="slider-initial-capital"
-                    />
-                    <Badge variant="secondary" className="min-w-[70px] justify-center" data-testid="text-initial-capital">
-                      {(initialCapital / 10000).toFixed(0)}万円
-                    </Badge>
+                    {market === "US" ? (
+                      <>
+                        <Slider
+                          value={[initialCapital]}
+                          onValueChange={([v]) => setInitialCapital(v)}
+                          min={1000}
+                          max={100000}
+                          step={1000}
+                          className="flex-1"
+                          data-testid="slider-initial-capital"
+                        />
+                        <Badge variant="secondary" className="min-w-[70px] justify-center" data-testid="text-initial-capital">
+                          ${initialCapital.toLocaleString("en-US")}
+                        </Badge>
+                      </>
+                    ) : (
+                      <>
+                        <Slider
+                          value={[initialCapital / 10000]}
+                          onValueChange={([v]) => setInitialCapital(v * 10000)}
+                          min={10}
+                          max={1000}
+                          step={10}
+                          className="flex-1"
+                          data-testid="slider-initial-capital"
+                        />
+                        <Badge variant="secondary" className="min-w-[70px] justify-center" data-testid="text-initial-capital">
+                          {(initialCapital / 10000).toFixed(0)}万円
+                        </Badge>
+                      </>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground">手元資金。資金不足の場合は買いシグナルがあってもスキップされます</p>
                 </div>
@@ -1588,7 +1641,7 @@ export default function Backtest() {
                       <div>
                         <p className="text-xs text-muted-foreground">初期資金</p>
                         <p className="text-lg font-bold tabular-nums" data-testid="text-capital-start">
-                          {(stats.capitalStart / 10000).toFixed(0)}万円
+                          {stats.isUS ? `$${stats.capitalStart.toLocaleString("en-US")}` : `${(stats.capitalStart / 10000).toFixed(0)}万円`}
                         </p>
                       </div>
                     </div>
@@ -1601,7 +1654,7 @@ export default function Backtest() {
                       <div>
                         <p className="text-xs text-muted-foreground">最終資金</p>
                         <p className={`text-lg font-bold tabular-nums ${(stats.capitalEnd ?? 0) >= stats.capitalStart ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`} data-testid="text-capital-end">
-                          {stats.capitalEnd != null ? `${(stats.capitalEnd / 10000).toFixed(1)}万円` : "-"}
+                          {stats.capitalEnd != null ? (stats.isUS ? `$${stats.capitalEnd.toLocaleString("en-US")}` : `${(stats.capitalEnd / 10000).toFixed(1)}万円`) : "-"}
                         </p>
                       </div>
                     </div>
@@ -1614,9 +1667,9 @@ export default function Backtest() {
                         ? <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                         : <TrendingDown className="h-5 w-5 text-red-500" />}
                       <div>
-                        <p className="text-xs text-muted-foreground">総損益（円）</p>
+                        <p className="text-xs text-muted-foreground">総損益{stats.isUS ? "（$）" : "（円）"}</p>
                         <p className={`text-lg font-bold tabular-nums ${stats.totalProfitYen >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`} data-testid="text-capital-profit">
-                          {stats.totalProfitYen >= 0 ? "+" : ""}{stats.totalProfitYen.toLocaleString("ja-JP")}円
+                          {stats.totalProfitYen >= 0 ? "+" : ""}{stats.isUS ? `$${Math.abs(stats.totalProfitYen).toLocaleString("en-US")}` : `${stats.totalProfitYen.toLocaleString("ja-JP")}円`}
                         </p>
                       </div>
                     </div>
@@ -1665,12 +1718,12 @@ export default function Backtest() {
                       <YAxis
                         tick={{ fontSize: 11 }}
                         className="fill-muted-foreground"
-                        tickFormatter={(v: number) => `${(v / 10000).toFixed(0)}万`}
+                        tickFormatter={(v: number) => stats?.isUS ? `$${v.toLocaleString("en-US")}` : `${(v / 10000).toFixed(0)}万`}
                         domain={["dataMin - 50000", "dataMax + 50000"]}
                       />
                       <Tooltip
                         contentStyle={{ fontSize: 12, borderRadius: 8 }}
-                        formatter={(value: number) => [`${value.toLocaleString("ja-JP")}円`, "資産"]}
+                        formatter={(value: number) => [stats?.isUS ? `$${value.toLocaleString("en-US")}` : `${value.toLocaleString("ja-JP")}円`, "資産"]}
                         labelFormatter={(label: string) => label}
                       />
                       <ReferenceLine
@@ -1783,9 +1836,9 @@ export default function Backtest() {
                               <span>シグナル: {r.signalDate}</span>
                               <span>→</span>
                               <span>購入: {r.buyDate}</span>
-                              <span>始値 {r.buyPrice.toLocaleString("ja-JP")}円</span>
+                              <span>始値 {stats?.isUS ? `$${r.buyPrice.toLocaleString("en-US")}` : `${r.buyPrice.toLocaleString("ja-JP")}円`}</span>
                               <span>|</span>
-                              <span>高値 {r.dayHigh.toLocaleString("ja-JP")}円</span>
+                              <span>高値 {stats?.isUS ? `$${r.dayHigh.toLocaleString("en-US")}` : `${r.dayHigh.toLocaleString("ja-JP")}円`}</span>
                               {r.varEstimate != null && (
                                 <>
                                   <span>|</span>
@@ -1816,7 +1869,7 @@ export default function Backtest() {
                               {r.profitLossPercent >= 0 ? "+" : ""}{r.profitLossPercent.toFixed(2)}%
                             </p>
                             <p className="text-xs">
-                              {r.profitLoss >= 0 ? "+" : ""}{r.profitLoss.toLocaleString("ja-JP")}円
+                              {r.profitLoss >= 0 ? "+" : ""}{stats?.isUS ? `$${Math.abs(r.profitLoss).toLocaleString("en-US")}` : `${r.profitLoss.toLocaleString("ja-JP")}円`}
                             </p>
                           </div>
                         </div>
