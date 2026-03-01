@@ -182,7 +182,7 @@ interface DayIndicators {
   signalScore: number;
 }
 
-function computeIndicatorsAtIndex(closes: number[], dayIndex: number, minBars: number = 80): DayIndicators | null {
+export function computeIndicatorsAtIndex(closes: number[], dayIndex: number, minBars: number = 80): DayIndicators | null {
   const slice = closes.slice(0, dayIndex + 1);
   const n = slice.length;
   if (n < minBars) return null;

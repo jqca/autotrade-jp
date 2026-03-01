@@ -9,7 +9,7 @@ import { fetchJQuantsHistorical, fetchJQuantsLatestPrices, isJQuantsConfigured }
 import { importJPXStocks, fetchBatchPrices, startFetchAllPrices, getFetchAllProgress, startFetchFundamentals, getFundamentalsFetchProgress } from "./import-stocks";
 import { startScheduler, getSchedulerStatus, setSchedulerEnabled } from "./scheduler";
 import { startIndicatorBatch, getIndicatorBatchProgress, startIntradayIndicatorBatch, getIntradayIndicatorBatchProgress } from "./technical-batch";
-import { startBacktest, getBacktestProgress, cancelBacktest, DEFAULT_PARAMS, type BacktestParams } from "./backtest";
+import { startBacktest, getBacktestProgress, cancelBacktest, DEFAULT_PARAMS, type BacktestParams, computeIndicatorsAtIndex } from "./backtest";
 import { startIntradayFetch, getIntradayFetchProgress, aggregateStoredIntradayData } from "./intraday-batch";
 import { runClassicalRiskAssessment, computeClassicalRisk } from "./risk-classical";
 import { runQmlRiskAssessment, computeQmlRisk } from "./risk-qml";
@@ -592,6 +592,49 @@ export async function registerRoutes(
   app.delete("/api/backtest/runs/:runId", async (req, res) => {
     await storage.deleteBacktestRun(req.params.runId);
     res.json({ success: true });
+  });
+
+  app.get("/api/backtest/debug-indicators", async (req, res) => {
+    try {
+      const ticker = (req.query.ticker as string) || "7013";
+      const targetDates = (req.query.dates as string || "").split(",").filter(Boolean);
+      const history = await fetchHistoricalPrices(ticker, "2y", "1d");
+      if (history.length < 280) {
+        return res.json({ error: "データ不足", length: history.length });
+      }
+      const closes = history.map(p => p.close);
+      const dates = history.map(p => p.date);
+      const opens = history.map(p => p.open);
+      const highs = history.map(p => p.high);
+
+      const results: any[] = [];
+      for (let d = 79; d < closes.length - 1; d++) {
+        const dateStr = dates[d];
+        if (targetDates.length > 0 && !targetDates.some(t => dateStr.startsWith(t))) continue;
+
+        const indicators = computeIndicatorsAtIndex(closes, d);
+        if (!indicators) continue;
+
+        const buyDayIdx = d + 1;
+        const buyPrice = opens[buyDayIdx];
+        const buyDow = new Date(dates[buyDayIdx]).getDay();
+
+        results.push({
+          signalDate: dateStr,
+          buyDate: dates[buyDayIdx],
+          close: closes[d],
+          buyPrice,
+          dayHigh: highs[d],
+          buyDow,
+          buyPriceGteHigh: buyPrice >= highs[d],
+          gapPercent: Math.abs((buyPrice - closes[d]) / closes[d]) * 100,
+          ...indicators,
+        });
+      }
+      res.json({ ticker, totalBars: history.length, results });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   app.get("/api/jquants/status", async (_req, res) => {
