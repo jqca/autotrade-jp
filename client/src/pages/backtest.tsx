@@ -147,6 +147,7 @@ export default function Backtest() {
   const [stopLossPercent, setStopLossPercent] = useState(1);
   const [maxHoldDays, setMaxHoldDays] = useState(3);
   const [minVolume, setMinVolume] = useState(1000);
+  const [minVolatility, setMinVolatility] = useState(0.5);
   const [requireUptrend, setRequireUptrend] = useState(false);
   const [dynamicTarget, setDynamicTarget] = useState(false);
   const [requireMacdCrossover, setRequireMacdCrossover] = useState(false);
@@ -244,7 +245,7 @@ export default function Backtest() {
       rsiExcludeMin: 50,
       rsiExcludeMax: 60,
       minBarVolume: 10,
-      minVolatility: 0.5,
+      minVolatility,
     }),
     onSuccess: () => {
       setPolling(true);
@@ -954,6 +955,25 @@ export default function Backtest() {
                     </div>
 
                     <div className="space-y-3">
+                      <Label className="text-sm font-medium">最低ボラティリティ（%）</Label>
+                      <div className="flex items-center gap-3">
+                        <Slider
+                          value={[minVolatility * 10]}
+                          onValueChange={([v]) => setMinVolatility(v / 10)}
+                          min={0}
+                          max={30}
+                          step={1}
+                          className="flex-1"
+                          data-testid="slider-min-volatility"
+                        />
+                        <Badge variant="secondary" className="min-w-[70px] justify-center" data-testid="text-min-volatility">
+                          {minVolatility === 0 ? "なし" : `${minVolatility.toFixed(1)}%`}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">直近20本の価格変動率が低い銘柄を除外（推奨: 0.5%以上）</p>
+                    </div>
+
+                    <div className="space-y-3">
                       <Label className="text-sm font-medium">最小シグナルスコア</Label>
                       <div className="flex items-center gap-3">
                         <Slider
@@ -1223,6 +1243,7 @@ export default function Backtest() {
                   {trailingStop && <Badge variant="outline" className="border-amber-300 text-amber-700 dark:text-amber-400">TS {trailingStopPercent}%</Badge>}
                   {maxHoldDays > 1 && <Badge variant="outline">{maxHoldDays}日保持</Badge>}
                   {minVolume > 0 && <Badge variant="outline" className="border-blue-300 text-blue-700 dark:text-blue-400">出来高≥{minVolume.toLocaleString()}単元</Badge>}
+                  {minVolatility > 0 && <Badge variant="outline" className="border-purple-300 text-purple-700 dark:text-purple-400">Vol≥{minVolatility.toFixed(1)}%</Badge>}
                   {dynamicTarget && <Badge variant="outline">動的利確</Badge>}
                   {requireDailyConfirm && <Badge variant="outline" className="border-indigo-300 text-indigo-700 dark:text-indigo-400">日足確認</Badge>}
                 </div>
