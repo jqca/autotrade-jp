@@ -536,6 +536,8 @@ export async function registerRoutes(
       const dailyMinBuyIndicators = req.body.dailyMinBuyIndicators != null ? Math.max(1, Math.min(4, Math.round(Number(req.body.dailyMinBuyIndicators)))) : 2;
       const dailyMinSignalScore = req.body.dailyMinSignalScore != null ? Math.max(0, Math.min(100, Math.round(Number(req.body.dailyMinSignalScore)))) : 0;
       const initialCapital = req.body.initialCapital != null ? Math.max(0, Math.round(Number(req.body.initialCapital))) : 1000000;
+      const excludePriceMin = req.body.excludePriceMin != null ? Math.max(0, Math.round(Number(req.body.excludePriceMin))) : 0;
+      const excludePriceMax = req.body.excludePriceMax != null ? Math.max(0, Math.round(Number(req.body.excludePriceMax))) : 0;
       const validMarkets = ["JP", "US"];
       const market = validMarkets.includes(req.body.market) ? req.body.market : undefined;
       const validIndicatorKeys = ["macd", "rsi", "ma", "bb"];
@@ -576,6 +578,8 @@ export async function registerRoutes(
         dailyMinSignalScore,
         initialCapital,
         market,
+        excludePriceMin,
+        excludePriceMax,
       };
       await startBacktest(params, 3);
       res.json({ message: "バックテストを開始しました", params });

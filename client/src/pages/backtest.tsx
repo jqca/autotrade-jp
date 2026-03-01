@@ -148,6 +148,9 @@ export default function Backtest() {
   const [maxHoldDays, setMaxHoldDays] = useState(3);
   const [minVolume, setMinVolume] = useState(1000);
   const [minVolatility, setMinVolatility] = useState(0.5);
+  const [excludePriceMin, setExcludePriceMin] = useState(500);
+  const [excludePriceMax, setExcludePriceMax] = useState(1000);
+  const [excludePriceEnabled, setExcludePriceEnabled] = useState(false);
   const [requireUptrend, setRequireUptrend] = useState(false);
   const [dynamicTarget, setDynamicTarget] = useState(false);
   const [requireMacdCrossover, setRequireMacdCrossover] = useState(false);
@@ -246,6 +249,8 @@ export default function Backtest() {
       rsiExcludeMax: 60,
       minBarVolume: 10,
       minVolatility,
+      excludePriceMin: excludePriceEnabled ? excludePriceMin : 0,
+      excludePriceMax: excludePriceEnabled ? excludePriceMax : 0,
     }),
     onSuccess: () => {
       setPolling(true);
@@ -974,6 +979,48 @@ export default function Backtest() {
                     </div>
 
                     <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">株価除外帯</Label>
+                        <Switch
+                          checked={excludePriceEnabled}
+                          onCheckedChange={setExcludePriceEnabled}
+                          data-testid="switch-exclude-price"
+                        />
+                      </div>
+                      {excludePriceEnabled && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 space-y-1">
+                              <span className="text-xs text-muted-foreground">下限（円）</span>
+                              <input
+                                type="number"
+                                value={excludePriceMin}
+                                onChange={(e) => setExcludePriceMin(Math.max(0, Number(e.target.value)))}
+                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                                data-testid="input-exclude-price-min"
+                              />
+                            </div>
+                            <span className="mt-5 text-sm text-muted-foreground">〜</span>
+                            <div className="flex-1 space-y-1">
+                              <span className="text-xs text-muted-foreground">上限（円）</span>
+                              <input
+                                type="number"
+                                value={excludePriceMax}
+                                onChange={(e) => setExcludePriceMax(Math.max(0, Number(e.target.value)))}
+                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                                data-testid="input-exclude-price-max"
+                              />
+                            </div>
+                          </div>
+                          <Badge variant="secondary" className="w-full justify-center" data-testid="text-exclude-price-range">
+                            {excludePriceMin.toLocaleString()}円〜{excludePriceMax.toLocaleString()}円の銘柄を除外
+                          </Badge>
+                          <p className="text-xs text-muted-foreground">指定した株価帯の銘柄をバックテスト対象から除外します</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
                       <Label className="text-sm font-medium">最小シグナルスコア</Label>
                       <div className="flex items-center gap-3">
                         <Slider
@@ -1244,6 +1291,7 @@ export default function Backtest() {
                   {maxHoldDays > 1 && <Badge variant="outline">{maxHoldDays}日保持</Badge>}
                   {minVolume > 0 && <Badge variant="outline" className="border-blue-300 text-blue-700 dark:text-blue-400">出来高≥{minVolume.toLocaleString()}単元</Badge>}
                   {minVolatility > 0 && <Badge variant="outline" className="border-purple-300 text-purple-700 dark:text-purple-400">Vol≥{minVolatility.toFixed(1)}%</Badge>}
+                  {excludePriceEnabled && <Badge variant="outline" className="border-orange-300 text-orange-700 dark:text-orange-400">除外{excludePriceMin.toLocaleString()}〜{excludePriceMax.toLocaleString()}円</Badge>}
                   {dynamicTarget && <Badge variant="outline">動的利確</Badge>}
                   {requireDailyConfirm && <Badge variant="outline" className="border-indigo-300 text-indigo-700 dark:text-indigo-400">日足確認</Badge>}
                 </div>

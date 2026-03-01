@@ -43,6 +43,8 @@ export interface BacktestParams {
   rsiExcludeMax?: number;
   minBarVolume?: number;
   minVolatility?: number;
+  excludePriceMin?: number;
+  excludePriceMax?: number;
 }
 
 const INDICATOR_MAP: Record<string, (ind: ReturnType<typeof computeIndicators>) => boolean> = {
@@ -99,6 +101,8 @@ export const DEFAULT_PARAMS: BacktestParams = {
   rsiExcludeMax: 60,
   minBarVolume: 10,
   minVolatility: 0.5,
+  excludePriceMin: 0,
+  excludePriceMax: 0,
 };
 
 export interface BacktestProgress {
@@ -479,6 +483,8 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
 
             const buyPrice = opens[buyDayIdx];
 
+            if ((params.excludePriceMin ?? 0) > 0 && (params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
+
             if (buyPrice >= highs[d]) continue;
 
             if (maxGapPct > 0 && maxGapPct < 100) {
@@ -820,6 +826,8 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
 
               const entryBar = bars[entryBarGlobal];
               const buyPrice = entryBar.open;
+
+              if ((params.excludePriceMin ?? 0) > 0 && (params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
 
               const maxGapPctVal = params.maxGapPercent ?? 2.0;
               if (maxGapPctVal > 0 && maxGapPctVal < 100) {
@@ -1216,6 +1224,8 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
 
             const buyPrice = opens[buyDayIdx];
 
+            if ((params.excludePriceMin ?? 0) > 0 && (params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
+
             if (buyPrice >= highs[d]) continue;
 
             const recentCloses = closes.slice(Math.max(0, d - 20), d + 1);
@@ -1422,6 +1432,8 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               const entryBar = bars[entryBarGlobal];
               const buyPrice = entryBar.open;
 
+              if ((params.excludePriceMin ?? 0) > 0 && (params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
+
               const maxGapPctVal2 = params.maxGapPercent ?? 2.0;
               if (maxGapPctVal2 > 0 && maxGapPctVal2 < 100) {
                 const gapPct = Math.abs((buyPrice - closes[globalIdx]) / closes[globalIdx]) * 100;
@@ -1585,6 +1597,8 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
             if (buyDow2 === 5) continue;
 
             const buyPrice = opens[buyDayIdx];
+
+            if ((params.excludePriceMin ?? 0) > 0 && (params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
 
             if (buyPrice >= highs[d]) continue;
 
@@ -1788,6 +1802,8 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
 
               const entryBar = bars[entryBarGlobal];
               const buyPrice = entryBar.open;
+
+              if ((params.excludePriceMin ?? 0) > 0 && (params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
 
               const maxGapPctVal2 = params.maxGapPercent ?? 2.0;
               if (maxGapPctVal2 > 0 && maxGapPctVal2 < 100) {
