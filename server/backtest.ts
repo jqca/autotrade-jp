@@ -259,7 +259,7 @@ export function computeIndicatorsAtIndex(closes: number[], dayIndex: number, min
   const prevSignalVal = signalLine[n - 2];
   const isMacdCrossover = prevMacd <= prevSignalVal && macdLine[n - 1] > signalLine[n - 1];
 
-  const isHistFlipToPositive = histPrev < 0 && histCurr > 0;
+  const isHistFlipToPositive = histPrev2 < 0 && histPrev > 0 && histCurr > 0;
 
   let macdTrend = "neutral";
   if (isHistFlipToPositive) macdTrend = "buy";
