@@ -416,14 +416,20 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
 
             if (params.requireUptrend && !indicators.isUptrend) continue;
 
-            if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
+            if (params.requiredIndicators && params.requiredIndicators.length > 0) {
+              if (!checkRequiredIndicators(indicators, params)) continue;
+            } else {
+              if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
+            }
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
             }
 
-            if (indicators.maTrend === "sell") {
-              if (!indicators.isMacdCrossover && !indicators.isRsiReversal) continue;
+            if (!(params.requiredIndicators && params.requiredIndicators.length > 0)) {
+              if (indicators.maTrend === "sell") {
+                if (!indicators.isMacdCrossover && !indicators.isRsiReversal) continue;
+              }
             }
 
             if (params.requireMacdCrossover && !indicators.isMacdCrossover) continue;
@@ -753,14 +759,20 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
 
               if (params.requireUptrend && !indicators.isUptrend) continue;
 
-              if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
+              if (params.requiredIndicators && params.requiredIndicators.length > 0) {
+                if (!checkRequiredIndicators(indicators, params)) continue;
+              } else {
+                if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
+              }
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
               }
 
-              if (indicators.maTrend === "sell") {
-                if (!indicators.isMacdCrossover && !indicators.isRsiReversal) continue;
+              if (!(params.requiredIndicators && params.requiredIndicators.length > 0)) {
+                if (indicators.maTrend === "sell") {
+                  if (!indicators.isMacdCrossover && !indicators.isRsiReversal) continue;
+                }
               }
 
               if (params.requireMacdCrossover && !indicators.isMacdCrossover) continue;
@@ -1154,7 +1166,11 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
 
             if (params.requireUptrend && !indicators.isUptrend) continue;
 
-            if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
+            if (params.requiredIndicators && params.requiredIndicators.length > 0) {
+              if (!checkRequiredIndicators(indicators, params)) continue;
+            } else {
+              if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
+            }
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
@@ -1328,14 +1344,20 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
 
               if (params.requireUptrend && !indicators.isUptrend) continue;
 
-              if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
+              if (params.requiredIndicators && params.requiredIndicators.length > 0) {
+                if (!checkRequiredIndicators(indicators, params)) continue;
+              } else {
+                if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
+              }
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
               }
 
-              if (indicators.maTrend === "sell") {
-                if (!indicators.isMacdCrossover && !indicators.isRsiReversal) continue;
+              if (!(params.requiredIndicators && params.requiredIndicators.length > 0)) {
+                if (indicators.maTrend === "sell") {
+                  if (!indicators.isMacdCrossover && !indicators.isRsiReversal) continue;
+                }
               }
 
               if (params.requireMacdCrossover && !indicators.isMacdCrossover) continue;
@@ -1500,7 +1522,11 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
 
             if (params.requireUptrend && !indicators.isUptrend) continue;
 
-            if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
+            if (params.requiredIndicators && params.requiredIndicators.length > 0) {
+              if (!checkRequiredIndicators(indicators, params)) continue;
+            } else {
+              if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
+            }
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
@@ -1671,14 +1697,20 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
 
               if (params.requireUptrend && !indicators.isUptrend) continue;
 
-              if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
+              if (params.requiredIndicators && params.requiredIndicators.length > 0) {
+                if (!checkRequiredIndicators(indicators, params)) continue;
+              } else {
+                if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
+              }
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
               }
 
-              if (indicators.maTrend === "sell") {
-                if (!indicators.isMacdCrossover && !indicators.isRsiReversal) continue;
+              if (!(params.requiredIndicators && params.requiredIndicators.length > 0)) {
+                if (indicators.maTrend === "sell") {
+                  if (!indicators.isMacdCrossover && !indicators.isRsiReversal) continue;
+                }
               }
 
               if (params.requireMacdCrossover && !indicators.isMacdCrossover) continue;
