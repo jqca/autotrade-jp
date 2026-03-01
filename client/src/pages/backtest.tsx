@@ -151,6 +151,9 @@ export default function Backtest() {
   const [excludePriceMin, setExcludePriceMin] = useState(500);
   const [excludePriceMax, setExcludePriceMax] = useState(1000);
   const [excludePriceEnabled, setExcludePriceEnabled] = useState(false);
+  const [excludeComboNBN, setExcludeComboNBN] = useState(true);
+  const [excludeComboNNN, setExcludeComboNNN] = useState(false);
+  const [excludeComboNSN, setExcludeComboNSN] = useState(false);
   const [requireUptrend, setRequireUptrend] = useState(false);
   const [dynamicTarget, setDynamicTarget] = useState(false);
   const [requireMacdCrossover, setRequireMacdCrossover] = useState(false);
@@ -251,6 +254,11 @@ export default function Backtest() {
       minVolatility,
       excludePriceMin: excludePriceEnabled ? excludePriceMin : 0,
       excludePriceMax: excludePriceEnabled ? excludePriceMax : 0,
+      excludeCombos: [
+        ...(excludeComboNBN ? ["neutral/buy/neutral"] : []),
+        ...(excludeComboNNN ? ["neutral/neutral/neutral"] : []),
+        ...(excludeComboNSN ? ["neutral/sell/neutral"] : []),
+      ],
     }),
     onSuccess: () => {
       setPolling(true);
@@ -1021,6 +1029,28 @@ export default function Backtest() {
                     </div>
 
                     <div className="space-y-3">
+                      <Label className="text-sm font-medium">弱コンボ除外</Label>
+                      <p className="text-xs text-muted-foreground">勝率の低い指標コンボ（RSI/MA/BB）をエントリー対象から除外します</p>
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 cursor-pointer" data-testid="checkbox-exclude-nbn">
+                          <input type="checkbox" checked={excludeComboNBN} onChange={(e) => setExcludeComboNBN(e.target.checked)} className="rounded border-input" />
+                          <span className="text-sm">neutral/buy/neutral</span>
+                          <Badge variant="destructive" className="text-xs ml-auto">勝率11%</Badge>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer" data-testid="checkbox-exclude-nnn">
+                          <input type="checkbox" checked={excludeComboNNN} onChange={(e) => setExcludeComboNNN(e.target.checked)} className="rounded border-input" />
+                          <span className="text-sm">neutral/neutral/neutral</span>
+                          <Badge variant="secondary" className="text-xs ml-auto">勝率57%</Badge>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer" data-testid="checkbox-exclude-nsn">
+                          <input type="checkbox" checked={excludeComboNSN} onChange={(e) => setExcludeComboNSN(e.target.checked)} className="rounded border-input" />
+                          <span className="text-sm">neutral/sell/neutral</span>
+                          <Badge variant="destructive" className="text-xs ml-auto">勝率0%</Badge>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
                       <Label className="text-sm font-medium">最小シグナルスコア</Label>
                       <div className="flex items-center gap-3">
                         <Slider
@@ -1292,6 +1322,9 @@ export default function Backtest() {
                   {minVolume > 0 && <Badge variant="outline" className="border-blue-300 text-blue-700 dark:text-blue-400">出来高≥{minVolume.toLocaleString()}単元</Badge>}
                   {minVolatility > 0 && <Badge variant="outline" className="border-purple-300 text-purple-700 dark:text-purple-400">Vol≥{minVolatility.toFixed(1)}%</Badge>}
                   {excludePriceEnabled && <Badge variant="outline" className="border-orange-300 text-orange-700 dark:text-orange-400">除外{excludePriceMin.toLocaleString()}〜{excludePriceMax.toLocaleString()}円</Badge>}
+                  {excludeComboNBN && <Badge variant="outline" className="border-rose-300 text-rose-700 dark:text-rose-400">N/B/N除外</Badge>}
+                  {excludeComboNNN && <Badge variant="outline" className="border-rose-300 text-rose-700 dark:text-rose-400">N/N/N除外</Badge>}
+                  {excludeComboNSN && <Badge variant="outline" className="border-rose-300 text-rose-700 dark:text-rose-400">N/S/N除外</Badge>}
                   {dynamicTarget && <Badge variant="outline">動的利確</Badge>}
                   {requireDailyConfirm && <Badge variant="outline" className="border-indigo-300 text-indigo-700 dark:text-indigo-400">日足確認</Badge>}
                 </div>

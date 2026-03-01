@@ -538,6 +538,13 @@ export async function registerRoutes(
       const initialCapital = req.body.initialCapital != null ? Math.max(0, Math.round(Number(req.body.initialCapital))) : 1000000;
       const excludePriceMin = req.body.excludePriceMin != null ? Math.max(0, Math.round(Number(req.body.excludePriceMin))) : 0;
       const excludePriceMax = req.body.excludePriceMax != null ? Math.max(0, Math.round(Number(req.body.excludePriceMax))) : 0;
+      const rsiExcludeMin = req.body.rsiExcludeMin != null ? Number(req.body.rsiExcludeMin) : undefined;
+      const rsiExcludeMax = req.body.rsiExcludeMax != null ? Number(req.body.rsiExcludeMax) : undefined;
+      const minBarVolume = req.body.minBarVolume != null ? Math.max(0, Math.round(Number(req.body.minBarVolume))) : undefined;
+      const minVolatility = req.body.minVolatility != null ? Math.max(0, Number(req.body.minVolatility)) : undefined;
+      const excludeCombos = Array.isArray(req.body.excludeCombos)
+        ? (req.body.excludeCombos as string[]).filter(c => typeof c === 'string' && c.includes('/'))
+        : undefined;
       const validMarkets = ["JP", "US"];
       const market = validMarkets.includes(req.body.market) ? req.body.market : undefined;
       const validIndicatorKeys = ["macd", "rsi", "ma", "bb"];
@@ -580,6 +587,11 @@ export async function registerRoutes(
         market,
         excludePriceMin,
         excludePriceMax,
+        rsiExcludeMin,
+        rsiExcludeMax,
+        minBarVolume,
+        minVolatility,
+        excludeCombos,
       };
       await startBacktest(params, 3);
       res.json({ message: "バックテストを開始しました", params });

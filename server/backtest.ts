@@ -45,6 +45,7 @@ export interface BacktestParams {
   minVolatility?: number;
   excludePriceMin?: number;
   excludePriceMax?: number;
+  excludeCombos?: string[];
 }
 
 const INDICATOR_MAP: Record<string, (ind: ReturnType<typeof computeIndicators>) => boolean> = {
@@ -444,6 +445,10 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
               if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
+            }
+            if (params.excludeCombos && params.excludeCombos.length > 0) {
+              const combo = `${indicators.rsiTrend}/${indicators.maTrend}/${indicators.bbTrend}`;
+              if (params.excludeCombos.includes(combo)) continue;
             }
 
             if (!(params.requiredIndicators && params.requiredIndicators.length > 0)) {
@@ -1214,6 +1219,10 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
               if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
             }
+            if (params.excludeCombos && params.excludeCombos.length > 0) {
+              const combo = `${indicators.rsiTrend}/${indicators.maTrend}/${indicators.bbTrend}`;
+              if (params.excludeCombos.includes(combo)) continue;
+            }
 
             const buyDayIdx = d + 1;
             if (buyDayIdx >= closes.length) continue;
@@ -1587,6 +1596,10 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
               if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
+            }
+            if (params.excludeCombos && params.excludeCombos.length > 0) {
+              const combo = `${indicators.rsiTrend}/${indicators.maTrend}/${indicators.bbTrend}`;
+              if (params.excludeCombos.includes(combo)) continue;
             }
 
             const buyDayIdx = d + 1;
