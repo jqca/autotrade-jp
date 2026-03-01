@@ -241,6 +241,8 @@ export default function Backtest() {
       dailyMinSignalScore,
       initialCapital,
       market,
+      rsiExcludeMin: 50,
+      rsiExcludeMax: 60,
     }),
     onSuccess: () => {
       setPolling(true);

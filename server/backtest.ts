@@ -39,6 +39,8 @@ export interface BacktestParams {
   dailyMinSignalScore?: number;
   initialCapital?: number;
   market?: string;
+  rsiExcludeMin?: number;
+  rsiExcludeMax?: number;
 }
 
 const INDICATOR_MAP: Record<string, (ind: ReturnType<typeof computeIndicators>) => boolean> = {
@@ -91,6 +93,8 @@ export const DEFAULT_PARAMS: BacktestParams = {
   dailyMinBuyIndicators: 2,
   dailyMinSignalScore: 0,
   initialCapital: 1000000,
+  rsiExcludeMin: 50,
+  rsiExcludeMax: 60,
 };
 
 export interface BacktestProgress {
@@ -431,6 +435,7 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
+              if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
             }
 
             if (!(params.requiredIndicators && params.requiredIndicators.length > 0)) {
@@ -782,6 +787,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
+                if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
               }
 
               if (!(params.requiredIndicators && params.requiredIndicators.length > 0)) {
@@ -1191,6 +1197,7 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
+              if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
             }
 
             const buyDayIdx = d + 1;
@@ -1378,6 +1385,7 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
+                if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
               }
 
               if (!(params.requiredIndicators && params.requiredIndicators.length > 0)) {
@@ -1556,6 +1564,7 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
+              if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
             }
 
             const buyDayIdx = d + 1;
@@ -1740,6 +1749,7 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
+                if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
               }
 
               if (!(params.requiredIndicators && params.requiredIndicators.length > 0)) {
@@ -1910,7 +1920,7 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
     requireMaBuy: params.requireMaBuy,
     simDays: params.simDays,
     timeframe: params.timeframe,
-    label: params.label || `${tfLabel}${marketLabel} 目標${params.targetPercent}% ${params.requiredIndicators?.length ? "必須:" + params.requiredIndicators.map(i => i.toUpperCase()).join("/") : "指標" + params.minBuyIndicators + "+"} RSI${params.rsiMin}-${params.rsiMax}${params.requireMaBuy ? " MA必須" : ""}${aiQuantumLabel}${capitalLabel}${params.startDate || params.endDate ? ` ${params.startDate || ""}〜${params.endDate || ""}` : ""}`,
+    label: params.label || `${tfLabel}${marketLabel} 目標${params.targetPercent}% ${params.requiredIndicators?.length ? "必須:" + params.requiredIndicators.map(i => i.toUpperCase()).join("/") : "指標" + params.minBuyIndicators + "+"} RSI${params.rsiMin}-${params.rsiMax}${params.rsiExcludeMin != null && params.rsiExcludeMax != null ? ` 除外${params.rsiExcludeMin}-${params.rsiExcludeMax}` : ""}${params.requireMaBuy ? " MA必須" : ""}${aiQuantumLabel}${capitalLabel}${params.startDate || params.endDate ? ` ${params.startDate || ""}〜${params.endDate || ""}` : ""}`,
     useAi: params.useAi ?? false,
     useQuantum: params.useQuantum ?? false,
     aiThreshold: params.aiThreshold ?? 0.5,
