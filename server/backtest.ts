@@ -715,8 +715,10 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
           bars.sort((a, b) => a.date.localeCompare(b.date));
 
           const useDailyConfirm = params.requireDailyConfirm ?? false;
+          const macdRequired = params.requiredIndicators?.includes("macd") ?? false;
+          const needDailyCtx = useDailyConfirm || macdRequired;
           let dailyCtx: Map<string, DailyContext> | null = null;
-          if (useDailyConfirm) {
+          if (needDailyCtx) {
             dailyCtx = await buildDailyContext(ticker);
           }
 
@@ -750,6 +752,12 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               if (dc.buyIndicatorCount < dailyMinBuy) continue;
               const dailyMinScore = params.dailyMinSignalScore ?? 0;
               if (dailyMinScore > 0 && dc.signalScore < dailyMinScore) continue;
+            }
+
+            if (macdRequired && dailyCtx) {
+              const prevDayKey = dayIdx > 0 ? dayBarOffsets[dayIdx - 1].day : null;
+              const dc = prevDayKey ? dailyCtx.get(prevDayKey) : null;
+              if (!dc || dc.macdTrend !== "buy") continue;
             }
 
             const stopLoss = params.stopLossPercent ?? 0;
@@ -1300,8 +1308,10 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
           bars.sort((a, b) => a.date.localeCompare(b.date));
 
           const useDailyConfirm2 = params.requireDailyConfirm ?? false;
+          const macdRequired2 = params.requiredIndicators?.includes("macd") ?? false;
+          const needDailyCtx2 = useDailyConfirm2 || macdRequired2;
           let dailyCtx2: Map<string, DailyContext> | null = null;
-          if (useDailyConfirm2) {
+          if (needDailyCtx2) {
             dailyCtx2 = await buildDailyContext(ticker);
           }
 
@@ -1336,6 +1346,13 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               const dailyMinScore = params.dailyMinSignalScore ?? 0;
               if (dailyMinScore > 0 && dc.signalScore < dailyMinScore) continue;
             }
+
+            if (macdRequired2 && dailyCtx2) {
+              const prevDayKey = dayIdx > 0 ? dayBarOffsets[dayIdx - 1].day : null;
+              const dc = prevDayKey ? dailyCtx2.get(prevDayKey) : null;
+              if (!dc || dc.macdTrend !== "buy") continue;
+            }
+
 
             const stopLoss = params.stopLossPercent ?? 0;
 
@@ -1653,8 +1670,10 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
           bars.sort((a, b) => a.date.localeCompare(b.date));
 
           const useDailyConfirm2 = params.requireDailyConfirm ?? false;
+          const macdRequired2 = params.requiredIndicators?.includes("macd") ?? false;
+          const needDailyCtx2 = useDailyConfirm2 || macdRequired2;
           let dailyCtx2: Map<string, DailyContext> | null = null;
-          if (useDailyConfirm2) {
+          if (needDailyCtx2) {
             dailyCtx2 = await buildDailyContext(ticker);
           }
 
@@ -1689,6 +1708,13 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               const dailyMinScore = params.dailyMinSignalScore ?? 0;
               if (dailyMinScore > 0 && dc.signalScore < dailyMinScore) continue;
             }
+
+            if (macdRequired2 && dailyCtx2) {
+              const prevDayKey = dayIdx > 0 ? dayBarOffsets[dayIdx - 1].day : null;
+              const dc = prevDayKey ? dailyCtx2.get(prevDayKey) : null;
+              if (!dc || dc.macdTrend !== "buy") continue;
+            }
+
 
             const stopLoss = params.stopLossPercent ?? 0;
 
