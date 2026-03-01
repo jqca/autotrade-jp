@@ -16,8 +16,9 @@ import {
   CheckCircle, XCircle, Settings2, GitCompare, List, Banknote, TrendingUp,
   Clock, AlertTriangle, Activity, Zap, Brain, Atom, Shield,
 } from "lucide-react";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Link } from "wouter";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { BacktestResult, BacktestRun as BacktestRunConfig } from "@shared/schema";
@@ -301,6 +302,27 @@ export default function Backtest() {
       return { ...run, winRate };
     });
   }, [runs]);
+
+  const capitalChartData = useMemo(() => {
+    if (!results || results.length === 0) return null;
+    if (!results.some(r => r.capitalAfter != null)) return null;
+    const sorted = [...results]
+      .filter(r => r.capitalAfter != null)
+      .sort((a, b) => a.buyDate.localeCompare(b.buyDate));
+    if (sorted.length === 0) return null;
+    const initialCap = sorted[0].capitalBefore ?? sorted[0].capitalAfter!;
+    const points: { date: string; capital: number; label: string }[] = [
+      { date: sorted[0].buyDate, capital: Math.round(initialCap), label: "開始" },
+    ];
+    for (const r of sorted) {
+      points.push({
+        date: r.sellDate || r.buyDate,
+        capital: Math.round(r.capitalAfter!),
+        label: `${r.ticker} ${r.profitLossPercent >= 0 ? "+" : ""}${r.profitLossPercent.toFixed(2)}%`,
+      });
+    }
+    return { points, initialCap: Math.round(initialCap) };
+  }, [results]);
 
   const isRunning = progressData?.status === "running";
   const activeRunConfig = runs?.find(r => r.runId === activeRunId)?.config;
@@ -1614,6 +1636,62 @@ export default function Backtest() {
                   </CardContent>
                 </Card>
               </div>
+            )}
+
+            {capitalChartData && (
+              <Card data-testid="card-capital-chart">
+                <CardHeader className="pb-2 pt-4 px-4">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Activity className="h-4 w-4" />
+                    資産推移
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-2 pb-3">
+                  <ResponsiveContainer width="100%" height={260}>
+                    <AreaChart data={capitalChartData.points} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                      <defs>
+                        <linearGradient id="capitalGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 11 }}
+                        className="fill-muted-foreground"
+                        tickFormatter={(v: string) => v.slice(5)}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 11 }}
+                        className="fill-muted-foreground"
+                        tickFormatter={(v: number) => `${(v / 10000).toFixed(0)}万`}
+                        domain={["dataMin - 50000", "dataMax + 50000"]}
+                      />
+                      <Tooltip
+                        contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                        formatter={(value: number) => [`${value.toLocaleString("ja-JP")}円`, "資産"]}
+                        labelFormatter={(label: string) => label}
+                      />
+                      <ReferenceLine
+                        y={capitalChartData.initialCap}
+                        stroke="hsl(var(--muted-foreground))"
+                        strokeDasharray="4 4"
+                        strokeOpacity={0.5}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="capital"
+                        stroke="hsl(var(--primary))"
+                        fill="url(#capitalGrad)"
+                        strokeWidth={2}
+                        dot={{ r: 2, fill: "hsl(var(--primary))" }}
+                        activeDot={{ r: 4 }}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
             )}
           </>)}
 
