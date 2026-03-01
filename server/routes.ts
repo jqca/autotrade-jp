@@ -513,9 +513,14 @@ export async function registerRoutes(
       const dailyMinBuyIndicators = req.body.dailyMinBuyIndicators != null ? Math.max(1, Math.min(4, Math.round(Number(req.body.dailyMinBuyIndicators)))) : 2;
       const dailyMinSignalScore = req.body.dailyMinSignalScore != null ? Math.max(0, Math.min(100, Math.round(Number(req.body.dailyMinSignalScore)))) : 0;
       const initialCapital = req.body.initialCapital != null ? Math.max(0, Math.round(Number(req.body.initialCapital))) : 1000000;
+      const validIndicatorKeys = ["macd", "rsi", "ma", "bb"];
+      const requiredIndicators = Array.isArray(req.body.requiredIndicators)
+        ? (req.body.requiredIndicators as string[]).filter(k => validIndicatorKeys.includes(k))
+        : undefined;
       const params: BacktestParams = {
         targetPercent,
         minBuyIndicators,
+        requiredIndicators,
         rsiMin,
         rsiMax,
         requireMaBuy: Boolean(req.body.requireMaBuy),

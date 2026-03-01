@@ -8,6 +8,7 @@ import { logEnergy } from "./energy-monitor";
 export interface BacktestParams {
   targetPercent: number;
   minBuyIndicators: number;
+  requiredIndicators?: string[];
   rsiMin: number;
   rsiMax: number;
   requireMaBuy: boolean;
@@ -37,6 +38,26 @@ export interface BacktestParams {
   dailyMinBuyIndicators?: number;
   dailyMinSignalScore?: number;
   initialCapital?: number;
+}
+
+const INDICATOR_MAP: Record<string, (ind: ReturnType<typeof computeIndicators>) => boolean> = {
+  macd: (ind) => ind.macdTrend === "buy",
+  rsi: (ind) => ind.rsiTrend === "buy",
+  ma: (ind) => ind.maTrend === "buy",
+  bb: (ind) => ind.bbTrend === "buy",
+};
+
+function checkRequiredIndicators(indicators: ReturnType<typeof computeIndicators>, params: BacktestParams): boolean {
+  if (params.requiredIndicators && params.requiredIndicators.length > 0) {
+    for (const key of params.requiredIndicators) {
+      const check = INDICATOR_MAP[key];
+      if (check && !check(indicators)) return false;
+    }
+    return true;
+  }
+  const buyCount = [indicators.macdTrend, indicators.rsiTrend, indicators.maTrend, indicators.bbTrend]
+    .filter(t => t === "buy").length;
+  return buyCount >= params.minBuyIndicators;
 }
 
 export const DEFAULT_PARAMS: BacktestParams = {
@@ -395,10 +416,7 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
 
             if (params.requireUptrend && !indicators.isUptrend) continue;
 
-            const buyIndicators = [indicators.macdTrend, indicators.rsiTrend, indicators.maTrend, indicators.bbTrend]
-              .filter(t => t === "buy").length;
-
-            if (indicators.overallSignal !== "buy" || buyIndicators < params.minBuyIndicators) continue;
+            if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
@@ -735,10 +753,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
 
               if (params.requireUptrend && !indicators.isUptrend) continue;
 
-              const buyIndicators = [indicators.macdTrend, indicators.rsiTrend, indicators.maTrend, indicators.bbTrend]
-                .filter(t => t === "buy").length;
-
-              if (indicators.overallSignal !== "buy" || buyIndicators < params.minBuyIndicators) continue;
+              if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
@@ -1139,10 +1154,7 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
 
             if (params.requireUptrend && !indicators.isUptrend) continue;
 
-            const buyIndicators = [indicators.macdTrend, indicators.rsiTrend, indicators.maTrend, indicators.bbTrend]
-              .filter(t => t === "buy").length;
-
-            if (indicators.overallSignal !== "buy" || buyIndicators < params.minBuyIndicators) continue;
+            if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
@@ -1316,10 +1328,7 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
 
               if (params.requireUptrend && !indicators.isUptrend) continue;
 
-              const buyIndicators = [indicators.macdTrend, indicators.rsiTrend, indicators.maTrend, indicators.bbTrend]
-                .filter(t => t === "buy").length;
-
-              if (indicators.overallSignal !== "buy" || buyIndicators < params.minBuyIndicators) continue;
+              if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
@@ -1491,10 +1500,7 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
 
             if (params.requireUptrend && !indicators.isUptrend) continue;
 
-            const buyIndicators = [indicators.macdTrend, indicators.rsiTrend, indicators.maTrend, indicators.bbTrend]
-              .filter(t => t === "buy").length;
-
-            if (indicators.overallSignal !== "buy" || buyIndicators < params.minBuyIndicators) continue;
+            if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
@@ -1665,10 +1671,7 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
 
               if (params.requireUptrend && !indicators.isUptrend) continue;
 
-              const buyIndicators = [indicators.macdTrend, indicators.rsiTrend, indicators.maTrend, indicators.bbTrend]
-                .filter(t => t === "buy").length;
-
-              if (indicators.overallSignal !== "buy" || buyIndicators < params.minBuyIndicators) continue;
+              if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
@@ -1835,7 +1838,7 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
     requireMaBuy: params.requireMaBuy,
     simDays: params.simDays,
     timeframe: params.timeframe,
-    label: params.label || `${tfLabel} 目標${params.targetPercent}% 指標${params.minBuyIndicators}+ RSI${params.rsiMin}-${params.rsiMax}${params.requireMaBuy ? " MA必須" : ""}${aiQuantumLabel}${capitalLabel}${params.startDate || params.endDate ? ` ${params.startDate || ""}〜${params.endDate || ""}` : ""}`,
+    label: params.label || `${tfLabel} 目標${params.targetPercent}% ${params.requiredIndicators?.length ? "必須:" + params.requiredIndicators.map(i => i.toUpperCase()).join("/") : "指標" + params.minBuyIndicators + "+"} RSI${params.rsiMin}-${params.rsiMax}${params.requireMaBuy ? " MA必須" : ""}${aiQuantumLabel}${capitalLabel}${params.startDate || params.endDate ? ` ${params.startDate || ""}〜${params.endDate || ""}` : ""}`,
     useAi: params.useAi ?? false,
     useQuantum: params.useQuantum ?? false,
     aiThreshold: params.aiThreshold ?? 0.5,

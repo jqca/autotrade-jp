@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   PlayCircle, StopCircle, Trophy, TrendingDown, BarChart3, Trash2, Loader2,
@@ -51,6 +52,7 @@ interface BacktestProgress {
 interface BacktestParams {
   targetPercent: number;
   minBuyIndicators: number;
+  requiredIndicators?: string[];
   rsiMin: number;
   rsiMax: number;
   requireMaBuy: boolean;
@@ -98,7 +100,7 @@ function RunLabel({ run }: { run: BacktestRun }) {
     ? ` [${cfg.useAi ? "AI" : ""}${cfg.useAi && cfg.useQuantum ? "+" : ""}${cfg.useQuantum ? "量子" : ""}]`
     : "";
   const paramStr = cfg
-    ? `${tfLabel} 目標${cfg.targetPercent}% 指標${cfg.minBuyIndicators}+${aiLabel}`
+    ? `${tfLabel} 目標${cfg.targetPercent}% ${cfg.requiredIndicators?.length ? "必須:" + (cfg.requiredIndicators as string[]).map((i: string) => i.toUpperCase()).join("/") : "指標" + cfg.minBuyIndicators + "+"}${aiLabel}`
     : "";
   return <span>{dateStr} {paramStr} ({run.count}件)</span>;
 }
@@ -128,10 +130,9 @@ export default function Backtest() {
   const { toast } = useToast();
 
   const [targetPercent, setTargetPercent] = useState(1.0);
-  const [minBuyIndicators, setMinBuyIndicators] = useState(3);
+  const [requiredIndicators, setRequiredIndicators] = useState<string[]>(["macd", "ma"]);
   const [rsiMin, setRsiMin] = useState(25);
   const [rsiMax, setRsiMax] = useState(30);
-  const [requireMaBuy, setRequireMaBuy] = useState(false);
   const [simDays, setSimDays] = useState(200);
   const [timeframe, setTimeframe] = useState("1d");
   const [startDate, setStartDate] = useState("");
@@ -203,10 +204,11 @@ export default function Backtest() {
   const runMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/backtest/run", {
       targetPercent,
-      minBuyIndicators,
+      minBuyIndicators: requiredIndicators.length,
+      requiredIndicators,
       rsiMin,
       rsiMax,
-      requireMaBuy,
+      requireMaBuy: requiredIndicators.includes("ma"),
       simDays,
       timeframe,
       label: "",
@@ -699,28 +701,41 @@ export default function Backtest() {
                   <p className="text-xs text-muted-foreground">当日高値が始値+目標%に達したら利確（勝ち）</p>
                 </div>
 
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">最低買い指標数</Label>
-                  <div className="flex items-center gap-3">
-                    <Slider
-                      value={[minBuyIndicators]}
-                      onValueChange={([v]) => setMinBuyIndicators(v)}
-                      min={0}
-                      max={4}
-                      step={1}
-                      className="flex-1"
-                      data-testid="slider-min-indicators"
-                    />
-                    <Badge variant="secondary" className="min-w-[50px] justify-center" data-testid="text-min-indicators">
-                      {minBuyIndicators}/4
+                <div className="space-y-3 sm:col-span-2">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm font-medium">必須買い指標</Label>
+                    <Badge variant="secondary" className="text-[10px] h-5" data-testid="text-required-indicators-count">
+                      {requiredIndicators.length}/4 選択中
                     </Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground">MACD/RSI/MA/BBのうち何個以上が「買い」でエントリー（0=制限なし）</p>
-                  <div className="text-xs text-muted-foreground space-y-1 pl-2 border-l-2 border-muted">
-                    <p><span className="font-medium text-foreground">MACD</span>: MACDラインがシグナル線より上（クロス時+30pt）</p>
-                    <p><span className="font-medium text-foreground">RSI</span>: RSI値が30以下（売られすぎ＝反発期待）</p>
-                    <p><span className="font-medium text-foreground">MA</span>: MA5がMA25をゴールデンクロス、または価格&gt;MA5&gt;MA25の上昇配列</p>
-                    <p><span className="font-medium text-foreground">BB</span>: 価格がボリンジャーバンド下限以下（反発期待）</p>
+                  <p className="text-xs text-muted-foreground">チェックした指標が全て「買い」の場合のみエントリー（未選択＝制限なし）</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {([
+                      { key: "macd", label: "MACD", desc: "MACDラインがシグナル線より上（クロス時+30pt）" },
+                      { key: "rsi", label: "RSI", desc: "RSI値が30以下（売られすぎ＝反発期待）" },
+                      { key: "ma", label: "MA（移動平均）", desc: "MA5がMA25をGC、または価格>MA5>MA25の上昇配列" },
+                      { key: "bb", label: "BB（ボリンジャー）", desc: "価格がバンド下限以下（反発期待）" },
+                    ] as const).map(ind => (
+                      <label
+                        key={ind.key}
+                        className="flex items-start gap-3 p-3 rounded-lg border cursor-pointer hover:bg-accent/50 transition-colors"
+                        data-testid={`checkbox-indicator-${ind.key}`}
+                      >
+                        <Checkbox
+                          checked={requiredIndicators.includes(ind.key)}
+                          onCheckedChange={(checked) => {
+                            setRequiredIndicators(prev =>
+                              checked ? [...prev, ind.key] : prev.filter(k => k !== ind.key)
+                            );
+                          }}
+                          className="mt-0.5"
+                        />
+                        <div className="space-y-0.5">
+                          <span className="text-sm font-medium">{ind.label}</span>
+                          <p className="text-xs text-muted-foreground">{ind.desc}</p>
+                        </div>
+                      </label>
+                    ))}
                   </div>
                 </div>
 
@@ -786,17 +801,6 @@ export default function Backtest() {
                   <p className="text-xs text-muted-foreground">手元資金。資金不足の場合は買いシグナルがあってもスキップされます</p>
                 </div>
 
-                <div className="flex items-center gap-3 sm:col-span-2">
-                  <Switch
-                    checked={requireMaBuy}
-                    onCheckedChange={setRequireMaBuy}
-                    data-testid="switch-require-ma"
-                  />
-                  <div>
-                    <Label className="text-sm font-medium">MA（移動平均）必須</Label>
-                    <p className="text-xs text-muted-foreground">移動平均線が買いシグナルでなければエントリーしない</p>
-                  </div>
-                </div>
               </div>
 
               <div className="pt-4 border-t">
@@ -1122,9 +1126,10 @@ export default function Backtest() {
                 <div className="flex gap-2 text-xs text-muted-foreground flex-wrap">
                   <Badge variant={timeframe !== "1d" ? "default" : "outline"}>{({"5m":"5分足","10m":"10分足","30m":"30分足","1d":"日足"} as Record<string,string>)[timeframe] || timeframe}</Badge>
                   <Badge variant="outline">目標 {targetPercent.toFixed(1)}%</Badge>
-                  <Badge variant="outline">指標 {minBuyIndicators}+</Badge>
+                  {requiredIndicators.length > 0
+                    ? <Badge variant="outline">必須: {requiredIndicators.map(i => i.toUpperCase()).join("/")}</Badge>
+                    : <Badge variant="outline">指標制限なし</Badge>}
                   <Badge variant="outline">RSI {rsiMin}-{rsiMax}</Badge>
-                  {requireMaBuy && <Badge variant="outline">MA必須</Badge>}
                   <Badge variant="outline">{simDays}日間</Badge>
                   {useAi && <Badge className="bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300">AI</Badge>}
                   {useQuantum && <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">量子</Badge>}
@@ -1371,9 +1376,10 @@ export default function Backtest() {
                     {({"5m":"5分足","10m":"10分足","30m":"30分足","1d":"日足"} as Record<string,string>)[activeRunConfig.timeframe]}
                   </Badge>
                   <Badge variant="outline">目標 {activeRunConfig.targetPercent}%</Badge>
-                  <Badge variant="outline">指標 {activeRunConfig.minBuyIndicators}+</Badge>
+                  {activeRunConfig.requiredIndicators?.length
+                    ? <Badge variant="outline">必須: {(activeRunConfig.requiredIndicators as string[]).map((i: string) => i.toUpperCase()).join("/")}</Badge>
+                    : <Badge variant="outline">指標 {activeRunConfig.minBuyIndicators}+</Badge>}
                   <Badge variant="outline">RSI {activeRunConfig.rsiMin}-{activeRunConfig.rsiMax}</Badge>
-                  {activeRunConfig.requireMaBuy && <Badge variant="outline">MA必須</Badge>}
                   <Badge variant="outline">{activeRunConfig.simDays}日間</Badge>
                   {activeRunConfig.useAi && <Badge className="bg-sky-100 text-sky-700 dark:bg-sky-900 dark:text-sky-300">AI (閾値{((activeRunConfig.aiThreshold ?? 0.5) * 100).toFixed(0)}%)</Badge>}
                   {activeRunConfig.useQuantum && <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">量子QAOA</Badge>}
