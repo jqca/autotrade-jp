@@ -433,6 +433,7 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
               if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
             }
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
+            if (indicators.maTrend === "sell") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
               if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
@@ -785,6 +786,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
                 if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
               }
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
+            if (indicators.maTrend === "sell") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
                 if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
@@ -1195,6 +1197,7 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
               if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
             }
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
+            if (indicators.maTrend === "sell") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
               if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
@@ -1383,6 +1386,7 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
                 if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
               }
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
+            if (indicators.maTrend === "sell") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
                 if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
@@ -1562,6 +1566,7 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
               if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
             }
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
+            if (indicators.maTrend === "sell") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
               if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
@@ -1747,6 +1752,7 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
                 if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
               }
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
+            if (indicators.maTrend === "sell") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
                 if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
