@@ -1,10 +1,13 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TrendingUp, TrendingDown, Activity, Wallet, BarChart3, Zap, Clock, Timer, Database } from "lucide-react";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Stock, Strategy, Trade, PortfolioPosition } from "@shared/schema";
 
@@ -76,7 +79,19 @@ function StatCard({ title, value, change, icon: Icon, trend }: {
   );
 }
 
+interface NikkeiData {
+  range: string;
+  interval: string;
+  trend: "up" | "down" | "neutral";
+  latest: { close: number; change: number; changePercent: number; date: string };
+  period: { change: number; changePercent: number };
+  ma25: number | null;
+  ma75: number | null;
+  prices: { date: string; close: number; high: number; low: number; open: number; volume: number }[];
+}
+
 export default function Dashboard() {
+  const [nikkeiRange, setNikkeiRange] = useState("1y");
   const { data: stocksRaw, isLoading: stocksLoading } = useQuery<Stock[]>({ queryKey: ["/api/stocks"] });
   const stocks = stocksRaw?.filter(s => s.currentPrice > 0 && s.previousClose > 0);
   const { data: strategies, isLoading: strategiesLoading } = useQuery<Strategy[]>({ queryKey: ["/api/strategies"] });
@@ -88,6 +103,14 @@ export default function Dashboard() {
   const { data: intradayProgress } = useQuery<IntradayFetchProgress>({
     queryKey: ["/api/intraday/progress"],
     refetchInterval: (query) => query.state.data?.status === "running" ? 2000 : false,
+  });
+  const { data: nikkeiData, isLoading: nikkeiLoading } = useQuery<NikkeiData>({
+    queryKey: ["/api/market-index/nikkei225", nikkeiRange],
+    queryFn: async () => {
+      const res = await fetch(`/api/market-index/nikkei225?range=${nikkeiRange}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
 
   const toggleScheduler = useMutation({
@@ -184,6 +207,115 @@ export default function Dashboard() {
           trend="neutral"
         />
       </div>
+
+      <Card data-testid="card-nikkei225">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <CardTitle className="text-lg">日経平均株価</CardTitle>
+              {nikkeiData && (
+                <>
+                  <span className="text-xl font-bold" data-testid="text-nikkei-price">
+                    {nikkeiData.latest.close.toLocaleString("ja-JP", { minimumFractionDigits: 2 })}
+                  </span>
+                  <Badge
+                    variant={nikkeiData.latest.change >= 0 ? "default" : "destructive"}
+                    className="text-xs"
+                    data-testid="badge-nikkei-change"
+                  >
+                    {nikkeiData.latest.change >= 0 ? "+" : ""}{nikkeiData.latest.change.toLocaleString("ja-JP")}
+                    ({nikkeiData.latest.changePercent >= 0 ? "+" : ""}{nikkeiData.latest.changePercent.toFixed(2)}%)
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className={
+                      nikkeiData.trend === "up" ? "border-emerald-300 text-emerald-700 dark:text-emerald-400" :
+                      nikkeiData.trend === "down" ? "border-red-300 text-red-500 dark:text-red-400" :
+                      ""
+                    }
+                    data-testid="badge-nikkei-trend"
+                  >
+                    {nikkeiData.trend === "up" ? "上昇トレンド" : nikkeiData.trend === "down" ? "下降トレンド" : "レンジ"}
+                  </Badge>
+                </>
+              )}
+            </div>
+            <Select value={nikkeiRange} onValueChange={setNikkeiRange}>
+              <SelectTrigger className="w-[100px]" data-testid="select-nikkei-range">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1mo">1ヶ月</SelectItem>
+                <SelectItem value="3mo">3ヶ月</SelectItem>
+                <SelectItem value="6mo">6ヶ月</SelectItem>
+                <SelectItem value="1y">1年</SelectItem>
+                <SelectItem value="2y">2年</SelectItem>
+                <SelectItem value="5y">5年</SelectItem>
+                <SelectItem value="10y">10年</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {nikkeiData && (
+            <div className="flex gap-4 text-xs text-muted-foreground mt-1">
+              <span>期間: {nikkeiData.period.changePercent >= 0 ? "+" : ""}{nikkeiData.period.changePercent.toFixed(2)}%</span>
+              {nikkeiData.ma25 && <span>MA25: {nikkeiData.ma25.toLocaleString("ja-JP")}</span>}
+              {nikkeiData.ma75 && <span>MA75: {nikkeiData.ma75.toLocaleString("ja-JP")}</span>}
+              <span>{nikkeiData.latest.date}</span>
+            </div>
+          )}
+        </CardHeader>
+        <CardContent>
+          {nikkeiLoading ? (
+            <Skeleton className="h-[250px] w-full" />
+          ) : nikkeiData ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <AreaChart data={nikkeiData.prices} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="nikkeiGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={nikkeiData.period.changePercent >= 0 ? "#10b981" : "#ef4444"} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={nikkeiData.period.changePercent >= 0 ? "#10b981" : "#ef4444"} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 10 }}
+                  tickFormatter={(v: string) => {
+                    if (["5y", "10y"].includes(nikkeiRange)) return v.substring(0, 4);
+                    if (["1y", "2y"].includes(nikkeiRange)) return v.substring(5, 7) + "月";
+                    return v.substring(5);
+                  }}
+                  interval="preserveStartEnd"
+                  minTickGap={40}
+                />
+                <YAxis
+                  tick={{ fontSize: 10 }}
+                  domain={["auto", "auto"]}
+                  tickFormatter={(v: number) => (v / 1000).toFixed(0) + "k"}
+                  width={45}
+                />
+                <Tooltip
+                  contentStyle={{ fontSize: 12 }}
+                  formatter={(value: number) => [value.toLocaleString("ja-JP", { minimumFractionDigits: 2 }), "終値"]}
+                  labelFormatter={(label: string) => label}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="close"
+                  stroke={nikkeiData.period.changePercent >= 0 ? "#10b981" : "#ef4444"}
+                  fill="url(#nikkeiGrad)"
+                  strokeWidth={1.5}
+                  dot={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[250px] flex items-center justify-center text-muted-foreground">
+              データを取得できませんでした
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         <Card>

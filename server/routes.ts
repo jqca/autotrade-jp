@@ -1167,6 +1167,85 @@ export async function registerRoutes(
     }
   });
 
+  const nikkeiCache: { data: any; fetchedAt: number } = { data: null, fetchedAt: 0 };
+  const NIKKEI_CACHE_TTL = 30 * 60 * 1000;
+
+  app.get("/api/market-index/nikkei225", async (req, res) => {
+    try {
+      const range = (req.query.range as string) || "1y";
+      const validRanges = ["1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "max"];
+      const safeRange = validRanges.includes(range) ? range : "1y";
+      const cacheKey = `nikkei_${safeRange}`;
+      const now = Date.now();
+
+      if (nikkeiCache.data && (now - nikkeiCache.fetchedAt) < NIKKEI_CACHE_TTL && nikkeiCache.data.range === safeRange) {
+        return res.json(nikkeiCache.data);
+      }
+
+      const interval = ["5y", "10y", "max"].includes(safeRange) ? "1wk" : "1d";
+      const prices = await fetchHistoricalPrices("^N225", safeRange, interval);
+
+      if (prices.length === 0) {
+        return res.status(404).json({ message: "データが見つかりません" });
+      }
+
+      const latest = prices[prices.length - 1];
+      const prev = prices.length >= 2 ? prices[prices.length - 2] : latest;
+      const first = prices[0];
+      const change = latest.close - prev.close;
+      const changePercent = (change / prev.close) * 100;
+      const periodChange = latest.close - first.close;
+      const periodChangePercent = (periodChange / first.close) * 100;
+
+      const ma25 = prices.length >= 25
+        ? prices.slice(-25).reduce((s, p) => s + p.close, 0) / 25
+        : null;
+      const ma75 = prices.length >= 75
+        ? prices.slice(-75).reduce((s, p) => s + p.close, 0) / 75
+        : null;
+
+      let trend: "up" | "down" | "neutral" = "neutral";
+      if (ma25 && ma75) {
+        if (latest.close > ma25 && ma25 > ma75) trend = "up";
+        else if (latest.close < ma25 && ma25 < ma75) trend = "down";
+      }
+
+      const result = {
+        range: safeRange,
+        interval,
+        trend,
+        latest: {
+          close: latest.close,
+          change: Math.round(change * 100) / 100,
+          changePercent: Math.round(changePercent * 100) / 100,
+          date: latest.date,
+        },
+        period: {
+          change: Math.round(periodChange * 100) / 100,
+          changePercent: Math.round(periodChangePercent * 100) / 100,
+        },
+        ma25: ma25 ? Math.round(ma25 * 100) / 100 : null,
+        ma75: ma75 ? Math.round(ma75 * 100) / 100 : null,
+        prices: prices.map(p => ({
+          date: p.date,
+          close: p.close,
+          high: p.high,
+          low: p.low,
+          open: p.open,
+          volume: p.volume,
+        })),
+      };
+
+      nikkeiCache.data = result;
+      nikkeiCache.fetchedAt = now;
+
+      res.json(result);
+    } catch (err: any) {
+      console.error("[Nikkei225]", err.message);
+      res.status(500).json({ message: "日経平均データの取得に失敗しました" });
+    }
+  });
+
   seedCreditProducts().catch(err => console.error('[Seed] Credit seed error:', err));
 
   startScheduler();

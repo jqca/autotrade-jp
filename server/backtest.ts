@@ -46,6 +46,7 @@ export interface BacktestParams {
   excludePriceMin?: number;
   excludePriceMax?: number;
   excludeCombos?: string[];
+  requireMarketUptrend?: boolean;
 }
 
 const INDICATOR_MAP: Record<string, (ind: ReturnType<typeof computeIndicators>) => boolean> = {
@@ -1970,6 +1971,28 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
     requiredIndicators: params.requiredIndicators ?? null,
   };
   await storage.insertBacktestRun(runConfig);
+
+  let marketTrendMap: Map<string, "up" | "down" | "neutral"> | null = null;
+  if (params.requireMarketUptrend && marketFilter !== "US") {
+    try {
+      const nikkeiPrices = await fetchHistoricalPrices("^N225", "2y", "1d");
+      if (nikkeiPrices.length >= 75) {
+        marketTrendMap = new Map();
+        for (let i = 74; i < nikkeiPrices.length; i++) {
+          const ma25 = nikkeiPrices.slice(i - 24, i + 1).reduce((s, p) => s + p.close, 0) / 25;
+          const ma75 = nikkeiPrices.slice(i - 74, i + 1).reduce((s, p) => s + p.close, 0) / 75;
+          const close = nikkeiPrices[i].close;
+          let trend: "up" | "down" | "neutral" = "neutral";
+          if (close > ma25 && ma25 > ma75) trend = "up";
+          else if (close < ma25 && ma25 < ma75) trend = "down";
+          marketTrendMap.set(nikkeiPrices[i].date, trend);
+        }
+        console.log(`[Backtest] 日経平均トレンドデータ: ${marketTrendMap.size}日分取得`);
+      }
+    } catch (err: any) {
+      console.error("[Backtest] 日経平均データ取得失敗:", err.message);
+    }
+  }
 
   cancelRequested = false;
   progress.status = "running";
