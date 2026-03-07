@@ -47,6 +47,8 @@ export interface BacktestParams {
   excludePriceMax?: number;
   excludeCombos?: string[];
   requireMarketUptrend?: boolean;
+  tradingStartHour?: number;
+  tradingEndHour?: number;
 }
 
 const INDICATOR_MAP: Record<string, (ind: ReturnType<typeof computeIndicators>) => boolean> = {
@@ -789,6 +791,16 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               const globalIdx = dayInfo.startIdx + barInDay;
               if (globalIdx < 50) continue;
 
+              if (params.tradingStartHour != null || params.tradingEndHour != null) {
+                const barDate = bars[globalIdx].date;
+                const hourMatch = barDate.match(/T(\d{2}):/);
+                if (hourMatch) {
+                  const barHour = parseInt(hourMatch[1], 10);
+                  if (params.tradingStartHour != null && barHour < params.tradingStartHour) continue;
+                  if (params.tradingEndHour != null && barHour >= params.tradingEndHour) continue;
+                }
+              }
+
               if ((params.minVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minVolume ?? 0)) continue;
               if ((params.minBarVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minBarVolume ?? 0)) continue;
 
@@ -1398,6 +1410,16 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               const globalIdx = dayInfo.startIdx + barInDay;
               if (globalIdx < 50) continue;
 
+              if (params.tradingStartHour != null || params.tradingEndHour != null) {
+                const barDate = bars[globalIdx].date;
+                const hourMatch = barDate.match(/T(\d{2}):/);
+                if (hourMatch) {
+                  const barHour = parseInt(hourMatch[1], 10);
+                  if (params.tradingStartHour != null && barHour < params.tradingStartHour) continue;
+                  if (params.tradingEndHour != null && barHour >= params.tradingEndHour) continue;
+                }
+              }
+
               if ((params.minVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minVolume ?? 0)) continue;
               if ((params.minBarVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minBarVolume ?? 0)) continue;
 
@@ -1772,6 +1794,16 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
             for (let barInDay = 0; barInDay < dayBars.length - 1; barInDay++) {
               const globalIdx = dayInfo.startIdx + barInDay;
               if (globalIdx < 50) continue;
+
+              if (params.tradingStartHour != null || params.tradingEndHour != null) {
+                const barDate = bars[globalIdx].date;
+                const hourMatch = barDate.match(/T(\d{2}):/);
+                if (hourMatch) {
+                  const barHour = parseInt(hourMatch[1], 10);
+                  if (params.tradingStartHour != null && barHour < params.tradingStartHour) continue;
+                  if (params.tradingEndHour != null && barHour >= params.tradingEndHour) continue;
+                }
+              }
 
               if ((params.minVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minVolume ?? 0)) continue;
               if ((params.minBarVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minBarVolume ?? 0)) continue;

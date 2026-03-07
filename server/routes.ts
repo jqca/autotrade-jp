@@ -545,6 +545,8 @@ export async function registerRoutes(
       const excludeCombos = Array.isArray(req.body.excludeCombos)
         ? (req.body.excludeCombos as string[]).filter(c => typeof c === 'string' && c.includes('/'))
         : undefined;
+      const tradingStartHour = req.body.tradingStartHour != null ? Math.max(0, Math.min(23, Math.round(Number(req.body.tradingStartHour)))) : undefined;
+      const tradingEndHour = req.body.tradingEndHour != null ? Math.max(0, Math.min(24, Math.round(Number(req.body.tradingEndHour)))) : undefined;
       const validMarkets = ["JP", "US"];
       const market = validMarkets.includes(req.body.market) ? req.body.market : undefined;
       const validIndicatorKeys = ["macd", "rsi", "ma", "bb"];
@@ -592,6 +594,8 @@ export async function registerRoutes(
         minBarVolume,
         minVolatility,
         excludeCombos,
+        tradingStartHour,
+        tradingEndHour,
       };
       await startBacktest(params, 3);
       res.json({ message: "バックテストを開始しました", params });
@@ -1247,6 +1251,19 @@ export async function registerRoutes(
   });
 
   seedCreditProducts().catch(err => console.error('[Seed] Credit seed error:', err));
+
+  (async () => {
+    try {
+      const existing = await storage.getSetting("trading_start_hour");
+      if (!existing) {
+        await storage.setSetting("trading_start_hour", "9", "取引開始時刻", "日中足でエントリーする開始時刻（時、0-23）");
+        await storage.setSetting("trading_end_hour", "10", "取引終了時刻", "日中足でエントリーする終了時刻（この時間未満、0-24）");
+        console.log("[Seed] 取引時間帯のデフォルト設定を作成しました (9:00〜10:00)");
+      }
+    } catch (err) {
+      console.error("[Seed] 取引時間帯設定エラー:", err);
+    }
+  })();
 
   startScheduler();
 

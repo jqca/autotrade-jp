@@ -127,12 +127,20 @@ function PhaseIndicator({ phase }: { phase?: string }) {
   );
 }
 
+interface AppSetting {
+  key: string;
+  value: string;
+}
+
 export default function Backtest() {
   const [selectedRun, setSelectedRun] = useState<string>("latest");
   const [polling, setPolling] = useState(false);
   const [activeTab, setActiveTab] = useState("results");
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
   const { toast } = useToast();
+
+  const { data: appSettings } = useQuery<AppSetting[]>({ queryKey: ["/api/settings"] });
+  const settingsMap = (appSettings || []).reduce((acc, s) => { acc[s.key] = s.value; return acc; }, {} as Record<string, string>);
 
   const [targetPercent, setTargetPercent] = useState(1.0);
   const [requiredIndicators, setRequiredIndicators] = useState<string[]>(["macd"]);
@@ -155,6 +163,19 @@ export default function Backtest() {
   const [excludeComboNBN, setExcludeComboNBN] = useState(false);
   const [excludeComboNNN, setExcludeComboNNN] = useState(false);
   const [excludeComboNSN, setExcludeComboNSN] = useState(false);
+  const [tradingStartHour, setTradingStartHour] = useState(9);
+  const [tradingEndHour, setTradingEndHour] = useState(10);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+
+  useEffect(() => {
+    if (appSettings && !settingsLoaded) {
+      const startH = parseInt(settingsMap["trading_start_hour"] || "9", 10);
+      const endH = parseInt(settingsMap["trading_end_hour"] || "10", 10);
+      if (!isNaN(startH)) setTradingStartHour(startH);
+      if (!isNaN(endH)) setTradingEndHour(endH);
+      setSettingsLoaded(true);
+    }
+  }, [appSettings, settingsLoaded]);
   const [requireUptrend, setRequireUptrend] = useState(false);
   const [dynamicTarget, setDynamicTarget] = useState(false);
   const [requireMacdCrossover, setRequireMacdCrossover] = useState(false);
@@ -253,6 +274,8 @@ export default function Backtest() {
       rsiExcludeMax: 0,
       minBarVolume: 0,
       minVolatility,
+      tradingStartHour,
+      tradingEndHour,
       excludePriceMin: excludePriceEnabled ? excludePriceMin : 0,
       excludePriceMax: excludePriceEnabled ? excludePriceMax : 0,
       excludeCombos: [
@@ -985,6 +1008,43 @@ export default function Backtest() {
                         </Badge>
                       </div>
                       <p className="text-xs text-muted-foreground">直近20本の価格変動率が低い銘柄を除外（推奨: 0.5%以上）</p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">取引時間帯（日中足のみ）</Label>
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 space-y-1">
+                          <span className="text-xs text-muted-foreground">開始</span>
+                          <select
+                            value={tradingStartHour}
+                            onChange={(e) => setTradingStartHour(Number(e.target.value))}
+                            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                            data-testid="select-trading-start-hour"
+                          >
+                            {[9, 10, 11, 12, 13, 14].map(h => (
+                              <option key={h} value={h}>{h}:00</option>
+                            ))}
+                          </select>
+                        </div>
+                        <span className="text-muted-foreground pt-4">〜</span>
+                        <div className="flex-1 space-y-1">
+                          <span className="text-xs text-muted-foreground">終了（この時間未満）</span>
+                          <select
+                            value={tradingEndHour}
+                            onChange={(e) => setTradingEndHour(Number(e.target.value))}
+                            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                            data-testid="select-trading-end-hour"
+                          >
+                            {[10, 11, 12, 13, 14, 15, 16].map(h => (
+                              <option key={h} value={h}>{h}:00</option>
+                            ))}
+                          </select>
+                        </div>
+                        <Badge variant="secondary" className="min-w-[80px] justify-center mt-4" data-testid="text-trading-hours">
+                          {tradingStartHour}:00〜{tradingEndHour}:00
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">エントリーする時間帯を制限（9時台のみが最も勝率が高い）</p>
                     </div>
 
                     <div className="space-y-3">
