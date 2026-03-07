@@ -165,6 +165,8 @@ export default function Backtest() {
   const [excludeComboNSN, setExcludeComboNSN] = useState(false);
   const [tradingStartHour, setTradingStartHour] = useState(9);
   const [tradingEndHour, setTradingEndHour] = useState(10);
+  const [requireNikkeiMomentum, setRequireNikkeiMomentum] = useState(false);
+  const [nikkeiMomentumBars, setNikkeiMomentumBars] = useState(6);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   useEffect(() => {
@@ -173,6 +175,10 @@ export default function Backtest() {
       const endH = parseInt(settingsMap["trading_end_hour"] || "10", 10);
       if (!isNaN(startH)) setTradingStartHour(startH);
       if (!isNaN(endH)) setTradingEndHour(endH);
+      const nikkeiMom = settingsMap["require_nikkei_momentum"];
+      if (nikkeiMom === "true") setRequireNikkeiMomentum(true);
+      const nikkeiMomBars = parseInt(settingsMap["nikkei_momentum_bars"] || "6", 10);
+      if (!isNaN(nikkeiMomBars) && nikkeiMomBars >= 2) setNikkeiMomentumBars(nikkeiMomBars);
       setSettingsLoaded(true);
     }
   }, [appSettings, settingsLoaded]);
@@ -276,6 +282,8 @@ export default function Backtest() {
       minVolatility,
       tradingStartHour,
       tradingEndHour,
+      requireNikkeiMomentum,
+      nikkeiMomentumBars,
       excludePriceMin: excludePriceEnabled ? excludePriceMin : 0,
       excludePriceMax: excludePriceEnabled ? excludePriceMax : 0,
       excludeCombos: [
@@ -1045,6 +1053,40 @@ export default function Backtest() {
                         </Badge>
                       </div>
                       <p className="text-xs text-muted-foreground">エントリーする時間帯を制限（9時台のみが最も勝率が高い）</p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">日経平均モメンタムフィルター</Label>
+                        <Switch
+                          checked={requireNikkeiMomentum}
+                          onCheckedChange={setRequireNikkeiMomentum}
+                          data-testid="switch-nikkei-momentum"
+                        />
+                      </div>
+                      {requireNikkeiMomentum && (
+                        <div className="space-y-2">
+                          <div className="space-y-1">
+                            <span className="text-xs text-muted-foreground">参照バー数（{nikkeiMomentumBars}本）</span>
+                            <input
+                              type="range"
+                              min={2}
+                              max={20}
+                              value={nikkeiMomentumBars}
+                              onChange={(e) => setNikkeiMomentumBars(Number(e.target.value))}
+                              className="w-full"
+                              data-testid="input-nikkei-momentum-bars"
+                            />
+                            <div className="flex justify-between text-[10px] text-muted-foreground">
+                              <span>2本（短期）</span>
+                              <span>20本（長期）</span>
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            日経平均の直近{nikkeiMomentumBars}本の5分足が上昇中の時のみエントリー
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-3">

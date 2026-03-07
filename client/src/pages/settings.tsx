@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Settings, Save, Coins, Clock } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Loader2, Settings, Save, Coins, Clock, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 
@@ -110,8 +111,10 @@ export default function SettingsPage() {
 
   const tradingStartHour = parseInt(editValues["trading_start_hour"] || "9", 10);
   const tradingEndHour = parseInt(editValues["trading_end_hour"] || "10", 10);
+  const nikkeiMomentumEnabled = editValues["require_nikkei_momentum"] === "true";
+  const nikkeiMomentumBars = parseInt(editValues["nikkei_momentum_bars"] || "6", 10);
 
-  const generalSettings = (settings || []).filter(s => !s.key.startsWith("trading_"));
+  const generalSettings = (settings || []).filter(s => !s.key.startsWith("trading_") && !s.key.startsWith("nikkei_") && s.key !== "require_nikkei_momentum");
   const hasTradingSettings = (settings || []).some(s => s.key.startsWith("trading_"));
 
   return (
@@ -192,6 +195,63 @@ export default function SettingsPage() {
                   最終更新: {new Date((settings || []).find(s => s.key === "trading_start_hour")?.updatedAt || "").toLocaleString("ja-JP")}
                 </p>
               )}
+            </CardContent>
+          </Card>
+
+          <Card data-testid="card-setting-nikkei-momentum">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <TrendingUp className="h-5 w-5 text-orange-500" />
+                日経平均モメンタムフィルター
+              </CardTitle>
+              <CardDescription>
+                日経平均の勢い（直近N本の上昇/下落）を判定し、上昇中のみエントリーするフィルターです。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm">フィルターを有効にする</Label>
+                <Switch
+                  checked={nikkeiMomentumEnabled}
+                  onCheckedChange={(v) => setEditValues((prev) => ({ ...prev, require_nikkei_momentum: v ? "true" : "false" }))}
+                  data-testid="switch-setting-nikkei-momentum"
+                />
+              </div>
+              {nikkeiMomentumEnabled && (
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">参照バー数: {nikkeiMomentumBars}本</Label>
+                  <input
+                    type="range"
+                    min={2}
+                    max={20}
+                    value={nikkeiMomentumBars}
+                    onChange={(e) => setEditValues((prev) => ({ ...prev, nikkei_momentum_bars: e.target.value }))}
+                    className="w-full"
+                    data-testid="input-setting-nikkei-momentum-bars"
+                  />
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>2本（短期）</span>
+                    <span>20本（長期）</span>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center justify-end">
+                <Button
+                  onClick={() => handleSaveMultiple([
+                    { key: "require_nikkei_momentum", value: nikkeiMomentumEnabled ? "true" : "false", label: "日経モメンタムフィルター", description: "日経平均上昇中のみエントリーする" },
+                    { key: "nikkei_momentum_bars", value: String(nikkeiMomentumBars), label: "モメンタム参照バー数", description: "日経平均モメンタム判定に使う5分足バー数" },
+                  ])}
+                  disabled={updateMutation.isPending}
+                  data-testid="button-save-nikkei-momentum"
+                >
+                  {updateMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-1" />
+                  )}
+                  保存
+                </Button>
+              </div>
             </CardContent>
           </Card>
 

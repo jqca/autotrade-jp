@@ -49,6 +49,8 @@ export interface BacktestParams {
   requireMarketUptrend?: boolean;
   tradingStartHour?: number;
   tradingEndHour?: number;
+  requireNikkeiMomentum?: boolean;
+  nikkeiMomentumBars?: number;
 }
 
 const INDICATOR_MAP: Record<string, (ind: ReturnType<typeof computeIndicators>) => boolean> = {
@@ -362,6 +364,43 @@ function groupBarsByDay(bars: HistoricalPrice[]): Map<string, HistoricalPrice[]>
     dayMap.get(day)!.push(bar);
   }
   return dayMap;
+}
+
+type NikkeiMomentumMap = Map<string, number>;
+
+async function buildNikkeiMomentumMap(simDays: number, timeframe: string, startDate?: string, endDate?: string, momentumBars: number = 6): Promise<NikkeiMomentumMap> {
+  const map: NikkeiMomentumMap = new Map();
+  try {
+    const bars = await loadIntradayBars("^N225", simDays, timeframe, startDate, endDate);
+    if (bars.length < momentumBars + 1) return map;
+    bars.sort((a, b) => a.date.localeCompare(b.date));
+    for (let i = momentumBars; i < bars.length; i++) {
+      const prev = bars[i - momentumBars].close;
+      const curr = bars[i].close;
+      if (prev > 0) {
+        const momentum = ((curr - prev) / prev) * 100;
+        map.set(bars[i].date, momentum);
+      }
+    }
+    console.log(`[Backtest] 日経モメンタムマップ: ${map.size}バー分構築 (${momentumBars}本平均)`);
+  } catch (err: any) {
+    console.error("[Backtest] 日経平均5分足データ取得失敗:", err.message);
+  }
+  return map;
+}
+
+function checkNikkeiMomentum(barDate: string, nikkeiMap: NikkeiMomentumMap): boolean {
+  const momentum = nikkeiMap.get(barDate);
+  if (momentum === undefined) {
+    const datePrefix = barDate.substring(0, 16);
+    for (const [key, val] of nikkeiMap) {
+      if (key.startsWith(datePrefix)) {
+        return val > 0;
+      }
+    }
+    return true;
+  }
+  return momentum > 0;
 }
 
 interface SignalCandidate {
@@ -724,6 +763,11 @@ async function buildDailyContext(ticker: string): Promise<Map<string, DailyConte
 async function collectIntradaySignals(params: BacktestParams, tickers: string[], concurrency: number): Promise<SignalCandidate[]> {
   const allSignals: SignalCandidate[] = [];
 
+  let nikkeiMap: NikkeiMomentumMap | null = null;
+  if (params.requireNikkeiMomentum) {
+    nikkeiMap = await buildNikkeiMomentumMap(params.simDays, params.timeframe, params.startDate, params.endDate, params.nikkeiMomentumBars ?? 6);
+  }
+
   for (let i = 0; i < tickers.length; i += concurrency) {
     if (isCancelled()) break;
     const batch = tickers.slice(i, i + concurrency);
@@ -800,6 +844,8 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
                   if (params.tradingEndHour != null && barHour >= params.tradingEndHour) continue;
                 }
               }
+
+              if (nikkeiMap && nikkeiMap.size > 0 && !checkNikkeiMomentum(bars[globalIdx].date, nikkeiMap)) continue;
 
               if ((params.minVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minVolume ?? 0)) continue;
               if ((params.minBarVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minBarVolume ?? 0)) continue;
@@ -1342,6 +1388,11 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
 async function collectIntradaySignalsDirect(params: BacktestParams, tickers: string[], concurrency: number): Promise<SignalCandidate[]> {
   const allSignals: SignalCandidate[] = [];
 
+  let nikkeiMap: NikkeiMomentumMap | null = null;
+  if (params.requireNikkeiMomentum) {
+    nikkeiMap = await buildNikkeiMomentumMap(params.simDays, params.timeframe, params.startDate, params.endDate, params.nikkeiMomentumBars ?? 6);
+  }
+
   for (let i = 0; i < tickers.length; i += concurrency) {
     if (isCancelled()) break;
     const batch = tickers.slice(i, i + concurrency);
@@ -1419,6 +1470,8 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
                   if (params.tradingEndHour != null && barHour >= params.tradingEndHour) continue;
                 }
               }
+
+              if (nikkeiMap && nikkeiMap.size > 0 && !checkNikkeiMomentum(bars[globalIdx].date, nikkeiMap)) continue;
 
               if ((params.minVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minVolume ?? 0)) continue;
               if ((params.minBarVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minBarVolume ?? 0)) continue;
@@ -1727,6 +1780,11 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
 }
 
 async function runIntradayBacktest(params: BacktestParams, runId: string, tickers: string[], concurrency: number): Promise<void> {
+  let nikkeiMap: NikkeiMomentumMap | null = null;
+  if (params.requireNikkeiMomentum) {
+    nikkeiMap = await buildNikkeiMomentumMap(params.simDays, params.timeframe, params.startDate, params.endDate, params.nikkeiMomentumBars ?? 6);
+  }
+
   for (let i = 0; i < tickers.length; i += concurrency) {
     if (isCancelled()) break;
     const batch = tickers.slice(i, i + concurrency);
@@ -1804,6 +1862,8 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
                   if (params.tradingEndHour != null && barHour >= params.tradingEndHour) continue;
                 }
               }
+
+              if (nikkeiMap && nikkeiMap.size > 0 && !checkNikkeiMomentum(bars[globalIdx].date, nikkeiMap)) continue;
 
               if ((params.minVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minVolume ?? 0)) continue;
               if ((params.minBarVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minBarVolume ?? 0)) continue;
