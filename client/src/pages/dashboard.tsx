@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TrendingUp, TrendingDown, Activity, Wallet, BarChart3, Zap, Clock, Timer, Database } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { ComposedChart, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Stock, Strategy, Trade, PortfolioPosition } from "@shared/schema";
 
@@ -268,8 +268,8 @@ export default function Dashboard() {
           {nikkeiLoading ? (
             <Skeleton className="h-[250px] w-full" />
           ) : nikkeiData ? (
-            <ResponsiveContainer width="100%" height={250}>
-              <AreaChart data={nikkeiData.prices} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={300}>
+              <ComposedChart data={nikkeiData.prices} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="nikkeiGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor={nikkeiData.period.changePercent >= 0 ? "#10b981" : "#ef4444"} stopOpacity={0.3} />
@@ -289,17 +289,42 @@ export default function Dashboard() {
                   minTickGap={40}
                 />
                 <YAxis
+                  yAxisId="price"
                   tick={{ fontSize: 10 }}
                   domain={["auto", "auto"]}
                   tickFormatter={(v: number) => (v / 1000).toFixed(0) + "k"}
                   width={45}
                 />
+                <YAxis
+                  yAxisId="volume"
+                  orientation="right"
+                  tick={{ fontSize: 9 }}
+                  tickFormatter={(v: number) => {
+                    if (v >= 1e9) return (v / 1e9).toFixed(1) + "B";
+                    if (v >= 1e6) return (v / 1e6).toFixed(0) + "M";
+                    if (v >= 1e3) return (v / 1e3).toFixed(0) + "K";
+                    return String(v);
+                  }}
+                  width={45}
+                  domain={[0, (max: number) => max * 4]}
+                />
                 <Tooltip
                   contentStyle={{ fontSize: 12 }}
-                  formatter={(value: number) => [value.toLocaleString("ja-JP", { minimumFractionDigits: 2 }), "終値"]}
+                  formatter={(value: number, name: string) => {
+                    if (name === "volume") return [value.toLocaleString("ja-JP"), "出来高"];
+                    return [value.toLocaleString("ja-JP", { minimumFractionDigits: 2 }), "終値"];
+                  }}
                   labelFormatter={(label: string) => label}
                 />
+                <Bar
+                  yAxisId="volume"
+                  dataKey="volume"
+                  fill="currentColor"
+                  className="text-muted-foreground/20"
+                  isAnimationActive={false}
+                />
                 <Area
+                  yAxisId="price"
                   type="monotone"
                   dataKey="close"
                   stroke={nikkeiData.period.changePercent >= 0 ? "#10b981" : "#ef4444"}
@@ -307,7 +332,7 @@ export default function Dashboard() {
                   strokeWidth={1.5}
                   dot={false}
                 />
-              </AreaChart>
+              </ComposedChart>
             </ResponsiveContainer>
           ) : (
             <div className="h-[250px] flex items-center justify-center text-muted-foreground">
