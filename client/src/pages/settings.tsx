@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Settings, Save, Coins, Clock, TrendingUp } from "lucide-react";
+import { Loader2, Settings, Save, Coins, Clock, TrendingUp, Filter } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 
@@ -114,7 +114,14 @@ export default function SettingsPage() {
   const nikkeiMomentumEnabled = editValues["require_nikkei_momentum"] === "true";
   const nikkeiMomentumBars = parseInt(editValues["nikkei_momentum_bars"] || "6", 10);
 
-  const generalSettings = (settings || []).filter(s => !s.key.startsWith("trading_") && !s.key.startsWith("nikkei_") && s.key !== "require_nikkei_momentum");
+  const excludePriceEnabled = editValues["exclude_price_enabled"] === "true";
+  const excludePriceMin = parseInt(editValues["exclude_price_min"] || "0", 10);
+  const excludePriceMax = parseInt(editValues["exclude_price_max"] || "1000", 10);
+  const rsiExcludeEnabled = editValues["rsi_exclude_enabled"] === "true";
+  const rsiExcludeMinVal = parseInt(editValues["rsi_exclude_min"] || "50", 10);
+  const rsiExcludeMaxVal = parseInt(editValues["rsi_exclude_max"] || "60", 10);
+
+  const generalSettings = (settings || []).filter(s => !s.key.startsWith("trading_") && !s.key.startsWith("nikkei_") && !s.key.startsWith("exclude_price") && !s.key.startsWith("rsi_exclude") && s.key !== "require_nikkei_momentum");
   const hasTradingSettings = (settings || []).some(s => s.key.startsWith("trading_"));
 
   return (
@@ -195,6 +202,113 @@ export default function SettingsPage() {
                   最終更新: {new Date((settings || []).find(s => s.key === "trading_start_hour")?.updatedAt || "").toLocaleString("ja-JP")}
                 </p>
               )}
+            </CardContent>
+          </Card>
+
+          <Card data-testid="card-setting-filters">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Filter className="h-5 w-5 text-green-500" />
+                エントリーフィルター
+              </CardTitle>
+              <CardDescription>
+                勝率を上げるために、弱い条件の銘柄をバックテスト対象から除外します。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">株価除外帯</Label>
+                  <Switch
+                    checked={excludePriceEnabled}
+                    onCheckedChange={(v) => setEditValues((prev) => ({ ...prev, exclude_price_enabled: v ? "true" : "false" }))}
+                    data-testid="switch-setting-exclude-price"
+                  />
+                </div>
+                {excludePriceEnabled && (
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 space-y-1">
+                      <span className="text-xs text-muted-foreground">下限（円）</span>
+                      <Input
+                        type="number"
+                        value={excludePriceMin}
+                        onChange={(e) => setEditValues((prev) => ({ ...prev, exclude_price_min: e.target.value }))}
+                        data-testid="input-setting-exclude-price-min"
+                      />
+                    </div>
+                    <span className="mt-5 text-sm text-muted-foreground">〜</span>
+                    <div className="flex-1 space-y-1">
+                      <span className="text-xs text-muted-foreground">上限（円）</span>
+                      <Input
+                        type="number"
+                        value={excludePriceMax}
+                        onChange={(e) => setEditValues((prev) => ({ ...prev, exclude_price_max: e.target.value }))}
+                        data-testid="input-setting-exclude-price-max"
+                      />
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">1000円未満は勝率44%と低いため除外推奨</p>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">RSI除外帯</Label>
+                  <Switch
+                    checked={rsiExcludeEnabled}
+                    onCheckedChange={(v) => setEditValues((prev) => ({ ...prev, rsi_exclude_enabled: v ? "true" : "false" }))}
+                    data-testid="switch-setting-rsi-exclude"
+                  />
+                </div>
+                {rsiExcludeEnabled && (
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 space-y-1">
+                      <span className="text-xs text-muted-foreground">下限</span>
+                      <Input
+                        type="number"
+                        value={rsiExcludeMinVal}
+                        onChange={(e) => setEditValues((prev) => ({ ...prev, rsi_exclude_min: e.target.value }))}
+                        data-testid="input-setting-rsi-exclude-min"
+                      />
+                    </div>
+                    <span className="mt-5 text-sm text-muted-foreground">〜</span>
+                    <div className="flex-1 space-y-1">
+                      <span className="text-xs text-muted-foreground">上限</span>
+                      <Input
+                        type="number"
+                        value={rsiExcludeMaxVal}
+                        onChange={(e) => setEditValues((prev) => ({ ...prev, rsi_exclude_max: e.target.value }))}
+                        data-testid="input-setting-rsi-exclude-max"
+                      />
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">RSI 50〜60は勝率47.9%と低いため除外推奨</p>
+              </div>
+
+              <div className="flex items-center justify-end">
+                <Button
+                  onClick={() => handleSaveMultiple([
+                    { key: "exclude_price_enabled", value: excludePriceEnabled ? "true" : "false", label: "株価除外フィルター", description: "指定株価帯を除外" },
+                    { key: "exclude_price_min", value: String(excludePriceMin), label: "株価除外下限", description: "除外する株価の下限（円）" },
+                    { key: "exclude_price_max", value: String(excludePriceMax), label: "株価除外上限", description: "除外する株価の上限（円）" },
+                    { key: "rsi_exclude_enabled", value: rsiExcludeEnabled ? "true" : "false", label: "RSI除外フィルター", description: "指定RSI帯を除外" },
+                    { key: "rsi_exclude_min", value: String(rsiExcludeMinVal), label: "RSI除外下限", description: "除外するRSIの下限" },
+                    { key: "rsi_exclude_max", value: String(rsiExcludeMaxVal), label: "RSI除外上限", description: "除外するRSIの上限" },
+                  ])}
+                  disabled={updateMutation.isPending}
+                  data-testid="button-save-filters"
+                >
+                  {updateMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-1" />
+                  )}
+                  保存
+                </Button>
+              </div>
             </CardContent>
           </Card>
 

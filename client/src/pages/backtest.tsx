@@ -157,9 +157,12 @@ export default function Backtest() {
   const [maxHoldDays, setMaxHoldDays] = useState(3);
   const [minVolume, setMinVolume] = useState(50);
   const [minVolatility, setMinVolatility] = useState(0);
-  const [excludePriceMin, setExcludePriceMin] = useState(500);
+  const [excludePriceMin, setExcludePriceMin] = useState(0);
   const [excludePriceMax, setExcludePriceMax] = useState(1000);
-  const [excludePriceEnabled, setExcludePriceEnabled] = useState(false);
+  const [excludePriceEnabled, setExcludePriceEnabled] = useState(true);
+  const [rsiExcludeMin, setRsiExcludeMin] = useState(50);
+  const [rsiExcludeMax, setRsiExcludeMax] = useState(60);
+  const [rsiExcludeEnabled, setRsiExcludeEnabled] = useState(true);
   const [excludeComboNBN, setExcludeComboNBN] = useState(false);
   const [excludeComboNNN, setExcludeComboNNN] = useState(false);
   const [excludeComboNSN, setExcludeComboNSN] = useState(false);
@@ -179,6 +182,18 @@ export default function Backtest() {
       if (nikkeiMom === "true") setRequireNikkeiMomentum(true);
       const nikkeiMomBars = parseInt(settingsMap["nikkei_momentum_bars"] || "6", 10);
       if (!isNaN(nikkeiMomBars) && nikkeiMomBars >= 2) setNikkeiMomentumBars(nikkeiMomBars);
+      const excludePriceEn = settingsMap["exclude_price_enabled"];
+      if (excludePriceEn !== undefined) setExcludePriceEnabled(excludePriceEn === "true");
+      const exPriceMin = parseInt(settingsMap["exclude_price_min"] || "0", 10);
+      const exPriceMax = parseInt(settingsMap["exclude_price_max"] || "1000", 10);
+      if (!isNaN(exPriceMin)) setExcludePriceMin(exPriceMin);
+      if (!isNaN(exPriceMax)) setExcludePriceMax(exPriceMax);
+      const rsiExEn = settingsMap["rsi_exclude_enabled"];
+      if (rsiExEn !== undefined) setRsiExcludeEnabled(rsiExEn === "true");
+      const rsiExMin = parseInt(settingsMap["rsi_exclude_min"] || "50", 10);
+      const rsiExMax = parseInt(settingsMap["rsi_exclude_max"] || "60", 10);
+      if (!isNaN(rsiExMin)) setRsiExcludeMin(rsiExMin);
+      if (!isNaN(rsiExMax)) setRsiExcludeMax(rsiExMax);
       setSettingsLoaded(true);
     }
   }, [appSettings, settingsLoaded]);
@@ -276,8 +291,8 @@ export default function Backtest() {
       dailyMinSignalScore,
       initialCapital,
       market,
-      rsiExcludeMin: 0,
-      rsiExcludeMax: 0,
+      rsiExcludeMin: rsiExcludeEnabled ? rsiExcludeMin : 0,
+      rsiExcludeMax: rsiExcludeEnabled ? rsiExcludeMax : 0,
       minBarVolume: 0,
       minVolatility,
       tradingStartHour,
@@ -1127,6 +1142,48 @@ export default function Backtest() {
                             {excludePriceMin.toLocaleString()}円〜{excludePriceMax.toLocaleString()}円の銘柄を除外
                           </Badge>
                           <p className="text-xs text-muted-foreground">指定した株価帯の銘柄をバックテスト対象から除外します</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">RSI除外帯</Label>
+                        <Switch
+                          checked={rsiExcludeEnabled}
+                          onCheckedChange={setRsiExcludeEnabled}
+                          data-testid="switch-rsi-exclude"
+                        />
+                      </div>
+                      {rsiExcludeEnabled && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 space-y-1">
+                              <span className="text-xs text-muted-foreground">下限</span>
+                              <input
+                                type="number"
+                                value={rsiExcludeMin}
+                                onChange={(e) => setRsiExcludeMin(Math.max(0, Math.min(100, Number(e.target.value))))}
+                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                                data-testid="input-rsi-exclude-min"
+                              />
+                            </div>
+                            <span className="mt-5 text-sm text-muted-foreground">〜</span>
+                            <div className="flex-1 space-y-1">
+                              <span className="text-xs text-muted-foreground">上限</span>
+                              <input
+                                type="number"
+                                value={rsiExcludeMax}
+                                onChange={(e) => setRsiExcludeMax(Math.max(0, Math.min(100, Number(e.target.value))))}
+                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                                data-testid="input-rsi-exclude-max"
+                              />
+                            </div>
+                          </div>
+                          <Badge variant="secondary" className="w-full justify-center" data-testid="text-rsi-exclude-range">
+                            RSI {rsiExcludeMin}〜{rsiExcludeMax} の銘柄を除外
+                          </Badge>
+                          <p className="text-xs text-muted-foreground">RSIが中途半端な銘柄（トレンド不明確）を除外します。50〜60帯は勝率47.9%と低いため除外推奨</p>
                         </div>
                       )}
                     </div>
