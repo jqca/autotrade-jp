@@ -147,7 +147,7 @@ export default function Backtest() {
   const [aiThreshold, setAiThreshold] = useState(0.5);
   const [stopLossPercent, setStopLossPercent] = useState(1);
   const [maxHoldDays, setMaxHoldDays] = useState(3);
-  const [minVolume, setMinVolume] = useState(500);
+  const [minVolume, setMinVolume] = useState(50);
   const [minVolatility, setMinVolatility] = useState(0);
   const [excludePriceMin, setExcludePriceMin] = useState(500);
   const [excludePriceMax, setExcludePriceMax] = useState(1000);

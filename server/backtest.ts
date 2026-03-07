@@ -83,7 +83,7 @@ export const DEFAULT_PARAMS: BacktestParams = {
   aiThreshold: 0.5,
   stopLossPercent: 0,
   maxHoldDays: 1,
-  minVolume: 500,
+  minVolume: 50,
   requireUptrend: false,
   dynamicTarget: false,
   requireMacdCrossover: false,
