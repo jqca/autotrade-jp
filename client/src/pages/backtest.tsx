@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   PlayCircle, StopCircle, Trophy, TrendingDown, BarChart3, Trash2, Loader2,
   CheckCircle, XCircle, Settings2, GitCompare, List, Banknote, TrendingUp,
-  Clock, AlertTriangle, Activity, Zap, Brain, Atom, Shield,
+  Clock, AlertTriangle, Activity, Zap, Brain, Atom, Shield, ArrowUpDown,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { Link } from "wouter";
@@ -131,6 +131,7 @@ export default function Backtest() {
   const [selectedRun, setSelectedRun] = useState<string>("latest");
   const [polling, setPolling] = useState(false);
   const [activeTab, setActiveTab] = useState("results");
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
   const { toast } = useToast();
 
   const [targetPercent, setTargetPercent] = useState(1.0);
@@ -1910,7 +1911,23 @@ export default function Backtest() {
             </Card>
           ) : (
             <div className="space-y-2">
-              {results.map((r) => (
+              <div className="flex justify-end mb-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSortOrder(prev => prev === "desc" ? "asc" : "desc")}
+                  className="gap-1.5 text-xs"
+                  data-testid="button-sort-order"
+                >
+                  <ArrowUpDown className="h-3.5 w-3.5" />
+                  取引日時: {sortOrder === "desc" ? "新しい順" : "古い順"}
+                </Button>
+              </div>
+              {[...results].sort((a, b) =>
+                sortOrder === "desc"
+                  ? b.buyDate.localeCompare(a.buyDate)
+                  : a.buyDate.localeCompare(b.buyDate)
+              ).map((r) => (
                 <Link key={r.id} href={`/stocks/${r.ticker}`}>
                   <Card className="cursor-pointer" data-testid={`backtest-row-${r.id}`}>
                     <CardContent className="py-3 px-4">
