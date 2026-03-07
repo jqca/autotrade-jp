@@ -486,7 +486,7 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
-              if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
+              if ((params.rsiExcludeMax ?? 0) > 0 && indicators.rsiValue >= (params.rsiExcludeMin ?? 0) && indicators.rsiValue <= params.rsiExcludeMax!) continue;
             }
             if (params.excludeCombos && params.excludeCombos.length > 0) {
               const combo = `${indicators.rsiTrend}/${indicators.maTrend}/${indicators.bbTrend}`;
@@ -530,7 +530,7 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
 
             const buyPrice = opens[buyDayIdx];
 
-            if ((params.excludePriceMin ?? 0) > 0 && (params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
+            if ((params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
 
             if (buyPrice >= highs[d]) continue;
 
@@ -863,7 +863,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
-                if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
+                if ((params.rsiExcludeMax ?? 0) > 0 && indicators.rsiValue >= (params.rsiExcludeMin ?? 0) && indicators.rsiValue <= params.rsiExcludeMax!) continue;
               }
 
               if (!(params.requiredIndicators && params.requiredIndicators.length > 0)) {
@@ -891,7 +891,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               const entryBar = bars[entryBarGlobal];
               const buyPrice = entryBar.open;
 
-              if ((params.excludePriceMin ?? 0) > 0 && (params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
+              if ((params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
 
               const maxGapPctVal = params.maxGapPercent ?? 2.0;
               if (maxGapPctVal > 0 && maxGapPctVal < 100) {
@@ -1276,7 +1276,7 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
-              if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
+              if ((params.rsiExcludeMax ?? 0) > 0 && indicators.rsiValue >= (params.rsiExcludeMin ?? 0) && indicators.rsiValue <= params.rsiExcludeMax!) continue;
             }
             if (params.excludeCombos && params.excludeCombos.length > 0) {
               const combo = `${indicators.rsiTrend}/${indicators.maTrend}/${indicators.bbTrend}`;
@@ -1292,7 +1292,7 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
 
             const buyPrice = opens[buyDayIdx];
 
-            if ((params.excludePriceMin ?? 0) > 0 && (params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
+            if ((params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
 
             if (buyPrice >= highs[d]) continue;
 
@@ -1489,7 +1489,7 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
-                if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
+                if ((params.rsiExcludeMax ?? 0) > 0 && indicators.rsiValue >= (params.rsiExcludeMin ?? 0) && indicators.rsiValue <= params.rsiExcludeMax!) continue;
               }
 
               if (!(params.requiredIndicators && params.requiredIndicators.length > 0)) {
@@ -1517,7 +1517,7 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               const entryBar = bars[entryBarGlobal];
               const buyPrice = entryBar.open;
 
-              if ((params.excludePriceMin ?? 0) > 0 && (params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
+              if ((params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
 
               const maxGapPctVal2 = params.maxGapPercent ?? 2.0;
               if (maxGapPctVal2 > 0 && maxGapPctVal2 < 100) {
@@ -1671,7 +1671,7 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
-              if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
+              if ((params.rsiExcludeMax ?? 0) > 0 && indicators.rsiValue >= (params.rsiExcludeMin ?? 0) && indicators.rsiValue <= params.rsiExcludeMax!) continue;
             }
             if (params.excludeCombos && params.excludeCombos.length > 0) {
               const combo = `${indicators.rsiTrend}/${indicators.maTrend}/${indicators.bbTrend}`;
@@ -1687,7 +1687,7 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
 
             const buyPrice = opens[buyDayIdx];
 
-            if ((params.excludePriceMin ?? 0) > 0 && (params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
+            if ((params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
 
             if (buyPrice >= highs[d]) continue;
 
@@ -1881,7 +1881,7 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
-                if (params.rsiExcludeMin != null && params.rsiExcludeMax != null && indicators.rsiValue >= params.rsiExcludeMin && indicators.rsiValue <= params.rsiExcludeMax) continue;
+                if ((params.rsiExcludeMax ?? 0) > 0 && indicators.rsiValue >= (params.rsiExcludeMin ?? 0) && indicators.rsiValue <= params.rsiExcludeMax!) continue;
               }
 
               if (!(params.requiredIndicators && params.requiredIndicators.length > 0)) {
@@ -1909,7 +1909,7 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               const entryBar = bars[entryBarGlobal];
               const buyPrice = entryBar.open;
 
-              if ((params.excludePriceMin ?? 0) > 0 && (params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
+              if ((params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
 
               const maxGapPctVal2 = params.maxGapPercent ?? 2.0;
               if (maxGapPctVal2 > 0 && maxGapPctVal2 < 100) {
