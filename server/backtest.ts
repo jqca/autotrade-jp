@@ -2104,6 +2104,7 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
   progress.capitalRemaining = undefined;
 
   console.log(`[Backtest] ${tickers.length}銘柄の${tfLabel}バックテストを開始 (runId: ${runId}, 初期資金: ${initialCapital}円, AI: ${params.useAi}, 量子: ${params.useQuantum})`);
+  console.log(`[Backtest] フィルター設定: 株価除外=${params.excludePriceMin}〜${params.excludePriceMax}円, RSI除外=${params.rsiExcludeMin}〜${params.rsiExcludeMax}`);
 
   (async () => {
     try {
