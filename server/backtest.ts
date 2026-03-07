@@ -71,7 +71,7 @@ function checkRequiredIndicators(indicators: ReturnType<typeof computeIndicators
 
 export const DEFAULT_PARAMS: BacktestParams = {
   targetPercent: 1.0,
-  minBuyIndicators: 3,
+  minBuyIndicators: 2,
   rsiMin: 0,
   rsiMax: 75,
   requireMaBuy: false,
@@ -83,7 +83,7 @@ export const DEFAULT_PARAMS: BacktestParams = {
   aiThreshold: 0.5,
   stopLossPercent: 0,
   maxHoldDays: 1,
-  minVolume: 1000,
+  minVolume: 500,
   requireUptrend: false,
   dynamicTarget: false,
   requireMacdCrossover: false,
@@ -99,10 +99,10 @@ export const DEFAULT_PARAMS: BacktestParams = {
   dailyMinBuyIndicators: 2,
   dailyMinSignalScore: 0,
   initialCapital: 1000000,
-  rsiExcludeMin: 50,
-  rsiExcludeMax: 60,
-  minBarVolume: 10,
-  minVolatility: 0.5,
+  rsiExcludeMin: 0,
+  rsiExcludeMax: 0,
+  minBarVolume: 0,
+  minVolatility: 0,
   excludePriceMin: 0,
   excludePriceMax: 0,
 };

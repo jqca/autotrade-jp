@@ -147,12 +147,12 @@ export default function Backtest() {
   const [aiThreshold, setAiThreshold] = useState(0.5);
   const [stopLossPercent, setStopLossPercent] = useState(1);
   const [maxHoldDays, setMaxHoldDays] = useState(3);
-  const [minVolume, setMinVolume] = useState(1000);
-  const [minVolatility, setMinVolatility] = useState(0.5);
+  const [minVolume, setMinVolume] = useState(500);
+  const [minVolatility, setMinVolatility] = useState(0);
   const [excludePriceMin, setExcludePriceMin] = useState(500);
   const [excludePriceMax, setExcludePriceMax] = useState(1000);
   const [excludePriceEnabled, setExcludePriceEnabled] = useState(false);
-  const [excludeComboNBN, setExcludeComboNBN] = useState(true);
+  const [excludeComboNBN, setExcludeComboNBN] = useState(false);
   const [excludeComboNNN, setExcludeComboNNN] = useState(false);
   const [excludeComboNSN, setExcludeComboNSN] = useState(false);
   const [requireUptrend, setRequireUptrend] = useState(false);
@@ -249,9 +249,9 @@ export default function Backtest() {
       dailyMinSignalScore,
       initialCapital,
       market,
-      rsiExcludeMin: 50,
-      rsiExcludeMax: 60,
-      minBarVolume: 10,
+      rsiExcludeMin: 0,
+      rsiExcludeMax: 0,
+      minBarVolume: 0,
       minVolatility,
       excludePriceMin: excludePriceEnabled ? excludePriceMin : 0,
       excludePriceMax: excludePriceEnabled ? excludePriceMax : 0,
