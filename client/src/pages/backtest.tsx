@@ -142,11 +142,11 @@ export default function Backtest() {
   const { data: appSettings } = useQuery<AppSetting[]>({ queryKey: ["/api/settings"] });
   const settingsMap = (appSettings || []).reduce((acc, s) => { acc[s.key] = s.value; return acc; }, {} as Record<string, string>);
 
-  const [targetPercent, setTargetPercent] = useState(1.0);
+  const [targetPercent, setTargetPercent] = useState(0.7);
   const [requiredIndicators, setRequiredIndicators] = useState<string[]>(["macd"]);
   const [rsiMin, setRsiMin] = useState(40);
   const [rsiMax, setRsiMax] = useState(65);
-  const [simDays, setSimDays] = useState(200);
+  const [simDays, setSimDays] = useState(120);
   const [timeframe, setTimeframe] = useState("1d");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
