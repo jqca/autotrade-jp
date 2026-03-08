@@ -555,6 +555,7 @@ export async function registerRoutes(
       const rsiExcludeAfterMin = req.body.rsiExcludeAfterMin != null ? Math.max(0, Math.min(100, Math.round(Number(req.body.rsiExcludeAfterMin)))) : 45;
       const rsiExcludeAfterMax = req.body.rsiExcludeAfterMax != null ? Math.max(0, Math.min(100, Math.round(Number(req.body.rsiExcludeAfterMax)))) : 50;
       const rsiExcludeAfterTime = req.body.rsiExcludeAfterTime != null ? Math.max(0, Math.round(Number(req.body.rsiExcludeAfterTime))) : 600;
+      const minIntradayRange = req.body.minIntradayRange != null ? Math.max(0, Math.min(10, Number(req.body.minIntradayRange))) : 0.5;
       const nikkeiMomentumBars = req.body.nikkeiMomentumBars != null ? Math.max(2, Math.min(20, Math.round(Number(req.body.nikkeiMomentumBars)))) : 6;
       const validMarkets = ["JP", "US"];
       const market = validMarkets.includes(req.body.market) ? req.body.market : undefined;
@@ -614,6 +615,7 @@ export async function registerRoutes(
         rsiExcludeAfterMin,
         rsiExcludeAfterMax,
         rsiExcludeAfterTime,
+        minIntradayRange,
       };
       await startBacktest(params, 3);
       res.json({ message: "バックテストを開始しました", params });

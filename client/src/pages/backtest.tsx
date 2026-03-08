@@ -156,7 +156,8 @@ export default function Backtest() {
   const [stopLossPercent, setStopLossPercent] = useState(1);
   const [maxHoldDays, setMaxHoldDays] = useState(3);
   const [minVolume, setMinVolume] = useState(50);
-  const [minVolatility, setMinVolatility] = useState(0);
+  const [minVolatility, setMinVolatility] = useState(0.5);
+  const [minIntradayRange, setMinIntradayRange] = useState(0.5);
   const [excludePriceMin, setExcludePriceMin] = useState(0);
   const [excludePriceMax, setExcludePriceMax] = useState(1000);
   const [excludePriceEnabled, setExcludePriceEnabled] = useState(true);
@@ -309,6 +310,7 @@ export default function Backtest() {
       rsiExcludeMax: rsiExcludeEnabled ? rsiExcludeMax : 0,
       minBarVolume: 0,
       minVolatility,
+      minIntradayRange,
       tradingStartHour,
       tradingStartMinute,
       tradingEndHour,
@@ -1055,6 +1057,25 @@ export default function Backtest() {
                     </div>
 
                     <div className="space-y-3">
+                      <Label className="text-sm font-medium">最小日中足値幅（%）</Label>
+                      <div className="flex items-center gap-3">
+                        <Slider
+                          value={[minIntradayRange * 10]}
+                          onValueChange={([v]) => setMinIntradayRange(v / 10)}
+                          min={0}
+                          max={30}
+                          step={1}
+                          className="flex-1"
+                          data-testid="slider-min-intraday-range"
+                        />
+                        <Badge variant="secondary" className="min-w-[70px] justify-center" data-testid="text-min-intraday-range">
+                          {minIntradayRange === 0 ? "なし" : `${minIntradayRange.toFixed(1)}%`}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">当日の直近10本の5分足High-Low幅が小さい銘柄を除外。値動きのない銘柄は利確に届かず全敗する傾向（推奨: 0.5%以上）。</p>
+                    </div>
+
+                    <div className="space-y-3">
                       <Label className="text-sm font-medium">取引時間帯（日中足のみ）</Label>
                       <div className="flex items-center gap-3">
                         <div className="flex-1 space-y-1">
@@ -1615,6 +1636,7 @@ export default function Backtest() {
                   {maxHoldDays > 1 && <Badge variant="outline">{maxHoldDays}日保持</Badge>}
                   {minVolume > 0 && <Badge variant="outline" className="border-blue-300 text-blue-700 dark:text-blue-400">出来高≥{minVolume.toLocaleString()}単元</Badge>}
                   {minVolatility > 0 && <Badge variant="outline" className="border-purple-300 text-purple-700 dark:text-purple-400">Vol≥{minVolatility.toFixed(1)}%</Badge>}
+                  {minIntradayRange > 0 && <Badge variant="outline" className="border-teal-300 text-teal-700 dark:text-teal-400">値幅≥{minIntradayRange.toFixed(1)}%</Badge>}
                   {excludePriceEnabled && <Badge variant="outline" className="border-orange-300 text-orange-700 dark:text-orange-400">除外{excludePriceMin.toLocaleString()}〜{excludePriceMax.toLocaleString()}円</Badge>}
                   {excludeComboNBN && <Badge variant="outline" className="border-rose-300 text-rose-700 dark:text-rose-400">N/B/N除外</Badge>}
                   {excludeComboNNN && <Badge variant="outline" className="border-rose-300 text-rose-700 dark:text-rose-400">N/N/N除外</Badge>}

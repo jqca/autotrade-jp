@@ -58,6 +58,7 @@ export interface BacktestParams {
   rsiExcludeAfterMin?: number;
   rsiExcludeAfterMax?: number;
   rsiExcludeAfterTime?: number;
+  minIntradayRange?: number;
 }
 
 const INDICATOR_MAP: Record<string, (ind: ReturnType<typeof computeIndicators>) => boolean> = {
@@ -113,7 +114,7 @@ export const DEFAULT_PARAMS: BacktestParams = {
   rsiExcludeMin: 0,
   rsiExcludeMax: 0,
   minBarVolume: 0,
-  minVolatility: 0,
+  minVolatility: 0.5,
   excludePriceMin: 0,
   excludePriceMax: 0,
   tradingStartHour: 9,
@@ -125,6 +126,7 @@ export const DEFAULT_PARAMS: BacktestParams = {
   rsiExcludeAfterMin: 45,
   rsiExcludeAfterMax: 50,
   rsiExcludeAfterTime: 600,
+  minIntradayRange: 0.5,
 };
 
 export interface BacktestProgress {
@@ -948,6 +950,18 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
                 ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
                 : 0.02;
               if ((params.minVolatility ?? 0) > 0 && volatility * 100 < (params.minVolatility ?? 0)) continue;
+              if ((params.minIntradayRange ?? 0) > 0) {
+                const rangeLen = Math.min(10, globalIdx - (dayInfo?.startIdx ?? 0) + 1);
+                if (rangeLen > 0) {
+                  let rangeHigh = -Infinity, rangeLow = Infinity;
+                  for (let ri = globalIdx; ri > globalIdx - rangeLen; ri--) {
+                    if (bars[ri].high > rangeHigh) rangeHigh = bars[ri].high;
+                    if (bars[ri].low < rangeLow) rangeLow = bars[ri].low;
+                  }
+                  const rangePct = rangeLow > 0 ? ((rangeHigh - rangeLow) / rangeLow) * 100 : 0;
+                  if (rangePct < (params.minIntradayRange ?? 0)) continue;
+                }
+              }
 
               let effectiveTarget = params.targetPercent;
               if (params.dynamicTarget) {
@@ -1591,6 +1605,18 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
                 ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
                 : 0.02;
               if ((params.minVolatility ?? 0) > 0 && volatility * 100 < (params.minVolatility ?? 0)) continue;
+              if ((params.minIntradayRange ?? 0) > 0) {
+                const rangeLen = Math.min(10, globalIdx - (dayInfo?.startIdx ?? 0) + 1);
+                if (rangeLen > 0) {
+                  let rangeHigh = -Infinity, rangeLow = Infinity;
+                  for (let ri = globalIdx; ri > globalIdx - rangeLen; ri--) {
+                    if (bars[ri].high > rangeHigh) rangeHigh = bars[ri].high;
+                    if (bars[ri].low < rangeLow) rangeLow = bars[ri].low;
+                  }
+                  const rangePct = rangeLow > 0 ? ((rangeHigh - rangeLow) / rangeLow) * 100 : 0;
+                  if (rangePct < (params.minIntradayRange ?? 0)) continue;
+                }
+              }
 
               let effectiveTarget = params.targetPercent;
               if (params.dynamicTarget) {
@@ -1993,6 +2019,18 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
                 ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
                 : 0.02;
               if ((params.minVolatility ?? 0) > 0 && volatility * 100 < (params.minVolatility ?? 0)) continue;
+              if ((params.minIntradayRange ?? 0) > 0) {
+                const rangeLen = Math.min(10, globalIdx - (dayInfo?.startIdx ?? 0) + 1);
+                if (rangeLen > 0) {
+                  let rangeHigh = -Infinity, rangeLow = Infinity;
+                  for (let ri = globalIdx; ri > globalIdx - rangeLen; ri--) {
+                    if (bars[ri].high > rangeHigh) rangeHigh = bars[ri].high;
+                    if (bars[ri].low < rangeLow) rangeLow = bars[ri].low;
+                  }
+                  const rangePct = rangeLow > 0 ? ((rangeHigh - rangeLow) / rangeLow) * 100 : 0;
+                  if (rangePct < (params.minIntradayRange ?? 0)) continue;
+                }
+              }
 
               let effectiveTarget = params.targetPercent;
               if (params.dynamicTarget) {
