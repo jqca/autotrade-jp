@@ -174,8 +174,8 @@ export default function Backtest() {
   const [excludeBBSell, setExcludeBBSell] = useState(true);
   const [tradingStartHour, setTradingStartHour] = useState(9);
   const [tradingStartMinute, setTradingStartMinute] = useState(30);
-  const [tradingEndHour, setTradingEndHour] = useState(10);
-  const [tradingEndMinute, setTradingEndMinute] = useState(30);
+  const [tradingEndHour, setTradingEndHour] = useState(11);
+  const [tradingEndMinute, setTradingEndMinute] = useState(0);
   const [requireNikkeiMomentum, setRequireNikkeiMomentum] = useState(false);
   const [nikkeiMomentumBars, setNikkeiMomentumBars] = useState(6);
   const [excludeMaBuyAfter, setExcludeMaBuyAfter] = useState(600);
