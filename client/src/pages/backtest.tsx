@@ -189,8 +189,8 @@ export default function Backtest() {
     if (appSettings && !settingsLoaded) {
       const startH = parseInt(settingsMap["trading_start_hour"] || "9", 10);
       const startM = parseInt(settingsMap["trading_start_minute"] || "30", 10);
-      const endH = parseInt(settingsMap["trading_end_hour"] || "10", 10);
-      const endM = parseInt(settingsMap["trading_end_minute"] || "30", 10);
+      const endH = parseInt(settingsMap["trading_end_hour"] || "11", 10);
+      const endM = parseInt(settingsMap["trading_end_minute"] || "0", 10);
       if (!isNaN(startH)) setTradingStartHour(startH);
       if (!isNaN(startM)) setTradingStartMinute(startM);
       if (!isNaN(endH)) setTradingEndHour(endH);
