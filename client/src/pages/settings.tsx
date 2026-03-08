@@ -94,8 +94,8 @@ export default function SettingsPage() {
   };
 
   const tradingStartHour = parseInt(editValues["trading_start_hour"] || "9", 10);
-  const tradingStartMinute = parseInt(editValues["trading_start_minute"] || "50", 10);
-  const tradingEndHour = parseInt(editValues["trading_end_hour"] || "10", 10);
+  const tradingStartMinute = parseInt(editValues["trading_start_minute"] || "30", 10);
+  const tradingEndHour = parseInt(editValues["trading_end_hour"] || "11", 10);
   const tradingEndMinute = parseInt(editValues["trading_end_minute"] || "0", 10);
   const nikkeiMomentumEnabled = editValues["require_nikkei_momentum"] === "true";
   const nikkeiMomentumBars = parseInt(editValues["nikkei_momentum_bars"] || "6", 10);

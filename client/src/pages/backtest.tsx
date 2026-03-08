@@ -168,8 +168,8 @@ export default function Backtest() {
   const [excludeComboNSN, setExcludeComboNSN] = useState(false);
   const [excludeBBSell, setExcludeBBSell] = useState(true);
   const [tradingStartHour, setTradingStartHour] = useState(9);
-  const [tradingStartMinute, setTradingStartMinute] = useState(50);
-  const [tradingEndHour, setTradingEndHour] = useState(10);
+  const [tradingStartMinute, setTradingStartMinute] = useState(30);
+  const [tradingEndHour, setTradingEndHour] = useState(11);
   const [tradingEndMinute, setTradingEndMinute] = useState(0);
   const [requireNikkeiMomentum, setRequireNikkeiMomentum] = useState(false);
   const [nikkeiMomentumBars, setNikkeiMomentumBars] = useState(6);
@@ -178,8 +178,8 @@ export default function Backtest() {
   useEffect(() => {
     if (appSettings && !settingsLoaded) {
       const startH = parseInt(settingsMap["trading_start_hour"] || "9", 10);
-      const startM = parseInt(settingsMap["trading_start_minute"] || "50", 10);
-      const endH = parseInt(settingsMap["trading_end_hour"] || "10", 10);
+      const startM = parseInt(settingsMap["trading_start_minute"] || "30", 10);
+      const endH = parseInt(settingsMap["trading_end_hour"] || "11", 10);
       const endM = parseInt(settingsMap["trading_end_minute"] || "0", 10);
       if (!isNaN(startH)) setTradingStartHour(startH);
       if (!isNaN(startM)) setTradingStartMinute(startM);
