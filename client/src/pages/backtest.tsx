@@ -2154,11 +2154,11 @@ export default function Backtest() {
                               <span>購入: {r.buyDate}</span>
                               <span>購入価格 {stats?.isUS ? `$${r.buyPrice.toLocaleString("en-US")}` : `${r.buyPrice.toLocaleString("ja-JP")}円`}</span>
                               <span>|</span>
-                              <span>高値 {stats?.isUS ? `$${r.dayHigh.toLocaleString("en-US")}` : `${r.dayHigh.toLocaleString("ja-JP")}円`}</span>
+                              <span>高値 {stats?.isUS ? `$${r.dayHigh.toLocaleString("en-US")}` : `${r.dayHigh.toLocaleString("ja-JP")}円`}{r.maxHighDate ? ` (${r.maxHighDate.includes("T") ? r.maxHighDate.split("T")[1]?.substring(0, 5) : r.maxHighDate})` : ""}</span>
                               {r.sellPrice != null && (
                                 <>
                                   <span>|</span>
-                                  <span>売却価格 {stats?.isUS ? `$${r.sellPrice.toLocaleString("en-US")}` : `${r.sellPrice.toLocaleString("ja-JP")}円`}</span>
+                                  <span>売却価格 {stats?.isUS ? `$${r.sellPrice.toLocaleString("en-US")}` : `${r.sellPrice.toLocaleString("ja-JP")}円`}{r.sellDate ? ` (${r.sellDate.includes("T") ? r.sellDate.split("T")[1]?.substring(0, 5) : r.sellDate})` : ""}</span>
                                 </>
                               )}
                               {r.varEstimate != null && (

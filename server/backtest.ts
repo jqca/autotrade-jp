@@ -412,6 +412,7 @@ interface SignalCandidate {
   buyDate: string;
   buyPrice: number;
   dayHigh: number;
+  maxHighDate: string;
   sellDate: string;
   sellPrice: number;
   profitLoss: number;
@@ -573,6 +574,7 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
             let isWin = false;
             let sellPrice = 0;
             let maxHigh = buyPrice;
+            let maxHighDate = dates[buyDayIdx];
             let sellDate = dates[buyDayIdx];
             let trailingStopPrice = 0;
 
@@ -587,6 +589,7 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
 
               if (highs[k] > maxHigh) {
                 maxHigh = highs[k];
+                maxHighDate = dates[k];
                 if (useTrailingStop) {
                   trailingStopPrice = Math.round(maxHigh * (1 - trailingStopPct / 100) * 100) / 100;
                 }
@@ -629,6 +632,7 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
               buyDate: dates[buyDayIdx],
               buyPrice,
               dayHigh: maxHigh,
+              maxHighDate,
               sellDate,
               sellPrice,
               profitLoss,
@@ -939,6 +943,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               let isWin = false;
               let sellPrice = 0;
               let maxHigh = entryBar.high;
+              let maxHighDate = entryBar.date;
               let sellDate = entryBar.date;
               const useTrailingStop = params.trailingStop ?? false;
               const trailingStopPct = params.trailingStopPercent ?? 1.5;
@@ -950,6 +955,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               for (let k = entryBarGlobal; k <= entryDayInfo.endIdx; k++) {
                 if (bars[k].high > maxHigh) {
                   maxHigh = bars[k].high;
+                  maxHighDate = bars[k].date;
                   if (useTrailingStop) {
                     trailingStopPrice = Math.round(maxHigh * (1 - trailingStopPct / 100) * 100) / 100;
                   }
@@ -994,6 +1000,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
                 buyDate: entryBar.date,
                 buyPrice,
                 dayHigh: maxHigh,
+                maxHighDate,
                 sellDate,
                 sellPrice,
                 profitLoss,
@@ -1211,6 +1218,7 @@ async function saveSignals(signals: SignalCandidate[], runId: string, params: Ba
       buyDate: s.buyDate,
       buyPrice: s.buyPrice,
       dayHigh: s.dayHigh,
+      maxHighDate: s.maxHighDate,
       sellDate: s.sellDate,
       sellPrice: s.sellPrice,
       profitLoss: s.profitLoss,
@@ -1329,6 +1337,7 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
             let isWin = false;
             let sellPrice = 0;
             let maxHigh = buyPrice;
+            let maxHighDate = dates[buyDayIdx];
             let sellDate = dates[buyDayIdx];
             let trailingStopPrice2 = 0;
 
@@ -1337,6 +1346,7 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
               if (highs[k] >= targetPrice) { isWin = true; sellPrice = targetPrice; sellDate = dates[k]; break; }
               if (highs[k] > maxHigh) {
                 maxHigh = highs[k];
+                maxHighDate = dates[k];
                 if (useTrailingStop) {
                   trailingStopPrice2 = Math.round(maxHigh * (1 - trailingStopPct / 100) * 100) / 100;
                 }
@@ -1357,6 +1367,7 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
               buyDate: dates[buyDayIdx],
               buyPrice,
               dayHigh: maxHigh,
+              maxHighDate,
               sellDate,
               sellPrice,
               profitLoss,
