@@ -486,6 +486,7 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
             } else {
               if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
             }
+            if (indicators.overallSignal === "neutral") continue;
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
@@ -868,6 +869,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               } else {
                 if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
               }
+              if (indicators.overallSignal === "neutral") continue;
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
@@ -1285,6 +1287,7 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
             } else {
               if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
             }
+            if (indicators.overallSignal === "neutral") continue;
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
@@ -1503,6 +1506,7 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               } else {
                 if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
               }
+              if (indicators.overallSignal === "neutral") continue;
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
@@ -1685,6 +1689,7 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
             } else {
               if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
             }
+            if (indicators.overallSignal === "neutral") continue;
             if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
             if (indicators.rsiValue != null) {
               if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
@@ -1897,6 +1902,7 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               } else {
                 if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
               }
+              if (indicators.overallSignal === "neutral") continue;
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
