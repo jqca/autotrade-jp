@@ -174,6 +174,10 @@ export default function Backtest() {
   const [requireNikkeiMomentum, setRequireNikkeiMomentum] = useState(false);
   const [nikkeiMomentumBars, setNikkeiMomentumBars] = useState(6);
   const [excludeMaBuyAfter, setExcludeMaBuyAfter] = useState(600);
+  const [rsiExcludeAfterEnabled, setRsiExcludeAfterEnabled] = useState(true);
+  const [rsiExcludeAfterMin, setRsiExcludeAfterMin] = useState(45);
+  const [rsiExcludeAfterMax, setRsiExcludeAfterMax] = useState(50);
+  const [rsiExcludeAfterTime, setRsiExcludeAfterTime] = useState(600);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   useEffect(() => {
@@ -315,6 +319,9 @@ export default function Backtest() {
       excludePriceMax: excludePriceEnabled ? excludePriceMax : 0,
       excludeBBSell,
       excludeMaBuyAfter,
+      rsiExcludeAfterMin: rsiExcludeAfterEnabled ? rsiExcludeAfterMin : 0,
+      rsiExcludeAfterMax: rsiExcludeAfterEnabled ? rsiExcludeAfterMax : 0,
+      rsiExcludeAfterTime: rsiExcludeAfterEnabled ? rsiExcludeAfterTime : 0,
       excludeCombos: [
         ...(excludeComboNBN ? ["neutral/buy/neutral"] : []),
         ...(excludeComboNNN ? ["neutral/neutral/neutral"] : []),
@@ -1286,6 +1293,58 @@ export default function Backtest() {
                     </div>
 
                     <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">時間帯別RSI除外</Label>
+                        <Switch
+                          checked={rsiExcludeAfterEnabled}
+                          onCheckedChange={setRsiExcludeAfterEnabled}
+                          data-testid="switch-rsi-exclude-after"
+                        />
+                      </div>
+                      {rsiExcludeAfterEnabled && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Select
+                              value={String(rsiExcludeAfterTime)}
+                              onValueChange={(v) => setRsiExcludeAfterTime(Number(v))}
+                              data-testid="select-rsi-exclude-after-time"
+                            >
+                              <SelectTrigger className="w-[140px]" data-testid="trigger-rsi-exclude-after-time">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="570">9:30以降</SelectItem>
+                                <SelectItem value="600">10:00以降</SelectItem>
+                                <SelectItem value="630">10:30以降</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <span className="text-sm text-muted-foreground">RSI</span>
+                            <input
+                              type="number"
+                              value={rsiExcludeAfterMin}
+                              onChange={(e) => setRsiExcludeAfterMin(Number(e.target.value))}
+                              className="w-16 rounded border px-2 py-1 text-sm"
+                              min={0}
+                              max={100}
+                              data-testid="input-rsi-exclude-after-min"
+                            />
+                            <span className="text-sm">〜</span>
+                            <input
+                              type="number"
+                              value={rsiExcludeAfterMax}
+                              onChange={(e) => setRsiExcludeAfterMax(Number(e.target.value))}
+                              className="w-16 rounded border px-2 py-1 text-sm"
+                              min={0}
+                              max={100}
+                              data-testid="input-rsi-exclude-after-max"
+                            />
+                          </div>
+                          <p className="text-xs text-muted-foreground">指定時刻以降、RSIが指定範囲内の銘柄を除外。10時以降のRSI 45-50は方向感が弱く勝率57%と低い傾向。</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
                       <Label className="text-sm font-medium">最小シグナルスコア</Label>
                       <div className="flex items-center gap-3">
                         <Slider
@@ -1562,6 +1621,7 @@ export default function Backtest() {
                   {excludeComboNSN && <Badge variant="outline" className="border-rose-300 text-rose-700 dark:text-rose-400">N/S/N除外</Badge>}
                   {excludeBBSell && <Badge variant="outline" className="border-amber-300 text-amber-700 dark:text-amber-400">BB=sell除外</Badge>}
                   {excludeMaBuyAfter > 0 && <Badge variant="outline" className="border-rose-300 text-rose-700 dark:text-rose-400">MA=buy除外{Math.floor(excludeMaBuyAfter/60)}:{String(excludeMaBuyAfter%60).padStart(2,'0')}~</Badge>}
+                  {rsiExcludeAfterEnabled && <Badge variant="outline" className="border-orange-300 text-orange-700 dark:text-orange-400">RSI{rsiExcludeAfterMin}-{rsiExcludeAfterMax}除外{Math.floor(rsiExcludeAfterTime/60)}:{String(rsiExcludeAfterTime%60).padStart(2,'0')}~</Badge>}
                   {dynamicTarget && <Badge variant="outline">動的利確</Badge>}
                   {requireDailyConfirm && <Badge variant="outline" className="border-indigo-300 text-indigo-700 dark:text-indigo-400">日足確認</Badge>}
                 </div>

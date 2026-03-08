@@ -55,6 +55,9 @@ export interface BacktestParams {
   nikkeiMomentumBars?: number;
   excludeBBSell?: boolean;
   excludeMaBuyAfter?: number;
+  rsiExcludeAfterMin?: number;
+  rsiExcludeAfterMax?: number;
+  rsiExcludeAfterTime?: number;
 }
 
 const INDICATOR_MAP: Record<string, (ind: ReturnType<typeof computeIndicators>) => boolean> = {
@@ -119,6 +122,9 @@ export const DEFAULT_PARAMS: BacktestParams = {
   tradingEndMinute: 30,
   excludeBBSell: true,
   excludeMaBuyAfter: 600,
+  rsiExcludeAfterMin: 45,
+  rsiExcludeAfterMax: 50,
+  rsiExcludeAfterTime: 600,
 };
 
 export interface BacktestProgress {
@@ -873,6 +879,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               if (!indicators) continue;
 
               if (params.excludeMaBuyAfter != null && params.excludeMaBuyAfter > 0 && _curBarMin >= params.excludeMaBuyAfter && indicators.maTrend === "buy") continue;
+              if (params.rsiExcludeAfterTime != null && params.rsiExcludeAfterTime > 0 && _curBarMin >= params.rsiExcludeAfterTime && indicators.rsiValue != null && indicators.rsiValue >= (params.rsiExcludeAfterMin ?? 45) && indicators.rsiValue <= (params.rsiExcludeAfterMax ?? 50)) continue;
 
               if (params.requireUptrend && !indicators.isUptrend) continue;
 
@@ -1515,6 +1522,7 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               if (!indicators) continue;
 
               if (params.excludeMaBuyAfter != null && params.excludeMaBuyAfter > 0 && _curBarMin >= params.excludeMaBuyAfter && indicators.maTrend === "buy") continue;
+              if (params.rsiExcludeAfterTime != null && params.rsiExcludeAfterTime > 0 && _curBarMin >= params.rsiExcludeAfterTime && indicators.rsiValue != null && indicators.rsiValue >= (params.rsiExcludeAfterMin ?? 45) && indicators.rsiValue <= (params.rsiExcludeAfterMax ?? 50)) continue;
 
               if (params.requireUptrend && !indicators.isUptrend) continue;
 
@@ -1916,6 +1924,7 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               if (!indicators) continue;
 
               if (params.excludeMaBuyAfter != null && params.excludeMaBuyAfter > 0 && _curBarMin >= params.excludeMaBuyAfter && indicators.maTrend === "buy") continue;
+              if (params.rsiExcludeAfterTime != null && params.rsiExcludeAfterTime > 0 && _curBarMin >= params.rsiExcludeAfterTime && indicators.rsiValue != null && indicators.rsiValue >= (params.rsiExcludeAfterMin ?? 45) && indicators.rsiValue <= (params.rsiExcludeAfterMax ?? 50)) continue;
 
               if (params.requireUptrend && !indicators.isUptrend) continue;
 
