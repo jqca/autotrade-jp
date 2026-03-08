@@ -153,7 +153,11 @@ export default function Backtest() {
   const [useAi, setUseAi] = useState(false);
   const [useQuantum, setUseQuantum] = useState(false);
   const [aiThreshold, setAiThreshold] = useState(0.5);
-  const [stopLossPercent, setStopLossPercent] = useState(1);
+  const [stopLossPercent, setStopLossPercent] = useState(0.7);
+  const [requireEntryConfirm, setRequireEntryConfirm] = useState(true);
+  const [entryConfirmBars, setEntryConfirmBars] = useState(2);
+  const [requireBreakout, setRequireBreakout] = useState(true);
+  const [breakoutLookback, setBreakoutLookback] = useState(3);
   const [maxHoldDays, setMaxHoldDays] = useState(3);
   const [minVolume, setMinVolume] = useState(50);
   const [minVolatility, setMinVolatility] = useState(0.5);
@@ -321,6 +325,10 @@ export default function Backtest() {
       excludePriceMax: excludePriceEnabled ? excludePriceMax : 0,
       excludeBBSell,
       excludeMaBuyAfter,
+      requireEntryConfirm,
+      entryConfirmBars,
+      requireBreakout,
+      breakoutLookback,
       rsiExcludeAfterMin: rsiExcludeAfterEnabled ? rsiExcludeAfterMin : 0,
       rsiExcludeAfterMax: rsiExcludeAfterEnabled ? rsiExcludeAfterMax : 0,
       rsiExcludeAfterTime: rsiExcludeAfterEnabled ? rsiExcludeAfterTime : 0,
@@ -986,18 +994,72 @@ export default function Backtest() {
                       <Label className="text-sm font-medium">損切り (Stop Loss %)</Label>
                       <div className="flex items-center gap-3">
                         <Slider
-                          value={[stopLossPercent]}
-                          onValueChange={([v]) => setStopLossPercent(v)}
+                          value={[stopLossPercent * 10]}
+                          onValueChange={([v]) => setStopLossPercent(v / 10)}
                           min={0}
-                          max={10}
-                          step={0.5}
+                          max={100}
+                          step={1}
                           className="flex-1"
                           data-testid="slider-stop-loss"
                         />
                         <Badge variant="secondary" className="min-w-[50px] justify-center" data-testid="text-stop-loss">
-                          {stopLossPercent === 0 ? "なし" : `${stopLossPercent}%`}
+                          {stopLossPercent === 0 ? "なし" : `${stopLossPercent.toFixed(1)}%`}
                         </Badge>
                       </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <input type="checkbox" checked={requireEntryConfirm} onChange={(e) => setRequireEntryConfirm(e.target.checked)} data-testid="checkbox-entry-confirm" className="rounded" />
+                        <Label className="text-sm font-medium">エントリー確認フィルター</Label>
+                      </div>
+                      {requireEntryConfirm && (
+                        <div className="ml-6 space-y-2">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-muted-foreground">確認バー数:</span>
+                            <Slider
+                              value={[entryConfirmBars]}
+                              onValueChange={([v]) => setEntryConfirmBars(v)}
+                              min={1}
+                              max={5}
+                              step={1}
+                              className="flex-1"
+                              data-testid="slider-entry-confirm-bars"
+                            />
+                            <Badge variant="secondary" className="min-w-[40px] justify-center" data-testid="text-entry-confirm-bars">
+                              {entryConfirmBars}本
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">買い後、指定本数すべてで終値が買値以下なら見送り。即時反転パターンを排除。</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <input type="checkbox" checked={requireBreakout} onChange={(e) => setRequireBreakout(e.target.checked)} data-testid="checkbox-breakout" className="rounded" />
+                        <Label className="text-sm font-medium">ブレイクアウト確認</Label>
+                      </div>
+                      {requireBreakout && (
+                        <div className="ml-6 space-y-2">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-muted-foreground">参照バー数:</span>
+                            <Slider
+                              value={[breakoutLookback]}
+                              onValueChange={([v]) => setBreakoutLookback(v)}
+                              min={1}
+                              max={10}
+                              step={1}
+                              className="flex-1"
+                              data-testid="slider-breakout-lookback"
+                            />
+                            <Badge variant="secondary" className="min-w-[40px] justify-center" data-testid="text-breakout-lookback">
+                              {breakoutLookback}本
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">直近N本の高値をブレイクしてからエントリー。天井掴みを回避。</p>
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-3">
@@ -1631,7 +1693,9 @@ export default function Backtest() {
                   {requireVolumeSurge && <Badge variant="outline" className="border-orange-300 text-orange-700 dark:text-orange-400">出来高急増</Badge>}
                   {minSignalScore > 0 && <Badge variant="outline">スコア{minSignalScore}+</Badge>}
                   {confirmDays > 1 && <Badge variant="outline">{confirmDays}日確認</Badge>}
-                  {stopLossPercent > 0 && <Badge variant="outline" className="border-red-300 text-red-700 dark:text-red-400">SL {stopLossPercent}%</Badge>}
+                  {stopLossPercent > 0 && <Badge variant="outline" className="border-red-300 text-red-700 dark:text-red-400">SL {stopLossPercent.toFixed(1)}%</Badge>}
+                  {requireEntryConfirm && <Badge variant="outline" className="border-cyan-300 text-cyan-700 dark:text-cyan-400">確認{entryConfirmBars}本</Badge>}
+                  {requireBreakout && <Badge variant="outline" className="border-emerald-300 text-emerald-700 dark:text-emerald-400">BO {breakoutLookback}本</Badge>}
                   {trailingStop && <Badge variant="outline" className="border-amber-300 text-amber-700 dark:text-amber-400">TS {trailingStopPercent}%</Badge>}
                   {maxHoldDays > 1 && <Badge variant="outline">{maxHoldDays}日保持</Badge>}
                   {minVolume > 0 && <Badge variant="outline" className="border-blue-300 text-blue-700 dark:text-blue-400">出来高≥{minVolume.toLocaleString()}単元</Badge>}

@@ -59,6 +59,10 @@ export interface BacktestParams {
   rsiExcludeAfterMax?: number;
   rsiExcludeAfterTime?: number;
   minIntradayRange?: number;
+  requireEntryConfirm?: boolean;
+  entryConfirmBars?: number;
+  requireBreakout?: boolean;
+  breakoutLookback?: number;
 }
 
 const INDICATOR_MAP: Record<string, (ind: ReturnType<typeof computeIndicators>) => boolean> = {
@@ -93,7 +97,7 @@ export const DEFAULT_PARAMS: BacktestParams = {
   useAi: false,
   useQuantum: false,
   aiThreshold: 0.5,
-  stopLossPercent: 0,
+  stopLossPercent: 0.7,
   maxHoldDays: 1,
   minVolume: 50,
   requireUptrend: false,
@@ -920,8 +924,28 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               const entryBarGlobal = globalIdx + 1;
               if (entryBarGlobal >= bars.length) continue;
 
+              if (params.requireBreakout) {
+                const lookback = params.breakoutLookback ?? 3;
+                let recentHigh = -Infinity;
+                for (let bi = Math.max(0, globalIdx - lookback); bi <= globalIdx; bi++) {
+                  if (bars[bi].high > recentHigh) recentHigh = bars[bi].high;
+                }
+                if (bars[entryBarGlobal].high < recentHigh) continue;
+              }
+
               const entryBar = bars[entryBarGlobal];
               const buyPrice = entryBar.open;
+
+              if (params.requireEntryConfirm) {
+                const confirmBars = params.entryConfirmBars ?? 2;
+                let allBelow = true;
+                for (let ci = 1; ci <= confirmBars; ci++) {
+                  const checkIdx = entryBarGlobal + ci;
+                  if (checkIdx >= bars.length) { allBelow = false; break; }
+                  if (bars[checkIdx].close > buyPrice) { allBelow = false; break; }
+                }
+                if (allBelow) continue;
+              }
 
               if ((params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
 
@@ -1575,8 +1599,28 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               const entryBarGlobal = globalIdx + 1;
               if (entryBarGlobal >= bars.length) continue;
 
+              if (params.requireBreakout) {
+                const lookback = params.breakoutLookback ?? 3;
+                let recentHigh = -Infinity;
+                for (let bi = Math.max(0, globalIdx - lookback); bi <= globalIdx; bi++) {
+                  if (bars[bi].high > recentHigh) recentHigh = bars[bi].high;
+                }
+                if (bars[entryBarGlobal].high < recentHigh) continue;
+              }
+
               const entryBar = bars[entryBarGlobal];
               const buyPrice = entryBar.open;
+
+              if (params.requireEntryConfirm) {
+                const confirmBars = params.entryConfirmBars ?? 2;
+                let allBelow = true;
+                for (let ci = 1; ci <= confirmBars; ci++) {
+                  const checkIdx = entryBarGlobal + ci;
+                  if (checkIdx >= bars.length) { allBelow = false; break; }
+                  if (bars[checkIdx].close > buyPrice) { allBelow = false; break; }
+                }
+                if (allBelow) continue;
+              }
 
               if ((params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
 
@@ -1989,8 +2033,28 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               const entryBarGlobal = globalIdx + 1;
               if (entryBarGlobal >= bars.length) continue;
 
+              if (params.requireBreakout) {
+                const lookback = params.breakoutLookback ?? 3;
+                let recentHigh = -Infinity;
+                for (let bi = Math.max(0, globalIdx - lookback); bi <= globalIdx; bi++) {
+                  if (bars[bi].high > recentHigh) recentHigh = bars[bi].high;
+                }
+                if (bars[entryBarGlobal].high < recentHigh) continue;
+              }
+
               const entryBar = bars[entryBarGlobal];
               const buyPrice = entryBar.open;
+
+              if (params.requireEntryConfirm) {
+                const confirmBars = params.entryConfirmBars ?? 2;
+                let allBelow = true;
+                for (let ci = 1; ci <= confirmBars; ci++) {
+                  const checkIdx = entryBarGlobal + ci;
+                  if (checkIdx >= bars.length) { allBelow = false; break; }
+                  if (bars[checkIdx].close > buyPrice) { allBelow = false; break; }
+                }
+                if (allBelow) continue;
+              }
 
               if ((params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
 
