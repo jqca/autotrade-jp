@@ -54,6 +54,7 @@ export interface BacktestParams {
   requireNikkeiMomentum?: boolean;
   nikkeiMomentumBars?: number;
   excludeBBSell?: boolean;
+  excludeMaBuyAfter?: number;
 }
 
 const INDICATOR_MAP: Record<string, (ind: ReturnType<typeof computeIndicators>) => boolean> = {
@@ -114,9 +115,10 @@ export const DEFAULT_PARAMS: BacktestParams = {
   excludePriceMax: 0,
   tradingStartHour: 9,
   tradingStartMinute: 30,
-  tradingEndHour: 11,
-  tradingEndMinute: 0,
+  tradingEndHour: 10,
+  tradingEndMinute: 30,
   excludeBBSell: true,
+  excludeMaBuyAfter: 600,
 };
 
 export interface BacktestProgress {
@@ -849,15 +851,16 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               const globalIdx = dayInfo.startIdx + barInDay;
               if (globalIdx < 50) continue;
 
+              let _curBarMin = -1;
               if (params.tradingStartHour != null || params.tradingEndHour != null) {
                 const barDate = bars[globalIdx].date;
                 const timeMatch = barDate.match(/T(\d{2}):(\d{2})/);
                 if (timeMatch) {
-                  const barMinutes = parseInt(timeMatch[1], 10) * 60 + parseInt(timeMatch[2], 10);
+                  _curBarMin = parseInt(timeMatch[1], 10) * 60 + parseInt(timeMatch[2], 10);
                   const startMinutes = (params.tradingStartHour ?? 0) * 60 + (params.tradingStartMinute ?? 0);
                   const endMinutes = (params.tradingEndHour ?? 24) * 60 + (params.tradingEndMinute ?? 0);
-                  if (barMinutes < startMinutes) continue;
-                  if (barMinutes >= endMinutes) continue;
+                  if (_curBarMin < startMinutes) continue;
+                  if (_curBarMin >= endMinutes) continue;
                 }
               }
 
@@ -868,6 +871,8 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
 
               const indicators = computeIndicatorsAtIndex(closes, globalIdx, 50);
               if (!indicators) continue;
+
+              if (params.excludeMaBuyAfter != null && params.excludeMaBuyAfter > 0 && _curBarMin >= params.excludeMaBuyAfter && indicators.maTrend === "buy") continue;
 
               if (params.requireUptrend && !indicators.isUptrend) continue;
 
@@ -1488,15 +1493,16 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               const globalIdx = dayInfo.startIdx + barInDay;
               if (globalIdx < 50) continue;
 
+              let _curBarMin = -1;
               if (params.tradingStartHour != null || params.tradingEndHour != null) {
                 const barDate = bars[globalIdx].date;
                 const timeMatch = barDate.match(/T(\d{2}):(\d{2})/);
                 if (timeMatch) {
-                  const barMinutes = parseInt(timeMatch[1], 10) * 60 + parseInt(timeMatch[2], 10);
+                  _curBarMin = parseInt(timeMatch[1], 10) * 60 + parseInt(timeMatch[2], 10);
                   const startMinutes = (params.tradingStartHour ?? 0) * 60 + (params.tradingStartMinute ?? 0);
                   const endMinutes = (params.tradingEndHour ?? 24) * 60 + (params.tradingEndMinute ?? 0);
-                  if (barMinutes < startMinutes) continue;
-                  if (barMinutes >= endMinutes) continue;
+                  if (_curBarMin < startMinutes) continue;
+                  if (_curBarMin >= endMinutes) continue;
                 }
               }
 
@@ -1507,6 +1513,8 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
 
               const indicators = computeIndicatorsAtIndex(closes, globalIdx, 50);
               if (!indicators) continue;
+
+              if (params.excludeMaBuyAfter != null && params.excludeMaBuyAfter > 0 && _curBarMin >= params.excludeMaBuyAfter && indicators.maTrend === "buy") continue;
 
               if (params.requireUptrend && !indicators.isUptrend) continue;
 
@@ -1886,15 +1894,16 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               const globalIdx = dayInfo.startIdx + barInDay;
               if (globalIdx < 50) continue;
 
+              let _curBarMin = -1;
               if (params.tradingStartHour != null || params.tradingEndHour != null) {
                 const barDate = bars[globalIdx].date;
                 const timeMatch = barDate.match(/T(\d{2}):(\d{2})/);
                 if (timeMatch) {
-                  const barMinutes = parseInt(timeMatch[1], 10) * 60 + parseInt(timeMatch[2], 10);
+                  _curBarMin = parseInt(timeMatch[1], 10) * 60 + parseInt(timeMatch[2], 10);
                   const startMinutes = (params.tradingStartHour ?? 0) * 60 + (params.tradingStartMinute ?? 0);
                   const endMinutes = (params.tradingEndHour ?? 24) * 60 + (params.tradingEndMinute ?? 0);
-                  if (barMinutes < startMinutes) continue;
-                  if (barMinutes >= endMinutes) continue;
+                  if (_curBarMin < startMinutes) continue;
+                  if (_curBarMin >= endMinutes) continue;
                 }
               }
 
@@ -1905,6 +1914,8 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
 
               const indicators = computeIndicatorsAtIndex(closes, globalIdx, 50);
               if (!indicators) continue;
+
+              if (params.excludeMaBuyAfter != null && params.excludeMaBuyAfter > 0 && _curBarMin >= params.excludeMaBuyAfter && indicators.maTrend === "buy") continue;
 
               if (params.requireUptrend && !indicators.isUptrend) continue;
 

@@ -547,10 +547,11 @@ export async function registerRoutes(
         : undefined;
       const tradingStartHour = req.body.tradingStartHour != null ? Math.max(0, Math.min(23, Math.round(Number(req.body.tradingStartHour)))) : 9;
       const tradingStartMinute = req.body.tradingStartMinute != null ? Math.max(0, Math.min(55, Math.round(Number(req.body.tradingStartMinute)))) : 30;
-      const tradingEndHour = req.body.tradingEndHour != null ? Math.max(0, Math.min(24, Math.round(Number(req.body.tradingEndHour)))) : 11;
-      const tradingEndMinute = req.body.tradingEndMinute != null ? Math.max(0, Math.min(55, Math.round(Number(req.body.tradingEndMinute)))) : 0;
+      const tradingEndHour = req.body.tradingEndHour != null ? Math.max(0, Math.min(24, Math.round(Number(req.body.tradingEndHour)))) : 10;
+      const tradingEndMinute = req.body.tradingEndMinute != null ? Math.max(0, Math.min(55, Math.round(Number(req.body.tradingEndMinute)))) : 30;
       const requireNikkeiMomentum = Boolean(req.body.requireNikkeiMomentum);
       const excludeBBSell = req.body.excludeBBSell != null ? Boolean(req.body.excludeBBSell) : true;
+      const excludeMaBuyAfter = req.body.excludeMaBuyAfter != null ? Math.max(0, Math.round(Number(req.body.excludeMaBuyAfter))) : 600;
       const nikkeiMomentumBars = req.body.nikkeiMomentumBars != null ? Math.max(2, Math.min(20, Math.round(Number(req.body.nikkeiMomentumBars)))) : 6;
       const validMarkets = ["JP", "US"];
       const market = validMarkets.includes(req.body.market) ? req.body.market : undefined;
@@ -606,6 +607,7 @@ export async function registerRoutes(
         requireNikkeiMomentum,
         nikkeiMomentumBars,
         excludeBBSell,
+        excludeMaBuyAfter,
       };
       await startBacktest(params, 3);
       res.json({ message: "バックテストを開始しました", params });

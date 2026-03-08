@@ -169,18 +169,19 @@ export default function Backtest() {
   const [excludeBBSell, setExcludeBBSell] = useState(true);
   const [tradingStartHour, setTradingStartHour] = useState(9);
   const [tradingStartMinute, setTradingStartMinute] = useState(30);
-  const [tradingEndHour, setTradingEndHour] = useState(11);
-  const [tradingEndMinute, setTradingEndMinute] = useState(0);
+  const [tradingEndHour, setTradingEndHour] = useState(10);
+  const [tradingEndMinute, setTradingEndMinute] = useState(30);
   const [requireNikkeiMomentum, setRequireNikkeiMomentum] = useState(false);
   const [nikkeiMomentumBars, setNikkeiMomentumBars] = useState(6);
+  const [excludeMaBuyAfter, setExcludeMaBuyAfter] = useState(600);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   useEffect(() => {
     if (appSettings && !settingsLoaded) {
       const startH = parseInt(settingsMap["trading_start_hour"] || "9", 10);
       const startM = parseInt(settingsMap["trading_start_minute"] || "30", 10);
-      const endH = parseInt(settingsMap["trading_end_hour"] || "11", 10);
-      const endM = parseInt(settingsMap["trading_end_minute"] || "0", 10);
+      const endH = parseInt(settingsMap["trading_end_hour"] || "10", 10);
+      const endM = parseInt(settingsMap["trading_end_minute"] || "30", 10);
       if (!isNaN(startH)) setTradingStartHour(startH);
       if (!isNaN(startM)) setTradingStartMinute(startM);
       if (!isNaN(endH)) setTradingEndHour(endH);
@@ -201,6 +202,8 @@ export default function Backtest() {
       const rsiExMax = parseInt(settingsMap["rsi_exclude_max"] || "60", 10);
       if (!isNaN(rsiExMin)) setRsiExcludeMin(rsiExMin);
       if (!isNaN(rsiExMax)) setRsiExcludeMax(rsiExMax);
+      const exMaBuyAfter = parseInt(settingsMap["exclude_ma_buy_after"] || "600", 10);
+      if (!isNaN(exMaBuyAfter)) setExcludeMaBuyAfter(exMaBuyAfter);
       setSettingsLoaded(true);
     }
   }, [appSettings, settingsLoaded]);
@@ -311,6 +314,7 @@ export default function Backtest() {
       excludePriceMin: excludePriceEnabled ? excludePriceMin : 0,
       excludePriceMax: excludePriceEnabled ? excludePriceMax : 0,
       excludeBBSell,
+      excludeMaBuyAfter,
       excludeCombos: [
         ...(excludeComboNBN ? ["neutral/buy/neutral"] : []),
         ...(excludeComboNNN ? ["neutral/neutral/neutral"] : []),
@@ -1259,6 +1263,29 @@ export default function Backtest() {
                     </div>
 
                     <div className="space-y-3">
+                      <Label className="text-sm font-medium">MA=buy除外（時刻以降）</Label>
+                      <div className="flex items-center gap-3">
+                        <Select
+                          value={String(excludeMaBuyAfter)}
+                          onValueChange={(v) => setExcludeMaBuyAfter(Number(v))}
+                          data-testid="select-exclude-ma-buy-after"
+                        >
+                          <SelectTrigger className="w-[180px]" data-testid="trigger-exclude-ma-buy-after">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">無効（除外しない）</SelectItem>
+                            <SelectItem value="570">9:30以降</SelectItem>
+                            <SelectItem value="600">10:00以降</SelectItem>
+                            <SelectItem value="630">10:30以降</SelectItem>
+                            <SelectItem value="660">11:00以降</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <p className="text-xs text-muted-foreground">指定時刻以降はMA=buy（移動平均上昇トレンド）のエントリーを除外。10時以降のMA=buyは天井圏で勝率が低い傾向があります。</p>
+                    </div>
+
+                    <div className="space-y-3">
                       <Label className="text-sm font-medium">最小シグナルスコア</Label>
                       <div className="flex items-center gap-3">
                         <Slider
@@ -1534,6 +1561,7 @@ export default function Backtest() {
                   {excludeComboNNN && <Badge variant="outline" className="border-rose-300 text-rose-700 dark:text-rose-400">N/N/N除外</Badge>}
                   {excludeComboNSN && <Badge variant="outline" className="border-rose-300 text-rose-700 dark:text-rose-400">N/S/N除外</Badge>}
                   {excludeBBSell && <Badge variant="outline" className="border-amber-300 text-amber-700 dark:text-amber-400">BB=sell除外</Badge>}
+                  {excludeMaBuyAfter > 0 && <Badge variant="outline" className="border-rose-300 text-rose-700 dark:text-rose-400">MA=buy除外{Math.floor(excludeMaBuyAfter/60)}:{String(excludeMaBuyAfter%60).padStart(2,'0')}~</Badge>}
                   {dynamicTarget && <Badge variant="outline">動的利確</Badge>}
                   {requireDailyConfirm && <Badge variant="outline" className="border-indigo-300 text-indigo-700 dark:text-indigo-400">日足確認</Badge>}
                 </div>
