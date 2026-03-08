@@ -112,6 +112,11 @@ export const DEFAULT_PARAMS: BacktestParams = {
   minVolatility: 0,
   excludePriceMin: 0,
   excludePriceMax: 0,
+  tradingStartHour: 9,
+  tradingStartMinute: 50,
+  tradingEndHour: 10,
+  tradingEndMinute: 0,
+  excludeBBSell: true,
 };
 
 export interface BacktestProgress {

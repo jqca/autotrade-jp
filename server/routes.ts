@@ -545,12 +545,12 @@ export async function registerRoutes(
       const excludeCombos = Array.isArray(req.body.excludeCombos)
         ? (req.body.excludeCombos as string[]).filter(c => typeof c === 'string' && c.includes('/'))
         : undefined;
-      const tradingStartHour = req.body.tradingStartHour != null ? Math.max(0, Math.min(23, Math.round(Number(req.body.tradingStartHour)))) : undefined;
-      const tradingStartMinute = req.body.tradingStartMinute != null ? Math.max(0, Math.min(55, Math.round(Number(req.body.tradingStartMinute)))) : undefined;
-      const tradingEndHour = req.body.tradingEndHour != null ? Math.max(0, Math.min(24, Math.round(Number(req.body.tradingEndHour)))) : undefined;
-      const tradingEndMinute = req.body.tradingEndMinute != null ? Math.max(0, Math.min(55, Math.round(Number(req.body.tradingEndMinute)))) : undefined;
+      const tradingStartHour = req.body.tradingStartHour != null ? Math.max(0, Math.min(23, Math.round(Number(req.body.tradingStartHour)))) : 9;
+      const tradingStartMinute = req.body.tradingStartMinute != null ? Math.max(0, Math.min(55, Math.round(Number(req.body.tradingStartMinute)))) : 50;
+      const tradingEndHour = req.body.tradingEndHour != null ? Math.max(0, Math.min(24, Math.round(Number(req.body.tradingEndHour)))) : 10;
+      const tradingEndMinute = req.body.tradingEndMinute != null ? Math.max(0, Math.min(55, Math.round(Number(req.body.tradingEndMinute)))) : 0;
       const requireNikkeiMomentum = Boolean(req.body.requireNikkeiMomentum);
-      const excludeBBSell = req.body.excludeBBSell != null ? Boolean(req.body.excludeBBSell) : undefined;
+      const excludeBBSell = req.body.excludeBBSell != null ? Boolean(req.body.excludeBBSell) : true;
       const nikkeiMomentumBars = req.body.nikkeiMomentumBars != null ? Math.max(2, Math.min(20, Math.round(Number(req.body.nikkeiMomentumBars)))) : 6;
       const validMarkets = ["JP", "US"];
       const market = validMarkets.includes(req.body.market) ? req.body.market : undefined;
