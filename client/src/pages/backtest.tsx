@@ -911,8 +911,8 @@ export default function Backtest() {
                       value={[simDays]}
                       onValueChange={([v]) => setSimDays(v)}
                       min={timeframe !== "1d" ? 10 : 80}
-                      max={timeframe !== "1d" ? 60 : 400}
-                      step={timeframe !== "1d" ? 5 : 10}
+                      max={timeframe !== "1d" ? 200 : 400}
+                      step={timeframe !== "1d" ? 10 : 10}
                       className="flex-1"
                       data-testid="slider-sim-days"
                     />
