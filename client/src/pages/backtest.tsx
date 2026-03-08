@@ -2152,9 +2152,15 @@ export default function Backtest() {
                               <span>シグナル: {r.signalDate}</span>
                               <span>→</span>
                               <span>購入: {r.buyDate}</span>
-                              <span>始値 {stats?.isUS ? `$${r.buyPrice.toLocaleString("en-US")}` : `${r.buyPrice.toLocaleString("ja-JP")}円`}</span>
+                              <span>購入価格 {stats?.isUS ? `$${r.buyPrice.toLocaleString("en-US")}` : `${r.buyPrice.toLocaleString("ja-JP")}円`}</span>
                               <span>|</span>
                               <span>高値 {stats?.isUS ? `$${r.dayHigh.toLocaleString("en-US")}` : `${r.dayHigh.toLocaleString("ja-JP")}円`}</span>
+                              {r.sellPrice != null && (
+                                <>
+                                  <span>|</span>
+                                  <span>売却価格 {stats?.isUS ? `$${r.sellPrice.toLocaleString("en-US")}` : `${r.sellPrice.toLocaleString("ja-JP")}円`}</span>
+                                </>
+                              )}
                               {r.varEstimate != null && (
                                 <>
                                   <span>|</span>
