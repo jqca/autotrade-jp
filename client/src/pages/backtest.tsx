@@ -214,7 +214,7 @@ export default function Backtest() {
   const [trailingStop, setTrailingStop] = useState(true);
   const [trailingStopPercent, setTrailingStopPercent] = useState(1.5);
   const [confirmDays, setConfirmDays] = useState(1);
-  const [minSignalScore, setMinSignalScore] = useState(20);
+  const [minSignalScore, setMinSignalScore] = useState(0);
   const [requireDailyConfirm, setRequireDailyConfirm] = useState(false);
   const [dailyMinBuyIndicators, setDailyMinBuyIndicators] = useState(2);
   const [dailyMinSignalScore, setDailyMinSignalScore] = useState(0);
