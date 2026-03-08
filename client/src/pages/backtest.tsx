@@ -144,7 +144,7 @@ export default function Backtest() {
 
   const [targetPercent, setTargetPercent] = useState(1.0);
   const [requiredIndicators, setRequiredIndicators] = useState<string[]>(["macd"]);
-  const [rsiMin, setRsiMin] = useState(25);
+  const [rsiMin, setRsiMin] = useState(40);
   const [rsiMax, setRsiMax] = useState(65);
   const [simDays, setSimDays] = useState(200);
   const [timeframe, setTimeframe] = useState("1d");
@@ -168,7 +168,7 @@ export default function Backtest() {
   const [excludeComboNSN, setExcludeComboNSN] = useState(false);
   const [excludeBBSell, setExcludeBBSell] = useState(true);
   const [tradingStartHour, setTradingStartHour] = useState(9);
-  const [tradingStartMinute, setTradingStartMinute] = useState(30);
+  const [tradingStartMinute, setTradingStartMinute] = useState(50);
   const [tradingEndHour, setTradingEndHour] = useState(10);
   const [tradingEndMinute, setTradingEndMinute] = useState(0);
   const [requireNikkeiMomentum, setRequireNikkeiMomentum] = useState(false);

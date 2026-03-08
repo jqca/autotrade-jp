@@ -79,7 +79,7 @@ function checkRequiredIndicators(indicators: ReturnType<typeof computeIndicators
 export const DEFAULT_PARAMS: BacktestParams = {
   targetPercent: 1.0,
   minBuyIndicators: 2,
-  rsiMin: 0,
+  rsiMin: 40,
   rsiMax: 65,
   requireMaBuy: false,
   simDays: 200,
