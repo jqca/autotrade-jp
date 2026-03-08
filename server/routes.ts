@@ -505,8 +505,8 @@ export async function registerRoutes(
       const timeframe = validTimeframes.includes(req.body.timeframe) ? req.body.timeframe : "1d";
       const isIntraday = timeframe !== "1d";
       if (isIntraday) {
-        if (simDays < 10 || simDays > 60) {
-          return res.status(400).json({ message: "日中足のシミュレーション日数は10〜60の範囲で指定してください" });
+        if (simDays < 10 || simDays > 200) {
+          return res.status(400).json({ message: "日中足のシミュレーション日数は10〜200の範囲で指定してください" });
         }
       } else {
         if (simDays < 80 || simDays > 400) {
