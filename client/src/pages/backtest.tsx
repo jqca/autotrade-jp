@@ -763,26 +763,26 @@ export default function Backtest() {
                   <Button
                     variant={timeframe === "5m" ? "default" : "outline"}
                     size="sm"
-                    onClick={() => { setTimeframe("5m"); setSimDays(60); }}
+                    onClick={() => { setTimeframe("5m"); setSimDays(120); }}
                     data-testid="button-timeframe-5m"
                   >
-                    5分足（過去60日）
+                    5分足（過去120日）
                   </Button>
                   <Button
                     variant={timeframe === "10m" ? "default" : "outline"}
                     size="sm"
-                    onClick={() => { setTimeframe("10m"); setSimDays(60); }}
+                    onClick={() => { setTimeframe("10m"); setSimDays(120); }}
                     data-testid="button-timeframe-10m"
                   >
-                    10分足（過去60日）
+                    10分足（過去120日）
                   </Button>
                   <Button
                     variant={timeframe === "30m" ? "default" : "outline"}
                     size="sm"
-                    onClick={() => { setTimeframe("30m"); setSimDays(60); }}
+                    onClick={() => { setTimeframe("30m"); setSimDays(120); }}
                     data-testid="button-timeframe-30m"
                   >
-                    30分足（過去60日）
+                    30分足（過去120日）
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -1791,7 +1791,7 @@ export default function Backtest() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.3); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(60); setUseAi(false); setUseQuantum(false); }}
+                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.3); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(120); setUseAi(false); setUseQuantum(false); }}
                     data-testid="button-preset-5m-default"
                   >
                     5分足デフォルト
@@ -1799,7 +1799,7 @@ export default function Backtest() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.5); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(60); setUseAi(true); setUseQuantum(true); setAiThreshold(0.5); }}
+                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.5); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(120); setUseAi(true); setUseQuantum(true); setAiThreshold(0.5); }}
                     data-testid="button-preset-5m-ai-quantum"
                   >
                     <Brain className="h-3 w-3 mr-1 text-sky-500" />
@@ -1808,7 +1808,7 @@ export default function Backtest() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.3); setMinBuyIndicators(3); setRsiMin(20); setRsiMax(30); setRequireMaBuy(true); setSimDays(60); setUseAi(false); setUseQuantum(false); setRequireDailyConfirm(false); }}
+                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.3); setMinBuyIndicators(3); setRsiMin(20); setRsiMax(30); setRequireMaBuy(true); setSimDays(120); setUseAi(false); setUseQuantum(false); setRequireDailyConfirm(false); }}
                     data-testid="button-preset-5m-strict"
                   >
                     5分足 厳格
@@ -1817,7 +1817,7 @@ export default function Backtest() {
                     variant="outline"
                     size="sm"
                     className="border-indigo-300 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
-                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.3); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(60); setUseAi(false); setUseQuantum(false); setRequireDailyConfirm(true); setDailyMinBuyIndicators(2); setDailyMinSignalScore(15); setStopLossPercent(1.0); setDynamicTarget(true); setRequireMacdCrossover(false); setRequireRsiReversal(false); setMinSignalScore(15); setTrailingStop(true); setTrailingStopPercent(1.5); setMaxHoldDays(3); setShowAdvanced(true); }}
+                    onClick={() => { setTimeframe("5m"); setTargetPercent(0.3); setMinBuyIndicators(3); setRsiMin(0); setRsiMax(30); setRequireMaBuy(false); setSimDays(120); setUseAi(false); setUseQuantum(false); setRequireDailyConfirm(true); setDailyMinBuyIndicators(2); setDailyMinSignalScore(15); setStopLossPercent(1.0); setDynamicTarget(true); setRequireMacdCrossover(false); setRequireRsiReversal(false); setMinSignalScore(15); setTrailingStop(true); setTrailingStopPercent(1.5); setMaxHoldDays(3); setShowAdvanced(true); }}
                     data-testid="button-preset-5m-daily"
                   >
                     <Activity className="h-3 w-3 mr-1 text-indigo-500" />
