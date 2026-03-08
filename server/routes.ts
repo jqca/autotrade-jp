@@ -546,7 +546,9 @@ export async function registerRoutes(
         ? (req.body.excludeCombos as string[]).filter(c => typeof c === 'string' && c.includes('/'))
         : undefined;
       const tradingStartHour = req.body.tradingStartHour != null ? Math.max(0, Math.min(23, Math.round(Number(req.body.tradingStartHour)))) : undefined;
+      const tradingStartMinute = req.body.tradingStartMinute != null ? Math.max(0, Math.min(55, Math.round(Number(req.body.tradingStartMinute)))) : undefined;
       const tradingEndHour = req.body.tradingEndHour != null ? Math.max(0, Math.min(24, Math.round(Number(req.body.tradingEndHour)))) : undefined;
+      const tradingEndMinute = req.body.tradingEndMinute != null ? Math.max(0, Math.min(55, Math.round(Number(req.body.tradingEndMinute)))) : undefined;
       const requireNikkeiMomentum = Boolean(req.body.requireNikkeiMomentum);
       const nikkeiMomentumBars = req.body.nikkeiMomentumBars != null ? Math.max(2, Math.min(20, Math.round(Number(req.body.nikkeiMomentumBars)))) : 6;
       const validMarkets = ["JP", "US"];
@@ -597,7 +599,9 @@ export async function registerRoutes(
         minVolatility,
         excludeCombos,
         tradingStartHour,
+        tradingStartMinute,
         tradingEndHour,
+        tradingEndMinute,
         requireNikkeiMomentum,
         nikkeiMomentumBars,
       };

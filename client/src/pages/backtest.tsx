@@ -167,7 +167,9 @@ export default function Backtest() {
   const [excludeComboNNN, setExcludeComboNNN] = useState(false);
   const [excludeComboNSN, setExcludeComboNSN] = useState(false);
   const [tradingStartHour, setTradingStartHour] = useState(9);
+  const [tradingStartMinute, setTradingStartMinute] = useState(30);
   const [tradingEndHour, setTradingEndHour] = useState(10);
+  const [tradingEndMinute, setTradingEndMinute] = useState(0);
   const [requireNikkeiMomentum, setRequireNikkeiMomentum] = useState(false);
   const [nikkeiMomentumBars, setNikkeiMomentumBars] = useState(6);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
@@ -175,9 +177,13 @@ export default function Backtest() {
   useEffect(() => {
     if (appSettings && !settingsLoaded) {
       const startH = parseInt(settingsMap["trading_start_hour"] || "9", 10);
+      const startM = parseInt(settingsMap["trading_start_minute"] || "30", 10);
       const endH = parseInt(settingsMap["trading_end_hour"] || "10", 10);
+      const endM = parseInt(settingsMap["trading_end_minute"] || "0", 10);
       if (!isNaN(startH)) setTradingStartHour(startH);
+      if (!isNaN(startM)) setTradingStartMinute(startM);
       if (!isNaN(endH)) setTradingEndHour(endH);
+      if (!isNaN(endM)) setTradingEndMinute(endM);
       const nikkeiMom = settingsMap["require_nikkei_momentum"];
       if (nikkeiMom === "true") setRequireNikkeiMomentum(true);
       const nikkeiMomBars = parseInt(settingsMap["nikkei_momentum_bars"] || "6", 10);
@@ -296,7 +302,9 @@ export default function Backtest() {
       minBarVolume: 0,
       minVolatility,
       tradingStartHour,
+      tradingStartMinute,
       tradingEndHour,
+      tradingEndMinute,
       requireNikkeiMomentum,
       nikkeiMomentumBars,
       excludePriceMin: excludePriceEnabled ? excludePriceMin : 0,
@@ -1038,36 +1046,62 @@ export default function Backtest() {
                       <div className="flex items-center gap-3">
                         <div className="flex-1 space-y-1">
                           <span className="text-xs text-muted-foreground">開始</span>
-                          <select
-                            value={tradingStartHour}
-                            onChange={(e) => setTradingStartHour(Number(e.target.value))}
-                            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                            data-testid="select-trading-start-hour"
-                          >
-                            {[9, 10, 11, 12, 13, 14].map(h => (
-                              <option key={h} value={h}>{h}:00</option>
-                            ))}
-                          </select>
+                          <div className="flex gap-1">
+                            <select
+                              value={tradingStartHour}
+                              onChange={(e) => setTradingStartHour(Number(e.target.value))}
+                              className="w-full rounded-md border bg-background px-2 py-2 text-sm"
+                              data-testid="select-trading-start-hour"
+                            >
+                              {[9, 10, 11, 12, 13, 14].map(h => (
+                                <option key={h} value={h}>{h}</option>
+                              ))}
+                            </select>
+                            <span className="pt-2 text-muted-foreground">:</span>
+                            <select
+                              value={tradingStartMinute}
+                              onChange={(e) => setTradingStartMinute(Number(e.target.value))}
+                              className="w-full rounded-md border bg-background px-2 py-2 text-sm"
+                              data-testid="select-trading-start-minute"
+                            >
+                              {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => (
+                                <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
                         <span className="text-muted-foreground pt-4">〜</span>
                         <div className="flex-1 space-y-1">
                           <span className="text-xs text-muted-foreground">終了（この時間未満）</span>
-                          <select
-                            value={tradingEndHour}
-                            onChange={(e) => setTradingEndHour(Number(e.target.value))}
-                            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                            data-testid="select-trading-end-hour"
-                          >
-                            {[10, 11, 12, 13, 14, 15, 16].map(h => (
-                              <option key={h} value={h}>{h}:00</option>
-                            ))}
-                          </select>
+                          <div className="flex gap-1">
+                            <select
+                              value={tradingEndHour}
+                              onChange={(e) => setTradingEndHour(Number(e.target.value))}
+                              className="w-full rounded-md border bg-background px-2 py-2 text-sm"
+                              data-testid="select-trading-end-hour"
+                            >
+                              {[9, 10, 11, 12, 13, 14, 15, 16].map(h => (
+                                <option key={h} value={h}>{h}</option>
+                              ))}
+                            </select>
+                            <span className="pt-2 text-muted-foreground">:</span>
+                            <select
+                              value={tradingEndMinute}
+                              onChange={(e) => setTradingEndMinute(Number(e.target.value))}
+                              className="w-full rounded-md border bg-background px-2 py-2 text-sm"
+                              data-testid="select-trading-end-minute"
+                            >
+                              {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map(m => (
+                                <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
-                        <Badge variant="secondary" className="min-w-[80px] justify-center mt-4" data-testid="text-trading-hours">
-                          {tradingStartHour}:00〜{tradingEndHour}:00
+                        <Badge variant="secondary" className="min-w-[100px] justify-center mt-4" data-testid="text-trading-hours">
+                          {tradingStartHour}:{String(tradingStartMinute).padStart(2, '0')}〜{tradingEndHour}:{String(tradingEndMinute).padStart(2, '0')}
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground">エントリーする時間帯を制限（9時台のみが最も勝率が高い）</p>
+                      <p className="text-xs text-muted-foreground">エントリーする時間帯を制限（9:30〜10:00が最も勝率が高い）</p>
                     </div>
 
                     <div className="space-y-3">

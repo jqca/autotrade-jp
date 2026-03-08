@@ -48,7 +48,9 @@ export interface BacktestParams {
   excludeCombos?: string[];
   requireMarketUptrend?: boolean;
   tradingStartHour?: number;
+  tradingStartMinute?: number;
   tradingEndHour?: number;
+  tradingEndMinute?: number;
   requireNikkeiMomentum?: boolean;
   nikkeiMomentumBars?: number;
 }
@@ -837,11 +839,13 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
 
               if (params.tradingStartHour != null || params.tradingEndHour != null) {
                 const barDate = bars[globalIdx].date;
-                const hourMatch = barDate.match(/T(\d{2}):/);
-                if (hourMatch) {
-                  const barHour = parseInt(hourMatch[1], 10);
-                  if (params.tradingStartHour != null && barHour < params.tradingStartHour) continue;
-                  if (params.tradingEndHour != null && barHour >= params.tradingEndHour) continue;
+                const timeMatch = barDate.match(/T(\d{2}):(\d{2})/);
+                if (timeMatch) {
+                  const barMinutes = parseInt(timeMatch[1], 10) * 60 + parseInt(timeMatch[2], 10);
+                  const startMinutes = (params.tradingStartHour ?? 0) * 60 + (params.tradingStartMinute ?? 0);
+                  const endMinutes = (params.tradingEndHour ?? 24) * 60 + (params.tradingEndMinute ?? 0);
+                  if (barMinutes < startMinutes) continue;
+                  if (barMinutes >= endMinutes) continue;
                 }
               }
 

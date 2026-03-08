@@ -18,25 +18,9 @@ interface AppSetting {
   updatedAt: string | null;
 }
 
-const HOUR_OPTIONS = [
-  { value: 9, label: "9:00" },
-  { value: 10, label: "10:00" },
-  { value: 11, label: "11:00" },
-  { value: 12, label: "12:00" },
-  { value: 13, label: "13:00" },
-  { value: 14, label: "14:00" },
-  { value: 15, label: "15:00" },
-];
-
-const END_HOUR_OPTIONS = [
-  { value: 10, label: "10:00" },
-  { value: 11, label: "11:00" },
-  { value: 12, label: "12:00" },
-  { value: 13, label: "13:00" },
-  { value: 14, label: "14:00" },
-  { value: 15, label: "15:00" },
-  { value: 16, label: "16:00（大引け）" },
-];
+const HOUR_OPTIONS = [9, 10, 11, 12, 13, 14, 15];
+const END_HOUR_OPTIONS = [9, 10, 11, 12, 13, 14, 15, 16];
+const MINUTE_OPTIONS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -110,7 +94,9 @@ export default function SettingsPage() {
   };
 
   const tradingStartHour = parseInt(editValues["trading_start_hour"] || "9", 10);
+  const tradingStartMinute = parseInt(editValues["trading_start_minute"] || "30", 10);
   const tradingEndHour = parseInt(editValues["trading_end_hour"] || "10", 10);
+  const tradingEndMinute = parseInt(editValues["trading_end_minute"] || "0", 10);
   const nikkeiMomentumEnabled = editValues["require_nikkei_momentum"] === "true";
   const nikkeiMomentumBars = parseInt(editValues["nikkei_momentum_bars"] || "6", 10);
 
@@ -144,47 +130,75 @@ export default function SettingsPage() {
                 取引時間帯
               </CardTitle>
               <CardDescription>
-                日中足バックテスト・自動売買でエントリーする時間帯を設定します。9時台のみが最も勝率が高い結果が出ています。
+                日中足バックテスト・自動売買でエントリーする時間帯を設定します。9:30〜10:00が最も勝率が高い結果が出ています。
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-end gap-4">
                 <div className="flex-1 space-y-1.5">
                   <Label className="text-sm text-muted-foreground">取引開始時刻</Label>
-                  <select
-                    value={tradingStartHour}
-                    onChange={(e) => setEditValues((prev) => ({ ...prev, trading_start_hour: e.target.value }))}
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                    data-testid="select-setting-trading-start"
-                  >
-                    {HOUR_OPTIONS.map(h => (
-                      <option key={h.value} value={h.value}>{h.label}</option>
-                    ))}
-                  </select>
+                  <div className="flex gap-1">
+                    <select
+                      value={tradingStartHour}
+                      onChange={(e) => setEditValues((prev) => ({ ...prev, trading_start_hour: e.target.value }))}
+                      className="w-full rounded-md border bg-background px-2 py-2 text-sm"
+                      data-testid="select-setting-trading-start-hour"
+                    >
+                      {HOUR_OPTIONS.map(h => (
+                        <option key={h} value={h}>{h}</option>
+                      ))}
+                    </select>
+                    <span className="pt-2 text-muted-foreground">:</span>
+                    <select
+                      value={tradingStartMinute}
+                      onChange={(e) => setEditValues((prev) => ({ ...prev, trading_start_minute: e.target.value }))}
+                      className="w-full rounded-md border bg-background px-2 py-2 text-sm"
+                      data-testid="select-setting-trading-start-minute"
+                    >
+                      {MINUTE_OPTIONS.map(m => (
+                        <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 <span className="text-muted-foreground pb-2">〜</span>
                 <div className="flex-1 space-y-1.5">
                   <Label className="text-sm text-muted-foreground">取引終了時刻</Label>
-                  <select
-                    value={tradingEndHour}
-                    onChange={(e) => setEditValues((prev) => ({ ...prev, trading_end_hour: e.target.value }))}
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                    data-testid="select-setting-trading-end"
-                  >
-                    {END_HOUR_OPTIONS.map(h => (
-                      <option key={h.value} value={h.value}>{h.label}</option>
-                    ))}
-                  </select>
+                  <div className="flex gap-1">
+                    <select
+                      value={tradingEndHour}
+                      onChange={(e) => setEditValues((prev) => ({ ...prev, trading_end_hour: e.target.value }))}
+                      className="w-full rounded-md border bg-background px-2 py-2 text-sm"
+                      data-testid="select-setting-trading-end-hour"
+                    >
+                      {END_HOUR_OPTIONS.map(h => (
+                        <option key={h} value={h}>{h}</option>
+                      ))}
+                    </select>
+                    <span className="pt-2 text-muted-foreground">:</span>
+                    <select
+                      value={tradingEndMinute}
+                      onChange={(e) => setEditValues((prev) => ({ ...prev, trading_end_minute: e.target.value }))}
+                      className="w-full rounded-md border bg-background px-2 py-2 text-sm"
+                      data-testid="select-setting-trading-end-minute"
+                    >
+                      {MINUTE_OPTIONS.map(m => (
+                        <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
-                  現在の設定: <span className="font-medium text-foreground">{tradingStartHour}:00 〜 {tradingEndHour}:00</span>
+                  現在の設定: <span className="font-medium text-foreground">{tradingStartHour}:{String(tradingStartMinute).padStart(2, '0')} 〜 {tradingEndHour}:{String(tradingEndMinute).padStart(2, '0')}</span>
                 </p>
                 <Button
                   onClick={() => handleSaveMultiple([
-                    { key: "trading_start_hour", value: String(tradingStartHour), label: "取引開始時刻", description: "日中足でエントリーする開始時刻（時、0-23）" },
-                    { key: "trading_end_hour", value: String(tradingEndHour), label: "取引終了時刻", description: "日中足でエントリーする終了時刻（この時間未満、0-24）" },
+                    { key: "trading_start_hour", value: String(tradingStartHour), label: "取引開始時刻（時）", description: "日中足でエントリーする開始時刻（時、0-23）" },
+                    { key: "trading_start_minute", value: String(tradingStartMinute), label: "取引開始時刻（分）", description: "日中足でエントリーする開始時刻（分、0-55）" },
+                    { key: "trading_end_hour", value: String(tradingEndHour), label: "取引終了時刻（時）", description: "日中足でエントリーする終了時刻（時、0-24）" },
+                    { key: "trading_end_minute", value: String(tradingEndMinute), label: "取引終了時刻（分）", description: "日中足でエントリーする終了時刻（分、0-55）" },
                   ])}
                   disabled={updateMutation.isPending}
                   data-testid="button-save-trading-hours"
