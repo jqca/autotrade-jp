@@ -550,6 +550,7 @@ export async function registerRoutes(
       const tradingEndHour = req.body.tradingEndHour != null ? Math.max(0, Math.min(24, Math.round(Number(req.body.tradingEndHour)))) : undefined;
       const tradingEndMinute = req.body.tradingEndMinute != null ? Math.max(0, Math.min(55, Math.round(Number(req.body.tradingEndMinute)))) : undefined;
       const requireNikkeiMomentum = Boolean(req.body.requireNikkeiMomentum);
+      const excludeBBSell = req.body.excludeBBSell != null ? Boolean(req.body.excludeBBSell) : undefined;
       const nikkeiMomentumBars = req.body.nikkeiMomentumBars != null ? Math.max(2, Math.min(20, Math.round(Number(req.body.nikkeiMomentumBars)))) : 6;
       const validMarkets = ["JP", "US"];
       const market = validMarkets.includes(req.body.market) ? req.body.market : undefined;
@@ -604,6 +605,7 @@ export async function registerRoutes(
         tradingEndMinute,
         requireNikkeiMomentum,
         nikkeiMomentumBars,
+        excludeBBSell,
       };
       await startBacktest(params, 3);
       res.json({ message: "バックテストを開始しました", params });

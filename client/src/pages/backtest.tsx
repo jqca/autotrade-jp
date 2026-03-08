@@ -145,7 +145,7 @@ export default function Backtest() {
   const [targetPercent, setTargetPercent] = useState(1.0);
   const [requiredIndicators, setRequiredIndicators] = useState<string[]>(["macd"]);
   const [rsiMin, setRsiMin] = useState(25);
-  const [rsiMax, setRsiMax] = useState(75);
+  const [rsiMax, setRsiMax] = useState(65);
   const [simDays, setSimDays] = useState(200);
   const [timeframe, setTimeframe] = useState("1d");
   const [startDate, setStartDate] = useState("");
@@ -166,6 +166,7 @@ export default function Backtest() {
   const [excludeComboNBN, setExcludeComboNBN] = useState(false);
   const [excludeComboNNN, setExcludeComboNNN] = useState(false);
   const [excludeComboNSN, setExcludeComboNSN] = useState(false);
+  const [excludeBBSell, setExcludeBBSell] = useState(true);
   const [tradingStartHour, setTradingStartHour] = useState(9);
   const [tradingStartMinute, setTradingStartMinute] = useState(30);
   const [tradingEndHour, setTradingEndHour] = useState(10);
@@ -309,6 +310,7 @@ export default function Backtest() {
       nikkeiMomentumBars,
       excludePriceMin: excludePriceEnabled ? excludePriceMin : 0,
       excludePriceMax: excludePriceEnabled ? excludePriceMax : 0,
+      excludeBBSell,
       excludeCombos: [
         ...(excludeComboNBN ? ["neutral/buy/neutral"] : []),
         ...(excludeComboNNN ? ["neutral/neutral/neutral"] : []),
@@ -1245,6 +1247,18 @@ export default function Backtest() {
                     </div>
 
                     <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">BB=sell除外（過熱圏フィルター）</Label>
+                        <Switch
+                          checked={excludeBBSell}
+                          onCheckedChange={setExcludeBBSell}
+                          data-testid="switch-exclude-bb-sell"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">ボリンジャーバンド上限付近（BB=sell）でのエントリーを除外します。過熱圏からの反落リスクを回避。</p>
+                    </div>
+
+                    <div className="space-y-3">
                       <Label className="text-sm font-medium">最小シグナルスコア</Label>
                       <div className="flex items-center gap-3">
                         <Slider
@@ -1519,6 +1533,7 @@ export default function Backtest() {
                   {excludeComboNBN && <Badge variant="outline" className="border-rose-300 text-rose-700 dark:text-rose-400">N/B/N除外</Badge>}
                   {excludeComboNNN && <Badge variant="outline" className="border-rose-300 text-rose-700 dark:text-rose-400">N/N/N除外</Badge>}
                   {excludeComboNSN && <Badge variant="outline" className="border-rose-300 text-rose-700 dark:text-rose-400">N/S/N除外</Badge>}
+                  {excludeBBSell && <Badge variant="outline" className="border-amber-300 text-amber-700 dark:text-amber-400">BB=sell除外</Badge>}
                   {dynamicTarget && <Badge variant="outline">動的利確</Badge>}
                   {requireDailyConfirm && <Badge variant="outline" className="border-indigo-300 text-indigo-700 dark:text-indigo-400">日足確認</Badge>}
                 </div>
