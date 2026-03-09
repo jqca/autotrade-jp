@@ -790,6 +790,7 @@ async function buildDailyContext(ticker: string): Promise<Map<string, DailyConte
 
 async function collectIntradaySignals(params: BacktestParams, tickers: string[], concurrency: number): Promise<SignalCandidate[]> {
   const allSignals: SignalCandidate[] = [];
+  const _gfc: Record<string, number> = {};
 
   let nikkeiMap: NikkeiMomentumMap | null = null;
   if (params.requireNikkeiMomentum) {
@@ -858,10 +859,12 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
             }
 
             const stopLoss = params.stopLossPercent ?? 0;
+            const _fc: Record<string, number> = {};
 
             for (let barInDay = 0; barInDay < dayBars.length - 1; barInDay++) {
               const globalIdx = dayInfo.startIdx + barInDay;
               if (globalIdx < 50) continue;
+              _fc["a_total"] = (_fc["a_total"] ?? 0) + 1;
 
               let _curBarMin = -1;
               if (params.tradingStartHour != null || params.tradingEndHour != null) {
@@ -871,45 +874,46 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
                   _curBarMin = parseInt(timeMatch[1], 10) * 60 + parseInt(timeMatch[2], 10);
                   const startMinutes = (params.tradingStartHour ?? 0) * 60 + (params.tradingStartMinute ?? 0);
                   const endMinutes = (params.tradingEndHour ?? 24) * 60 + (params.tradingEndMinute ?? 0);
-                  if (_curBarMin < startMinutes) continue;
-                  if (_curBarMin >= endMinutes) continue;
+                  if (_curBarMin < startMinutes) { _fc["b_time"] = (_fc["b_time"] ?? 0) + 1; continue; }
+                  if (_curBarMin >= endMinutes) { _fc["b_time"] = (_fc["b_time"] ?? 0) + 1; continue; }
                 }
               }
+              _fc["c_passTime"] = (_fc["c_passTime"] ?? 0) + 1;
 
-              if (nikkeiMap && nikkeiMap.size > 0 && !checkNikkeiMomentum(bars[globalIdx].date, nikkeiMap)) continue;
+              if (nikkeiMap && nikkeiMap.size > 0 && !checkNikkeiMomentum(bars[globalIdx].date, nikkeiMap)) { _fc["d_nikkei"] = (_fc["d_nikkei"] ?? 0) + 1; continue; }
 
-              if ((params.minVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minVolume ?? 0)) continue;
-              if ((params.minBarVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minBarVolume ?? 0)) continue;
+              if ((params.minVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minVolume ?? 0)) { _fc["e_vol"] = (_fc["e_vol"] ?? 0) + 1; continue; }
+              if ((params.minBarVolume ?? 0) > 0 && Math.floor(bars[globalIdx].volume / 100) < (params.minBarVolume ?? 0)) { _fc["e_barVol"] = (_fc["e_barVol"] ?? 0) + 1; continue; }
 
               const indicators = computeIndicatorsAtIndex(closes, globalIdx, 50);
-              if (!indicators) continue;
+              if (!indicators) { _fc["f_noInd"] = (_fc["f_noInd"] ?? 0) + 1; continue; }
 
-              if (params.rsiExcludeAfterTime != null && params.rsiExcludeAfterTime > 0 && _curBarMin >= params.rsiExcludeAfterTime && indicators.rsiValue != null && indicators.rsiValue >= (params.rsiExcludeAfterMin ?? 45) && indicators.rsiValue <= (params.rsiExcludeAfterMax ?? 50)) continue;
+              if (params.rsiExcludeAfterTime != null && params.rsiExcludeAfterTime > 0 && _curBarMin >= params.rsiExcludeAfterTime && indicators.rsiValue != null && indicators.rsiValue >= (params.rsiExcludeAfterMin ?? 45) && indicators.rsiValue <= (params.rsiExcludeAfterMax ?? 50)) { _fc["g_rsiAfter"] = (_fc["g_rsiAfter"] ?? 0) + 1; continue; }
 
-              if (params.requireUptrend && !indicators.isUptrend) continue;
+              if (params.requireUptrend && !indicators.isUptrend) { _fc["h_uptrend"] = (_fc["h_uptrend"] ?? 0) + 1; continue; }
 
               if (params.requiredIndicators && params.requiredIndicators.length > 0) {
-                if (!checkRequiredIndicators(indicators, params)) continue;
+                if (!checkRequiredIndicators(indicators, params)) { _fc["i_reqInd"] = (_fc["i_reqInd"] ?? 0) + 1; continue; }
               } else {
-                if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) continue;
+                if (indicators.overallSignal !== "buy" || !checkRequiredIndicators(indicators, params)) { _fc["i_reqInd"] = (_fc["i_reqInd"] ?? 0) + 1; continue; }
               }
-              if (indicators.overallSignal === "neutral") continue;
-              if (params.excludeBBSell && indicators.bbTrend === "sell") continue;
-              if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
+              if (indicators.overallSignal === "neutral") { _fc["j_neutral"] = (_fc["j_neutral"] ?? 0) + 1; continue; }
+              if (params.excludeBBSell && indicators.bbTrend === "sell") { _fc["k_bbSell"] = (_fc["k_bbSell"] ?? 0) + 1; continue; }
+              if (params.requireMaBuy && indicators.maTrend !== "buy") { _fc["l_maBuy"] = (_fc["l_maBuy"] ?? 0) + 1; continue; }
               if (indicators.rsiValue != null) {
-                if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
-                if ((params.rsiExcludeMax ?? 0) > 0 && indicators.rsiValue >= (params.rsiExcludeMin ?? 0) && indicators.rsiValue <= params.rsiExcludeMax!) continue;
+                if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) { _fc["m_rsiRange"] = (_fc["m_rsiRange"] ?? 0) + 1; continue; }
+                if ((params.rsiExcludeMax ?? 0) > 0 && indicators.rsiValue >= (params.rsiExcludeMin ?? 0) && indicators.rsiValue <= params.rsiExcludeMax!) { _fc["n_rsiExcl"] = (_fc["n_rsiExcl"] ?? 0) + 1; continue; }
               }
 
               if (!(params.requiredIndicators && params.requiredIndicators.length > 0)) {
                 if (indicators.maTrend === "sell") {
-                  if (!indicators.isMacdCrossover && !indicators.isRsiReversal) continue;
+                  if (!indicators.isMacdCrossover && !indicators.isRsiReversal) { _fc["o_maSell"] = (_fc["o_maSell"] ?? 0) + 1; continue; }
                 }
               }
 
-              if (params.requireMacdCrossover && !indicators.isMacdCrossover) continue;
-              if (params.requireRsiReversal && !indicators.isRsiReversal) continue;
-              if ((params.minSignalScore ?? 0) > 0 && indicators.signalScore < (params.minSignalScore ?? 0)) continue;
+              if (params.requireMacdCrossover && !indicators.isMacdCrossover) { _fc["p_macdX"] = (_fc["p_macdX"] ?? 0) + 1; continue; }
+              if (params.requireRsiReversal && !indicators.isRsiReversal) { _fc["q_rsiRev"] = (_fc["q_rsiRev"] ?? 0) + 1; continue; }
+              if ((params.minSignalScore ?? 0) > 0 && indicators.signalScore < (params.minSignalScore ?? 0)) { _fc["r_score"] = (_fc["r_score"] ?? 0) + 1; continue; }
 
               if (params.requireVolumeSurge) {
                 const surgeRatio = params.volumeSurgeRatio ?? 1.5;
@@ -917,8 +921,9 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
                 let avgVol = 0;
                 for (let vi = globalIdx - lookback; vi < globalIdx; vi++) avgVol += bars[vi].volume;
                 avgVol = avgVol / Math.max(1, lookback);
-                if (avgVol > 0 && bars[globalIdx].volume < avgVol * surgeRatio) continue;
+                if (avgVol > 0 && bars[globalIdx].volume < avgVol * surgeRatio) { _fc["s_volSurge"] = (_fc["s_volSurge"] ?? 0) + 1; continue; }
               }
+              _fc["t_passSignal"] = (_fc["t_passSignal"] ?? 0) + 1;
 
               const entryBarGlobal = globalIdx + 1;
               if (entryBarGlobal >= bars.length) continue;
@@ -929,7 +934,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
                 for (let bi = Math.max(0, globalIdx - lookback); bi <= globalIdx; bi++) {
                   if (bars[bi].high > recentHigh) recentHigh = bars[bi].high;
                 }
-                if (bars[entryBarGlobal].high < recentHigh) continue;
+                if (bars[entryBarGlobal].high < recentHigh) { _fc["u_breakout"] = (_fc["u_breakout"] ?? 0) + 1; continue; }
               }
 
               const entryBar = bars[entryBarGlobal];
@@ -943,15 +948,15 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
                   if (checkIdx >= bars.length) { allBelow = false; break; }
                   if (bars[checkIdx].close > buyPrice) { allBelow = false; break; }
                 }
-                if (allBelow) continue;
+                if (allBelow) { _fc["v_entryConf"] = (_fc["v_entryConf"] ?? 0) + 1; continue; }
               }
 
-              if ((params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) continue;
+              if ((params.excludePriceMax ?? 0) > 0 && buyPrice >= (params.excludePriceMin ?? 0) && buyPrice < (params.excludePriceMax ?? 0)) { _fc["w_price"] = (_fc["w_price"] ?? 0) + 1; continue; }
 
               const maxGapPctVal = params.maxGapPercent ?? 2.0;
               if (maxGapPctVal > 0 && maxGapPctVal < 100) {
                 const gapPct = Math.abs((buyPrice - closes[globalIdx]) / closes[globalIdx]) * 100;
-                if (gapPct > maxGapPctVal) continue;
+                if (gapPct > maxGapPctVal) { _fc["x_gap"] = (_fc["x_gap"] ?? 0) + 1; continue; }
               }
 
               const confirmDaysVal = Math.max(1, params.confirmDays ?? 1);
@@ -963,7 +968,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
                   const prevInd = computeIndicatorsAtIndex(closes, prevIdx, 50);
                   if (!prevInd || prevInd.overallSignal !== "buy") { confirmed = false; break; }
                 }
-                if (!confirmed) continue;
+                if (!confirmed) { _fc["y_confDay"] = (_fc["y_confDay"] ?? 0) + 1; continue; }
               }
 
               const entryDay = extractDatePart(entryBar.date);
@@ -972,7 +977,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               const volatility = recentCloses.length > 1
                 ? Math.sqrt(recentCloses.slice(1).reduce((sum, c, idx) => sum + ((c - recentCloses[idx]) / recentCloses[idx]) ** 2, 0) / (recentCloses.length - 1))
                 : 0.02;
-              if ((params.minVolatility ?? 0) > 0 && volatility * 100 < (params.minVolatility ?? 0)) continue;
+              if ((params.minVolatility ?? 0) > 0 && volatility * 100 < (params.minVolatility ?? 0)) { _fc["z1_vol"] = (_fc["z1_vol"] ?? 0) + 1; continue; }
               if ((params.minIntradayRange ?? 0) > 0) {
                 const rangeLen = Math.min(10, globalIdx - (dayInfo?.startIdx ?? 0) + 1);
                 if (rangeLen > 0) {
@@ -982,7 +987,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
                     if (bars[ri].low < rangeLow) rangeLow = bars[ri].low;
                   }
                   const rangePct = rangeLow > 0 ? ((rangeHigh - rangeLow) / rangeLow) * 100 : 0;
-                  if (rangePct < (params.minIntradayRange ?? 0)) continue;
+                  if (rangePct < (params.minIntradayRange ?? 0)) { _fc["z2_range"] = (_fc["z2_range"] ?? 0) + 1; continue; }
                 }
               }
 
@@ -1078,6 +1083,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               break;
             }
           }
+          for (const [k, v] of Object.entries(_fc)) { _gfc[k] = (_gfc[k] ?? 0) + v; }
         } catch {
           progress.errors++;
         }
@@ -1092,6 +1098,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
     }
   }
 
+  console.log("[Backtest] フィルター統計:", JSON.stringify(_gfc, null, 2));
   return allSignals;
 }
 
