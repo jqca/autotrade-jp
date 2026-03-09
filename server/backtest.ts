@@ -854,7 +854,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
             if (macdRequired && dailyCtx) {
               const prevDayKey = dayIdx > 0 ? dayBarOffsets[dayIdx - 1].day : null;
               const dc = prevDayKey ? dailyCtx.get(prevDayKey) : null;
-              if (!dc || dc.macdTrend !== "buy") continue;
+              if (!dc || (dc.macdTrend !== "buy" && dc.macdTrend !== "neutral")) continue;
             }
 
             const stopLoss = params.stopLossPercent ?? 0;
@@ -884,7 +884,6 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               const indicators = computeIndicatorsAtIndex(closes, globalIdx, 50);
               if (!indicators) continue;
 
-              if (params.excludeMaBuyAfter != null && params.excludeMaBuyAfter > 0 && _curBarMin >= params.excludeMaBuyAfter && indicators.maTrend === "buy") continue;
               if (params.rsiExcludeAfterTime != null && params.rsiExcludeAfterTime > 0 && _curBarMin >= params.rsiExcludeAfterTime && indicators.rsiValue != null && indicators.rsiValue >= (params.rsiExcludeAfterMin ?? 45) && indicators.rsiValue <= (params.rsiExcludeAfterMax ?? 50)) continue;
 
               if (params.requireUptrend && !indicators.isUptrend) continue;
@@ -1528,7 +1527,7 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
             if (macdRequired2 && dailyCtx2) {
               const prevDayKey = dayIdx > 0 ? dayBarOffsets[dayIdx - 1].day : null;
               const dc = prevDayKey ? dailyCtx2.get(prevDayKey) : null;
-              if (!dc || dc.macdTrend !== "buy") continue;
+              if (!dc || (dc.macdTrend !== "buy" && dc.macdTrend !== "neutral")) continue;
             }
 
 
@@ -1559,7 +1558,6 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               const indicators = computeIndicatorsAtIndex(closes, globalIdx, 50);
               if (!indicators) continue;
 
-              if (params.excludeMaBuyAfter != null && params.excludeMaBuyAfter > 0 && _curBarMin >= params.excludeMaBuyAfter && indicators.maTrend === "buy") continue;
               if (params.rsiExcludeAfterTime != null && params.rsiExcludeAfterTime > 0 && _curBarMin >= params.rsiExcludeAfterTime && indicators.rsiValue != null && indicators.rsiValue >= (params.rsiExcludeAfterMin ?? 45) && indicators.rsiValue <= (params.rsiExcludeAfterMax ?? 50)) continue;
 
               if (params.requireUptrend && !indicators.isUptrend) continue;
@@ -1962,7 +1960,7 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
             if (macdRequired2 && dailyCtx2) {
               const prevDayKey = dayIdx > 0 ? dayBarOffsets[dayIdx - 1].day : null;
               const dc = prevDayKey ? dailyCtx2.get(prevDayKey) : null;
-              if (!dc || dc.macdTrend !== "buy") continue;
+              if (!dc || (dc.macdTrend !== "buy" && dc.macdTrend !== "neutral")) continue;
             }
 
 
@@ -1993,7 +1991,6 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               const indicators = computeIndicatorsAtIndex(closes, globalIdx, 50);
               if (!indicators) continue;
 
-              if (params.excludeMaBuyAfter != null && params.excludeMaBuyAfter > 0 && _curBarMin >= params.excludeMaBuyAfter && indicators.maTrend === "buy") continue;
               if (params.rsiExcludeAfterTime != null && params.rsiExcludeAfterTime > 0 && _curBarMin >= params.rsiExcludeAfterTime && indicators.rsiValue != null && indicators.rsiValue >= (params.rsiExcludeAfterMin ?? 45) && indicators.rsiValue <= (params.rsiExcludeAfterMax ?? 50)) continue;
 
               if (params.requireUptrend && !indicators.isUptrend) continue;
