@@ -1018,7 +1018,9 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               const entryDayInfo = dayOffsetMap.get(entryDay);
               if (!entryDayInfo) continue;
 
-              for (let k = entryBarGlobal; k <= entryDayInfo.endIdx; k++) {
+              const maxHoldBars = params.timeframe === "5m" ? 3 : params.timeframe === "15m" ? 1 : 999;
+              const holdLimit = Math.min(entryBarGlobal + maxHoldBars, entryDayInfo.endIdx);
+              for (let k = entryBarGlobal; k <= holdLimit; k++) {
                 if (bars[k].high > maxHigh) {
                   maxHigh = bars[k].high;
                   maxHighDate = bars[k].date;
@@ -1050,8 +1052,9 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               }
 
               if (sellPrice === 0) {
-                sellPrice = bars[entryDayInfo.endIdx].close;
-                sellDate = bars[entryDayInfo.endIdx].date;
+                const exitIdx = Math.min(holdLimit, entryDayInfo.endIdx);
+                sellPrice = bars[exitIdx].close;
+                sellDate = bars[exitIdx].date;
                 isWin = sellPrice > buyPrice;
               }
 
@@ -1691,7 +1694,9 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               const entryDayInfo = dayOffsetMap.get(entryDay);
               if (!entryDayInfo) continue;
 
-              for (let k = entryBarGlobal; k <= entryDayInfo.endIdx; k++) {
+              const maxHoldBars = params.timeframe === "5m" ? 3 : params.timeframe === "15m" ? 1 : 999;
+              const holdLimit = Math.min(entryBarGlobal + maxHoldBars, entryDayInfo.endIdx);
+              for (let k = entryBarGlobal; k <= holdLimit; k++) {
                 if (bars[k].high >= targetPrice) { isWin = true; sellPrice = targetPrice; sellDate = bars[k].date; break; }
                 if (bars[k].high > maxHigh) {
                   maxHigh = bars[k].high;
@@ -1704,8 +1709,9 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               }
 
               if (sellPrice === 0) {
-                sellPrice = bars[entryDayInfo.endIdx].close;
-                sellDate = bars[entryDayInfo.endIdx].date;
+                const exitIdx = Math.min(holdLimit, entryDayInfo.endIdx);
+                sellPrice = bars[exitIdx].close;
+                sellDate = bars[exitIdx].date;
                 isWin = sellPrice > buyPrice;
               }
 
@@ -2124,7 +2130,9 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               const entryDayInfo = dayOffsetMap.get(entryDay);
               if (!entryDayInfo) continue;
 
-              for (let k = entryBarGlobal; k <= entryDayInfo.endIdx; k++) {
+              const maxHoldBars = params.timeframe === "5m" ? 3 : params.timeframe === "15m" ? 1 : 999;
+              const holdLimit = Math.min(entryBarGlobal + maxHoldBars, entryDayInfo.endIdx);
+              for (let k = entryBarGlobal; k <= holdLimit; k++) {
                 if (bars[k].high >= targetPrice) { isWin = true; sellPrice = targetPrice; sellDate = bars[k].date; break; }
                 if (bars[k].high > maxHigh) {
                   maxHigh = bars[k].high;
@@ -2137,8 +2145,9 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               }
 
               if (sellPrice === 0) {
-                sellPrice = bars[entryDayInfo.endIdx].close;
-                sellDate = bars[entryDayInfo.endIdx].date;
+                const exitIdx = Math.min(holdLimit, entryDayInfo.endIdx);
+                sellPrice = bars[exitIdx].close;
+                sellDate = bars[exitIdx].date;
                 isWin = sellPrice > buyPrice;
               }
 
