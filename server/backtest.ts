@@ -123,7 +123,7 @@ export const DEFAULT_PARAMS: BacktestParams = {
   excludePriceMax: 0,
   tradingStartHour: 9,
   tradingStartMinute: 30,
-  tradingEndHour: 13,
+  tradingEndHour: 14,
   tradingEndMinute: 0,
   excludeBBSell: true,
   excludeMaBuyAfter: 600,

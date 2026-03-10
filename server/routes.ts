@@ -547,8 +547,8 @@ export async function registerRoutes(
         : undefined;
       const tradingStartHour = req.body.tradingStartHour != null ? Math.max(0, Math.min(23, Math.round(Number(req.body.tradingStartHour)))) : 9;
       const tradingStartMinute = req.body.tradingStartMinute != null ? Math.max(0, Math.min(55, Math.round(Number(req.body.tradingStartMinute)))) : 30;
-      const tradingEndHour = req.body.tradingEndHour != null ? Math.max(0, Math.min(24, Math.round(Number(req.body.tradingEndHour)))) : 10;
-      const tradingEndMinute = req.body.tradingEndMinute != null ? Math.max(0, Math.min(55, Math.round(Number(req.body.tradingEndMinute)))) : 30;
+      const tradingEndHour = req.body.tradingEndHour != null ? Math.max(0, Math.min(24, Math.round(Number(req.body.tradingEndHour)))) : 14;
+      const tradingEndMinute = req.body.tradingEndMinute != null ? Math.max(0, Math.min(55, Math.round(Number(req.body.tradingEndMinute)))) : 0;
       const requireNikkeiMomentum = Boolean(req.body.requireNikkeiMomentum);
       const excludeBBSell = req.body.excludeBBSell != null ? Boolean(req.body.excludeBBSell) : true;
       const excludeMaBuyAfter = req.body.excludeMaBuyAfter != null ? Math.max(0, Math.round(Number(req.body.excludeMaBuyAfter))) : 600;
