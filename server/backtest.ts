@@ -907,6 +907,18 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
                 if ((params.rsiExcludeMax ?? 0) > 0 && indicators.rsiValue >= (params.rsiExcludeMin ?? 0) && indicators.rsiValue <= params.rsiExcludeMax!) { _fc["n_rsiExcl"] = (_fc["n_rsiExcl"] ?? 0) + 1; continue; }
               }
 
+              {
+                const barDateStr = bars[globalIdx].date;
+                const wedMatch = barDateStr.match(/^(\d{4}-\d{2}-\d{2})T(\d{2})/);
+                if (wedMatch) {
+                  const dow = new Date(wedMatch[1] + "T00:00:00+09:00").getDay();
+                  const hour = parseInt(wedMatch[2], 10);
+                  if (dow === 3 && hour >= 10 && hour < 13 && indicators.maTrend === "neutral" && indicators.rsiValue != null && indicators.rsiValue >= 42) {
+                    _fc["wed_filter"] = (_fc["wed_filter"] ?? 0) + 1; continue;
+                  }
+                }
+              }
+
               if (!(params.requiredIndicators && params.requiredIndicators.length > 0)) {
                 if (indicators.maTrend === "sell") {
                   if (!indicators.isMacdCrossover && !indicators.isRsiReversal) { _fc["o_maSell"] = (_fc["o_maSell"] ?? 0) + 1; continue; }
@@ -1587,6 +1599,18 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
                 if ((params.rsiExcludeMax ?? 0) > 0 && indicators.rsiValue >= (params.rsiExcludeMin ?? 0) && indicators.rsiValue <= params.rsiExcludeMax!) continue;
               }
 
+              {
+                const _bds = bars[globalIdx].date;
+                const _wm = _bds.match(/^(\d{4}-\d{2}-\d{2})T(\d{2})/);
+                if (_wm) {
+                  const _dow = new Date(_wm[1] + "T00:00:00+09:00").getDay();
+                  const _hr = parseInt(_wm[2], 10);
+                  if (_dow === 3 && _hr >= 10 && _hr < 13 && indicators.maTrend === "neutral" && indicators.rsiValue != null && indicators.rsiValue >= 42) {
+                    continue;
+                  }
+                }
+              }
+
               if (!(params.requiredIndicators && params.requiredIndicators.length > 0)) {
                 if (indicators.maTrend === "sell") {
                   if (!indicators.isMacdCrossover && !indicators.isRsiReversal) continue;
@@ -2021,6 +2045,18 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
                 if ((params.rsiExcludeMax ?? 0) > 0 && indicators.rsiValue >= (params.rsiExcludeMin ?? 0) && indicators.rsiValue <= params.rsiExcludeMax!) continue;
+              }
+
+              {
+                const _bds = bars[globalIdx].date;
+                const _wm = _bds.match(/^(\d{4}-\d{2}-\d{2})T(\d{2})/);
+                if (_wm) {
+                  const _dow = new Date(_wm[1] + "T00:00:00+09:00").getDay();
+                  const _hr = parseInt(_wm[2], 10);
+                  if (_dow === 3 && _hr >= 10 && _hr < 13 && indicators.maTrend === "neutral" && indicators.rsiValue != null && indicators.rsiValue >= 42) {
+                    continue;
+                  }
+                }
               }
 
               if (!(params.requiredIndicators && params.requiredIndicators.length > 0)) {
