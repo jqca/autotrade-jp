@@ -5,6 +5,32 @@ import { storage } from "./storage";
 import type { InsertBacktestResult, InsertBacktestRun } from "@shared/schema";
 import { logEnergy } from "./energy-monitor";
 
+function getTickSize(price: number): number {
+  if (price < 3000) return 1;
+  if (price < 5000) return 1;
+  if (price < 10000) return 5;
+  if (price < 50000) return 10;
+  if (price < 100000) return 50;
+  if (price < 500000) return 100;
+  if (price < 1000000) return 500;
+  if (price < 5000000) return 1000;
+  if (price < 10000000) return 5000;
+  if (price < 50000000) return 10000;
+  return 50000;
+}
+
+function roundUpToTick(price: number, market?: string): number {
+  if (market !== "JP") return Math.round(price * 100) / 100;
+  const tick = getTickSize(price);
+  return Math.ceil(price / tick) * tick;
+}
+
+function roundDownToTick(price: number, market?: string): number {
+  if (market !== "JP") return Math.round(price * 100) / 100;
+  const tick = getTickSize(price);
+  return Math.floor(price / tick) * tick;
+}
+
 export interface BacktestParams {
   targetPercent: number;
   minBuyIndicators: number;
@@ -589,10 +615,10 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
             }
 
             const targetMultiplier = 1 + effectiveTarget / 100;
-            const targetPrice = Math.round(buyPrice * targetMultiplier * 100) / 100;
+            const targetPrice = roundUpToTick(buyPrice * targetMultiplier, params.market);
 
             const stopPrice = stopLoss > 0
-              ? Math.round(buyPrice * (1 - stopLoss / 100) * 100) / 100
+              ? roundDownToTick(buyPrice * (1 - stopLoss / 100), params.market)
               : 0;
 
             let isWin = false;
@@ -615,7 +641,7 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
                 maxHigh = highs[k];
                 maxHighDate = dates[k];
                 if (useTrailingStop) {
-                  trailingStopPrice = Math.round(maxHigh * (1 - trailingStopPct / 100) * 100) / 100;
+                  trailingStopPrice = roundDownToTick(maxHigh * (1 - trailingStopPct / 100), params.market);
                 }
               }
 
@@ -1000,10 +1026,10 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               }
 
               const targetMultiplier = 1 + effectiveTarget / 100;
-              const targetPrice = Math.round(buyPrice * targetMultiplier * 100) / 100;
+              const targetPrice = roundUpToTick(buyPrice * targetMultiplier, params.market);
 
               const stopPrice = stopLoss > 0
-                ? Math.round(buyPrice * (1 - stopLoss / 100) * 100) / 100
+                ? roundDownToTick(buyPrice * (1 - stopLoss / 100), params.market)
                 : 0;
 
               let isWin = false;
@@ -1025,7 +1051,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
                   maxHigh = bars[k].high;
                   maxHighDate = bars[k].date;
                   if (useTrailingStop) {
-                    trailingStopPrice = Math.round(maxHigh * (1 - trailingStopPct / 100) * 100) / 100;
+                    trailingStopPrice = roundDownToTick(maxHigh * (1 - trailingStopPct / 100), params.market);
                   }
                 }
 
@@ -1404,8 +1430,8 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
             }
 
             const targetMultiplier = 1 + effectiveTarget / 100;
-            const targetPrice = Math.round(buyPrice * targetMultiplier * 100) / 100;
-            const stopPrice = stopLoss > 0 ? Math.round(buyPrice * (1 - stopLoss / 100) * 100) / 100 : 0;
+            const targetPrice = roundUpToTick(buyPrice * targetMultiplier, params.market);
+            const stopPrice = stopLoss > 0 ? roundDownToTick(buyPrice * (1 - stopLoss / 100), params.market) : 0;
 
             let isWin = false;
             let sellPrice = 0;
@@ -1421,7 +1447,7 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
                 maxHigh = highs[k];
                 maxHighDate = dates[k];
                 if (useTrailingStop) {
-                  trailingStopPrice2 = Math.round(maxHigh * (1 - trailingStopPct / 100) * 100) / 100;
+                  trailingStopPrice2 = roundDownToTick(maxHigh * (1 - trailingStopPct / 100), params.market);
                 }
               }
               if (stopPrice > 0 && lows[k] <= stopPrice) { isWin = false; sellPrice = stopPrice; sellDate = dates[k]; break; }
@@ -1680,8 +1706,8 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               }
 
               const targetMultiplier = 1 + effectiveTarget / 100;
-              const targetPrice = Math.round(buyPrice * targetMultiplier * 100) / 100;
-              const stopPrice = stopLoss > 0 ? Math.round(buyPrice * (1 - stopLoss / 100) * 100) / 100 : 0;
+              const targetPrice = roundUpToTick(buyPrice * targetMultiplier, params.market);
+              const stopPrice = stopLoss > 0 ? roundDownToTick(buyPrice * (1 - stopLoss / 100), params.market) : 0;
 
               let isWin = false;
               let sellPrice = 0;
@@ -1701,7 +1727,7 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
                 if (bars[k].high > maxHigh) {
                   maxHigh = bars[k].high;
                   if (useTrailingStop2) {
-                    trailingStopPrice2 = Math.round(maxHigh * (1 - trailingStopPct2 / 100) * 100) / 100;
+                    trailingStopPrice2 = roundDownToTick(maxHigh * (1 - trailingStopPct2 / 100), params.market);
                   }
                 }
                 if (stopPrice > 0 && bars[k].low <= stopPrice) { isWin = false; sellPrice = stopPrice; sellDate = bars[k].date; break; }
@@ -1846,8 +1872,8 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
             }
 
             const targetMultiplier = 1 + effectiveTarget / 100;
-            const targetPrice = Math.round(buyPrice * targetMultiplier * 100) / 100;
-            const stopPrice = stopLoss > 0 ? Math.round(buyPrice * (1 - stopLoss / 100) * 100) / 100 : 0;
+            const targetPrice = roundUpToTick(buyPrice * targetMultiplier, params.market);
+            const stopPrice = stopLoss > 0 ? roundDownToTick(buyPrice * (1 - stopLoss / 100), params.market) : 0;
 
             let isWin = false;
             let sellPrice = 0;
@@ -1861,7 +1887,7 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
               if (highs[k] > maxHigh) {
                 maxHigh = highs[k];
                 if (useTrailingStop) {
-                  trailingStopPrice2 = Math.round(maxHigh * (1 - trailingStopPct / 100) * 100) / 100;
+                  trailingStopPrice2 = roundDownToTick(maxHigh * (1 - trailingStopPct / 100), params.market);
                 }
               }
               if (stopPrice > 0 && lows[k] <= stopPrice) { isWin = false; sellPrice = stopPrice; sellDate = dates[k]; break; }
@@ -2116,8 +2142,8 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               }
 
               const targetMultiplier = 1 + effectiveTarget / 100;
-              const targetPrice = Math.round(buyPrice * targetMultiplier * 100) / 100;
-              const stopPrice = stopLoss > 0 ? Math.round(buyPrice * (1 - stopLoss / 100) * 100) / 100 : 0;
+              const targetPrice = roundUpToTick(buyPrice * targetMultiplier, params.market);
+              const stopPrice = stopLoss > 0 ? roundDownToTick(buyPrice * (1 - stopLoss / 100), params.market) : 0;
 
               let isWin = false;
               let sellPrice = 0;
@@ -2137,7 +2163,7 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
                 if (bars[k].high > maxHigh) {
                   maxHigh = bars[k].high;
                   if (useTrailingStop2) {
-                    trailingStopPrice2 = Math.round(maxHigh * (1 - trailingStopPct2 / 100) * 100) / 100;
+                    trailingStopPrice2 = roundDownToTick(maxHigh * (1 - trailingStopPct2 / 100), params.market);
                   }
                 }
                 if (stopPrice > 0 && bars[k].low <= stopPrice) { isWin = false; sellPrice = stopPrice; sellDate = bars[k].date; break; }
