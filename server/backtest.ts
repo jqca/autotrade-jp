@@ -125,11 +125,11 @@ export const DEFAULT_PARAMS: BacktestParams = {
   tradingStartMinute: 30,
   tradingEndHour: 14,
   tradingEndMinute: 0,
-  excludeBBSell: true,
-  excludeMaBuyAfter: 600,
+  excludeBBSell: false,
+  excludeMaBuyAfter: 0,
   rsiExcludeAfterMin: 45,
   rsiExcludeAfterMax: 50,
-  rsiExcludeAfterTime: 600,
+  rsiExcludeAfterTime: 0,
   minIntradayRange: 0.5,
 };
 
