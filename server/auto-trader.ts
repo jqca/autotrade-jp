@@ -1,7 +1,7 @@
 import { storage } from "./storage";
 import { computeIndicatorsAtIndex } from "./backtest";
 import { kabuFetch } from "./kabuClient";
-import { isJpTradingHours, isJpTradingDay, getUpcomingHolidays } from "./jp-holidays";
+import { isJpTradingHours } from "./jp-holidays";
 import type { InsertAutoTrade } from "@shared/schema";
 
 export interface AutoTraderSettings {
@@ -34,6 +34,19 @@ export interface AutoTraderLogEntry {
   type: "info" | "buy" | "sell" | "error" | "skip" | "stop";
 }
 
+interface IntradayBar {
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+const INTRADAY_MIN_BARS = 50;
+const DAILY_MIN_BARS = 50;
+const INTRADAY_DAYS_LOOKBACK = 7;
+const BAR_INTERVAL_MS = 5 * 60 * 1000;
+
 const DEFAULT_SETTINGS: AutoTraderSettings = {
   tickers: ["7203", "6758", "9984", "4755", "8306"],
   minBuyIndicators: 2,
@@ -63,6 +76,12 @@ class AutoTrader {
   private lastRunAt: string | null = null;
   private settings: AutoTraderSettings = { ...DEFAULT_SETTINGS };
   private intervalId: NodeJS.Timeout | null = null;
+
+  // 5分足バーをライブモードで蓄積するキャッシュ
+  private liveIntradayCache = new Map<string, IntradayBar[]>();
+  private liveCacheDate = "";
+  // 各銘柄の直近インジケーター計算に使ったバー数（UI表示用）
+  private lastBarCounts = new Map<string, { bars: number; source: "intraday_5m" | "daily" }>();
 
   async init() {
     try {
@@ -131,6 +150,7 @@ class AutoTrader {
     this.todayPnl = 0;
     await storage.setSetting("auto_trader_mode", this.mode, "自動売買モード");
     this.addLog("info", `自動売買開始 [${this.mode === "paper" ? "ペーパートレード" : "本番取引"}] 監視銘柄: ${this.settings.tickers.join(", ")}`);
+    this.addLog("info", `シグナル計算: 5分足リアルタイム（50本以上で自動切替、不足時は日足へフォールバック）`);
     await this.runCycle();
     this.intervalId = setInterval(() => this.runCycle(), this.settings.intervalSeconds * 1000);
   }
@@ -138,11 +158,145 @@ class AutoTrader {
   stop() {
     if (this.intervalId) { clearInterval(this.intervalId); this.intervalId = null; }
     this.running = false;
+    this.liveIntradayCache.clear();
+    this.lastBarCounts.clear();
     this.addLog("stop", "自動売買停止");
   }
 
   private isTradingHours(): boolean {
     return isJpTradingHours(new Date());
+  }
+
+  // ライブモードの5分足バーを更新する
+  private updateLiveBar(ticker: string, price: number) {
+    const now = new Date();
+    const jstDateStr = new Date(now.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+
+    // 日付が変わったらキャッシュをリセット
+    if (jstDateStr !== this.liveCacheDate) {
+      this.liveCacheDate = jstDateStr;
+      this.liveIntradayCache.clear();
+    }
+
+    // 5分足ウィンドウ（エポックmsを5分単位に丸める）
+    const windowStart = Math.floor(now.getTime() / BAR_INTERVAL_MS) * BAR_INTERVAL_MS;
+    const bars = this.liveIntradayCache.get(ticker) ?? [];
+    const lastBar = bars[bars.length - 1];
+
+    if (lastBar && lastBar.timestamp === windowStart) {
+      lastBar.high = Math.max(lastBar.high, price);
+      lastBar.low = Math.min(lastBar.low, price);
+      lastBar.close = price;
+    } else {
+      bars.push({ timestamp: windowStart, open: price, high: price, low: price, close: price });
+      this.liveIntradayCache.set(ticker, bars);
+    }
+  }
+
+  // DBから直近N日の5分足データを取得し、ライブキャッシュと結合して終値配列を返す
+  private async fetchIntradayCloses(ticker: string): Promise<{ closes: number[]; barCount: number } | null> {
+    try {
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - INTRADAY_DAYS_LOOKBACK);
+      const fromStr = fromDate.toISOString().slice(0, 10);
+
+      const dbBars = await storage.getIntradayPrices(ticker, fromStr, undefined, "5m");
+
+      let closes: number[];
+
+      if (this.mode === "live") {
+        // ライブモード: DBから昨日以前の分を取得し、今日分はメモリキャッシュで補完
+        const todayJst = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+        const historicalCloses = dbBars
+          .filter(b => !b.datetime.startsWith(todayJst))
+          .map(b => b.close);
+        const liveBars = this.liveIntradayCache.get(ticker) ?? [];
+        closes = [...historicalCloses, ...liveBars.map(b => b.close)];
+      } else {
+        // ペーパーモード: DBの5分足データをそのまま使用
+        closes = dbBars.map(b => b.close);
+      }
+
+      if (closes.length < INTRADAY_MIN_BARS) return null;
+
+      return { closes, barCount: closes.length };
+    } catch {
+      return null;
+    }
+  }
+
+  // 日足終値配列を取得（5分足フォールバック用）
+  private async fetchDailyCloses(ticker: string): Promise<number[] | null> {
+    try {
+      const prices = await storage.getIntradayPrices(ticker, undefined, undefined, "1d");
+      if (prices.length < DAILY_MIN_BARS) return null;
+      return prices.map(p => p.close);
+    } catch {
+      return null;
+    }
+  }
+
+  // 現在価格を取得（ライブ: kabu board API / ペーパー: 最新終値）
+  private async fetchCurrentPrice(
+    ticker: string
+  ): Promise<{ currentPrice: number; tickerName: string } | null> {
+    if (this.mode === "live") {
+      try {
+        const board = await kabuFetch("GET", `/board/${ticker}@1`) as any;
+        if (board?.CurrentPrice) {
+          this.updateLiveBar(ticker, board.CurrentPrice);
+          return { currentPrice: board.CurrentPrice, tickerName: board.Symbol ?? ticker };
+        }
+      } catch (err) {
+        this.addLog("error", `${ticker} ボードデータ取得失敗: ${(err as Error).message}`);
+      }
+      return null;
+    } else {
+      // ペーパーモード: DBの最新終値
+      const daily = await this.fetchDailyCloses(ticker);
+      if (!daily || daily.length === 0) return null;
+      return { currentPrice: daily[daily.length - 1], tickerName: ticker };
+    }
+  }
+
+  // シグナル計算用データを取得。5分足を優先し、不足時は日足にフォールバック
+  private async fetchPriceData(
+    ticker: string
+  ): Promise<{ closes: number[]; currentPrice: number; tickerName: string; dataSource: string } | null> {
+    try {
+      const priceResult = await this.fetchCurrentPrice(ticker);
+      if (!priceResult) {
+        this.addLog("skip", `${ticker}: 現在価格取得失敗`);
+        return null;
+      }
+      const { currentPrice, tickerName } = priceResult;
+
+      // 5分足データを試みる
+      const intradayResult = await this.fetchIntradayCloses(ticker);
+      if (intradayResult) {
+        const { closes, barCount } = intradayResult;
+        // 最新価格を末尾に追加（ライブモードでまだキャッシュに反映されていない場合）
+        const lastClose = closes[closes.length - 1];
+        if (lastClose !== currentPrice) closes.push(currentPrice);
+
+        this.lastBarCounts.set(ticker, { bars: barCount, source: "intraday_5m" });
+        return { closes, currentPrice, tickerName, dataSource: `5分足${barCount}本` };
+      }
+
+      // 日足フォールバック
+      const dailyCloses = await this.fetchDailyCloses(ticker);
+      if (!dailyCloses) {
+        this.addLog("skip", `${ticker}: データ不足（5分足・日足ともに50本未満）`);
+        return null;
+      }
+
+      if (dailyCloses[dailyCloses.length - 1] !== currentPrice) dailyCloses.push(currentPrice);
+      this.lastBarCounts.set(ticker, { bars: dailyCloses.length, source: "daily" });
+      return { closes: dailyCloses, currentPrice, tickerName, dataSource: `日足${dailyCloses.length}本(フォールバック)` };
+    } catch (err) {
+      this.addLog("error", `${ticker} データ取得エラー: ${(err as Error).message}`);
+      return null;
+    }
   }
 
   private async runCycle() {
@@ -172,42 +326,13 @@ class AutoTrader {
     }
   }
 
-  private async fetchPriceData(ticker: string): Promise<{ closes: number[]; currentPrice: number; tickerName: string } | null> {
-    try {
-      let currentPrice: number | null = null;
-      let tickerName = ticker;
-
-      if (this.mode === "live") {
-        try {
-          const board = await kabuFetch("GET", `/board/${ticker}@1`) as any;
-          if (board?.CurrentPrice) { currentPrice = board.CurrentPrice; tickerName = board.Symbol ?? ticker; }
-        } catch {}
-      }
-
-      const prices = await storage.getIntradayPrices(ticker, undefined, undefined, "1d");
-      if (prices.length < 50) {
-        this.addLog("skip", `${ticker}: データ不足 (${prices.length}本, 50本以上必要)`);
-        return null;
-      }
-
-      const closes = prices.map(p => p.close);
-      if (currentPrice === null) currentPrice = closes[closes.length - 1];
-      else closes.push(currentPrice);
-
-      return { closes, currentPrice, tickerName };
-    } catch (err) {
-      this.addLog("error", `${ticker} データ取得エラー: ${(err as Error).message}`);
-      return null;
-    }
-  }
-
   private async checkBuySignal(ticker: string) {
     const data = await this.fetchPriceData(ticker);
     if (!data) return;
-    const { closes, currentPrice, tickerName } = data;
+    const { closes, currentPrice, tickerName, dataSource } = data;
 
-    const ind = computeIndicatorsAtIndex(closes, closes.length - 1, 50);
-    if (!ind) { this.addLog("skip", `${ticker}: 指標計算不可`); return; }
+    const ind = computeIndicatorsAtIndex(closes, closes.length - 1, INTRADAY_MIN_BARS);
+    if (!ind) { this.addLog("skip", `${ticker}: 指標計算不可 [${dataSource}]`); return; }
 
     const trends = [ind.macdTrend, ind.rsiTrend, ind.maTrend, ind.bbTrend];
     const buyCount = trends.filter(t => t === "buy").length;
@@ -218,41 +343,41 @@ class AutoTrader {
       const label = ["MACD", "RSI", "MA", "BB"]
         .filter((_, i) => trends[i] === "buy").join("+");
       this.addLog("buy",
-        `🔔 ${ticker}(${tickerName}) 買いシグナル [${label}] RSI=${ind.rsiValue?.toFixed(1) ?? "N/A"} ¥${currentPrice.toLocaleString()}`);
+        `🔔 ${ticker}(${tickerName}) 買いシグナル [${label}] RSI=${ind.rsiValue?.toFixed(1) ?? "N/A"} ¥${currentPrice.toLocaleString()} [${dataSource}]`);
       await this.executeBuy(ticker, tickerName, currentPrice, ind);
     } else {
       this.addLog("info",
-        `${ticker}(${tickerName}): シグナルなし (買い${buyCount}/4) RSI=${ind.rsiValue?.toFixed(1) ?? "N/A"} ¥${currentPrice.toLocaleString()}`);
+        `${ticker}(${tickerName}): シグナルなし (買い${buyCount}/4) RSI=${ind.rsiValue?.toFixed(1) ?? "N/A"} ¥${currentPrice.toLocaleString()} [${dataSource}]`);
     }
   }
 
   private async checkPosition(pos: OpenPosition) {
     const data = await this.fetchPriceData(pos.ticker);
     if (!data) return;
-    const { closes, currentPrice } = data;
+    const { closes, currentPrice, dataSource } = data;
     const pnl = (currentPrice - pos.buyPrice) * pos.qty;
 
     if (currentPrice <= pos.stopLoss) {
-      this.addLog("sell", `🛑 ${pos.ticker} ストップロス ¥${currentPrice.toLocaleString()} 損失¥${Math.round(pnl).toLocaleString()}`);
+      this.addLog("sell", `🛑 ${pos.ticker} ストップロス ¥${currentPrice.toLocaleString()} 損失¥${Math.round(pnl).toLocaleString()} [${dataSource}]`);
       await this.executeSell(pos, currentPrice, "stop_loss", `ストップロス(${this.settings.stopLossPercent}%下落)`);
       return;
     }
     if (currentPrice >= pos.target) {
-      this.addLog("sell", `✅ ${pos.ticker} 目標達成 ¥${currentPrice.toLocaleString()} 利益¥${Math.round(pnl).toLocaleString()}`);
+      this.addLog("sell", `✅ ${pos.ticker} 目標達成 ¥${currentPrice.toLocaleString()} 利益¥${Math.round(pnl).toLocaleString()} [${dataSource}]`);
       await this.executeSell(pos, currentPrice, "target", `目標達成(${this.settings.targetPercent}%上昇)`);
       return;
     }
 
-    const ind = computeIndicatorsAtIndex(closes, closes.length - 1, 50);
+    const ind = computeIndicatorsAtIndex(closes, closes.length - 1, INTRADAY_MIN_BARS);
     if (ind) {
       const sellCount = [ind.macdTrend, ind.rsiTrend, ind.maTrend, ind.bbTrend].filter(t => t === "sell").length;
       if (sellCount >= 3) {
-        this.addLog("sell", `📉 ${pos.ticker} 売りシグナル(${sellCount}/4) ¥${currentPrice.toLocaleString()} P&L¥${Math.round(pnl).toLocaleString()}`);
+        this.addLog("sell", `📉 ${pos.ticker} 売りシグナル(${sellCount}/4) ¥${currentPrice.toLocaleString()} P&L¥${Math.round(pnl).toLocaleString()} [${dataSource}]`);
         await this.executeSell(pos, currentPrice, "sell", `売りシグナル(${sellCount}指標)`);
         return;
       }
     }
-    this.addLog("info", `${pos.ticker} ホールド ¥${currentPrice.toLocaleString()} 含損益¥${Math.round(pnl).toLocaleString()}`);
+    this.addLog("info", `${pos.ticker} ホールド ¥${currentPrice.toLocaleString()} 含損益¥${Math.round(pnl).toLocaleString()} [${dataSource}]`);
   }
 
   private calcQty(price: number): number {
@@ -362,6 +487,10 @@ class AutoTrader {
   }
 
   getStatus() {
+    const barCounts: Record<string, { bars: number; source: string }> = {};
+    for (const [ticker, info] of this.lastBarCounts) {
+      barCounts[ticker] = info;
+    }
     return {
       running: this.running,
       mode: this.mode,
@@ -374,6 +503,7 @@ class AutoTrader {
       log: this.log.slice(0, 50),
       lastRunAt: this.lastRunAt,
       settings: this.settings,
+      barCounts,
     };
   }
 
@@ -391,6 +521,8 @@ class AutoTrader {
     this.paperBalance = amount;
     this.paperInitialBalance = amount;
     this.openPositions.clear();
+    this.liveIntradayCache.clear();
+    this.lastBarCounts.clear();
     this.todayPnl = 0;
     this.totalBuys = 0;
     this.totalSells = 0;
