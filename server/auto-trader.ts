@@ -1,6 +1,7 @@
 import { storage } from "./storage";
 import { computeIndicatorsAtIndex } from "./backtest";
 import { kabuFetch } from "./kabuClient";
+import { isJpTradingHours, isJpTradingDay, getUpcomingHolidays } from "./jp-holidays";
 import type { InsertAutoTrade } from "@shared/schema";
 
 export interface AutoTraderSettings {
@@ -141,13 +142,7 @@ class AutoTrader {
   }
 
   private isTradingHours(): boolean {
-    const now = new Date();
-    const jstNow = new Date(now.getTime() + 9 * 3600 * 1000);
-    const day = jstNow.getUTCDay();
-    const hour = jstNow.getUTCHours();
-    const min = jstNow.getUTCMinutes();
-    const tod = hour * 60 + min;
-    return day >= 1 && day <= 5 && tod >= 9 * 60 && tod <= 15 * 60 + 30;
+    return isJpTradingHours(new Date());
   }
 
   private async runCycle() {
