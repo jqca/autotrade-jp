@@ -274,3 +274,26 @@ export const creditTransactions = pgTable("credit_transactions", {
 export const insertCreditTransactionSchema = createInsertSchema(creditTransactions).omit({ id: true, createdAt: true });
 export type CreditTransaction = typeof creditTransactions.$inferSelect;
 export type InsertCreditTransaction = z.infer<typeof insertCreditTransactionSchema>;
+
+export const kabuOrders = pgTable("kabu_orders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: text("order_id"),
+  symbol: text("symbol").notNull(),
+  symbolName: text("symbol_name"),
+  exchange: integer("exchange").notNull().default(1),
+  side: text("side").notNull(),
+  qty: integer("qty").notNull(),
+  price: real("price").notNull().default(0),
+  orderType: text("order_type").notNull().default("10"),
+  accountType: integer("account_type").notNull().default(4),
+  status: text("status").notNull().default("pending"),
+  executedQty: integer("executed_qty"),
+  executedPrice: real("executed_price"),
+  errorMsg: text("error_msg"),
+  rawResponse: text("raw_response"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertKabuOrderSchema = createInsertSchema(kabuOrders).omit({ id: true, createdAt: true });
+export type KabuOrder = typeof kabuOrders.$inferSelect;
+export type InsertKabuOrder = z.infer<typeof insertKabuOrderSchema>;

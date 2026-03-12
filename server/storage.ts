@@ -13,7 +13,8 @@ import {
   type EnergyLog, type InsertEnergyLog,
   type CreditTransaction, type InsertCreditTransaction,
   type AppSetting,
-  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults, backtestRuns, intradayPrices, marketRiskAssessments, quantumBenchmarkRuns, energyLogs, creditTransactions, appSettings,
+  type KabuOrder, type InsertKabuOrder,
+  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults, backtestRuns, intradayPrices, marketRiskAssessments, quantumBenchmarkRuns, energyLogs, creditTransactions, appSettings, kabuOrders,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, sql, like, or, ilike, count, and, gte, lte, desc } from "drizzle-orm";
@@ -91,8 +92,12 @@ export interface IStorage {
   getCreditTransactions(userId: string, limit?: number): Promise<CreditTransaction[]>;
   updateUserStripeCustomerId(userId: string, stripeCustomerId: string): Promise<void>;
   getSetting(key: string): Promise<string | null>;
+  getAppSetting(key: string): Promise<{ value: string } | undefined>;
   setSetting(key: string, value: string, label: string, description?: string): Promise<AppSetting>;
   getAllSettings(): Promise<AppSetting[]>;
+  insertKabuOrder(order: InsertKabuOrder): Promise<KabuOrder>;
+  getKabuOrders(limit?: number): Promise<KabuOrder[]>;
+  updateKabuOrder(id: string, updates: Partial<InsertKabuOrder>): Promise<KabuOrder | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -586,6 +591,11 @@ export class DatabaseStorage implements IStorage {
     return setting?.value ?? null;
   }
 
+  async getAppSetting(key: string): Promise<{ value: string } | undefined> {
+    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+    return setting ? { value: setting.value } : undefined;
+  }
+
   async setSetting(key: string, value: string, label: string, description?: string): Promise<AppSetting> {
     const [existing] = await db.select().from(appSettings).where(eq(appSettings.key, key));
     if (existing) {
@@ -598,6 +608,20 @@ export class DatabaseStorage implements IStorage {
 
   async getAllSettings(): Promise<AppSetting[]> {
     return await db.select().from(appSettings).orderBy(appSettings.key);
+  }
+
+  async insertKabuOrder(order: InsertKabuOrder): Promise<KabuOrder> {
+    const [row] = await db.insert(kabuOrders).values(order).returning();
+    return row;
+  }
+
+  async getKabuOrders(limit: number = 100): Promise<KabuOrder[]> {
+    return await db.select().from(kabuOrders).orderBy(desc(kabuOrders.createdAt)).limit(limit);
+  }
+
+  async updateKabuOrder(id: string, updates: Partial<InsertKabuOrder>): Promise<KabuOrder | undefined> {
+    const [row] = await db.update(kabuOrders).set(updates).where(eq(kabuOrders.id, id)).returning();
+    return row;
   }
 }
 

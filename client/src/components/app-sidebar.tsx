@@ -1,4 +1,4 @@
-import { LayoutDashboard, Eye, Zap, History, Wallet, Signal, FlaskConical, ShieldAlert, Atom, Gauge, Award, BatteryCharging, CreditCard, Settings, LogOut, User } from "lucide-react";
+import { LayoutDashboard, Eye, Zap, History, Wallet, Signal, FlaskConical, ShieldAlert, Atom, Gauge, Award, BatteryCharging, CreditCard, Settings, LogOut, User, ShoppingCart } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -25,6 +25,7 @@ const navItems = [
   { title: "量子VaR分析", url: "/var", icon: Gauge, testId: "link-var" },
   { title: "量子ベンチマーク", url: "/benchmark", icon: Award, testId: "link-benchmark" },
   { title: "消費電力モニター", url: "/energy", icon: BatteryCharging, testId: "link-energy" },
+  { title: "kabu注文発注", url: "/kabu-orders", icon: ShoppingCart, testId: "link-kabu-orders" },
   { title: "クレジット・課金", url: "/billing", icon: CreditCard, testId: "link-billing" },
   { title: "設定", url: "/settings", icon: Settings, testId: "link-settings" },
   { title: "取引戦略", url: "/strategies", icon: Zap, testId: "link-strategies" },

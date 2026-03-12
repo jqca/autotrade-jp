@@ -1296,6 +1296,184 @@ export async function registerRoutes(
 
   startScheduler();
 
+  // ── kabu API routes ──────────────────────────────────────────────────────
+  const { checkKabuConnection, getKabuToken, kabuFetch, clearKabuTokenCache, parseKabuSide, parseKabuOrderType, parseKabuOrderStatus, parseKabuExchange } = await import("./kabuClient");
+
+  app.get("/api/kabu/status", requireAuth, async (req, res) => {
+    try {
+      const result = await checkKabuConnection();
+      res.json(result);
+    } catch (err: any) {
+      res.json({ connected: false, baseUrl: "", error: err.message });
+    }
+  });
+
+  app.post("/api/kabu/auth", requireAuth, async (req, res) => {
+    try {
+      clearKabuTokenCache();
+      const { password } = req.body;
+      const token = await getKabuToken(password);
+      if (password) {
+        await storage.setSetting("kabu_api_password_hint", "set", "kabu APIパスワード設定済み", "パスワードはサーバーメモリ上のみ保持");
+      }
+      res.json({ success: true, tokenPreview: token.substring(0, 8) + "..." });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/kabu/settings", requireAuth, async (req, res) => {
+    try {
+      const { baseUrl } = req.body;
+      if (baseUrl) {
+        await storage.setSetting("kabu_api_base_url", baseUrl, "kabu API Base URL", "kabuステーション® APIのベースURL");
+      }
+      clearKabuTokenCache();
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/kabu/board/:symbol", requireAuth, async (req, res) => {
+    try {
+      const { symbol } = req.params;
+      const exchange = req.query.exchange ?? "1";
+      const data = await kabuFetch("GET", `/board/${symbol}@${exchange}`);
+      res.json(data);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/kabu/wallet", requireAuth, async (req, res) => {
+    try {
+      const data = await kabuFetch("GET", "/wallet/cash");
+      res.json(data);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/kabu/positions", requireAuth, async (req, res) => {
+    try {
+      const data = await kabuFetch("GET", "/positions?product=0") as any[];
+      const enriched = Array.isArray(data) ? data.map((p: any) => ({
+        ...p,
+        SideLabel: parseKabuSide(p.Side),
+        ExchangeLabel: parseKabuExchange(p.Exchange),
+      })) : data;
+      res.json(enriched);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/kabu/orders", requireAuth, async (req, res) => {
+    try {
+      const data = await kabuFetch("GET", "/orders?product=0") as any[];
+      const enriched = Array.isArray(data) ? data.map((o: any) => ({
+        ...o,
+        SideLabel: parseKabuSide(o.Side),
+        OrderTypeLabel: parseKabuOrderType(o.FrontOrderType),
+        StatusLabel: parseKabuOrderStatus(o.State),
+        ExchangeLabel: parseKabuExchange(o.Exchange),
+      })) : data;
+      res.json(enriched);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  const orderSchema = z.object({
+    symbol: z.string().min(1),
+    exchange: z.number().default(1),
+    side: z.enum(["1", "2"]),
+    qty: z.number().int().positive(),
+    price: z.number().default(0),
+    orderType: z.enum(["10", "20"]).default("10"),
+    accountType: z.number().default(4),
+    symbolName: z.string().optional(),
+  });
+
+  app.post("/api/kabu/order", requireAuth, async (req, res) => {
+    try {
+      const parsed = orderSchema.parse(req.body);
+      const password = req.body.accountPassword || process.env.KABU_ACCOUNT_PASSWORD || "";
+
+      const localOrder = await storage.insertKabuOrder({
+        symbol: parsed.symbol,
+        symbolName: parsed.symbolName || null,
+        exchange: parsed.exchange,
+        side: parsed.side,
+        qty: parsed.qty,
+        price: parsed.price,
+        orderType: parsed.orderType,
+        accountType: parsed.accountType,
+        status: "sending",
+        orderId: null,
+        executedQty: null,
+        executedPrice: null,
+        errorMsg: null,
+        rawResponse: null,
+      });
+
+      const body = {
+        Password: password,
+        Symbol: parsed.symbol,
+        Exchange: parsed.exchange,
+        SecurityType: 1,
+        Side: parsed.side,
+        CashMargin: 1,
+        DelivType: 2,
+        AccountType: parsed.accountType,
+        Qty: parsed.qty,
+        FrontOrderType: parseInt(parsed.orderType),
+        Price: parsed.price,
+        ExpireDay: 0,
+      };
+
+      let kabuRes: any;
+      try {
+        kabuRes = await kabuFetch("POST", "/sendorder", body) as any;
+        await storage.updateKabuOrder(localOrder.id, {
+          orderId: kabuRes.OrderId || null,
+          status: "accepted",
+          rawResponse: JSON.stringify(kabuRes),
+        });
+        res.json({ success: true, orderId: kabuRes.OrderId, localId: localOrder.id });
+      } catch (kabuErr: any) {
+        await storage.updateKabuOrder(localOrder.id, {
+          status: "failed",
+          errorMsg: kabuErr.message,
+        });
+        throw kabuErr;
+      }
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.put("/api/kabu/order/:orderId/cancel", requireAuth, async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      const password = req.body.accountPassword || process.env.KABU_ACCOUNT_PASSWORD || "";
+      const data = await kabuFetch("PUT", "/cancelorder", { OrderId: orderId, Password: password });
+      res.json(data);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/kabu/history", requireAuth, async (_req, res) => {
+    try {
+      const orders = await storage.getKabuOrders(200);
+      res.json(orders);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   return httpServer;
 }
 

@@ -24,6 +24,7 @@ import QuantumBenchmark from "@/pages/quantum-benchmark";
 import EnergyMonitor from "@/pages/energy-monitor";
 import Billing from "@/pages/billing";
 import SettingsPage from "@/pages/settings";
+import KabuOrders from "@/pages/kabu-orders";
 import AuthPage from "@/pages/auth-page";
 
 function Router() {
@@ -41,6 +42,7 @@ function Router() {
       <Route path="/energy" component={EnergyMonitor} />
       <Route path="/billing" component={Billing} />
       <Route path="/settings" component={SettingsPage} />
+      <Route path="/kabu-orders" component={KabuOrders} />
       <Route path="/strategies" component={Strategies} />
       <Route path="/trades" component={Trades} />
       <Route path="/portfolio" component={Portfolio} />
