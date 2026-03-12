@@ -14,7 +14,8 @@ import {
   type CreditTransaction, type InsertCreditTransaction,
   type AppSetting,
   type KabuOrder, type InsertKabuOrder,
-  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults, backtestRuns, intradayPrices, marketRiskAssessments, quantumBenchmarkRuns, energyLogs, creditTransactions, appSettings, kabuOrders,
+  type AutoTrade, type InsertAutoTrade,
+  users, stocks, strategies, trades, portfolioPositions, technicalIndicators, backtestResults, backtestRuns, intradayPrices, marketRiskAssessments, quantumBenchmarkRuns, energyLogs, creditTransactions, appSettings, kabuOrders, autoTrades,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, sql, like, or, ilike, count, and, gte, lte, desc } from "drizzle-orm";
@@ -98,6 +99,8 @@ export interface IStorage {
   insertKabuOrder(order: InsertKabuOrder): Promise<KabuOrder>;
   getKabuOrders(limit?: number): Promise<KabuOrder[]>;
   updateKabuOrder(id: string, updates: Partial<InsertKabuOrder>): Promise<KabuOrder | undefined>;
+  insertAutoTrade(trade: InsertAutoTrade): Promise<AutoTrade>;
+  getAutoTrades(limit?: number): Promise<AutoTrade[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -622,6 +625,15 @@ export class DatabaseStorage implements IStorage {
   async updateKabuOrder(id: string, updates: Partial<InsertKabuOrder>): Promise<KabuOrder | undefined> {
     const [row] = await db.update(kabuOrders).set(updates).where(eq(kabuOrders.id, id)).returning();
     return row;
+  }
+
+  async insertAutoTrade(trade: InsertAutoTrade): Promise<AutoTrade> {
+    const [row] = await db.insert(autoTrades).values(trade).returning();
+    return row;
+  }
+
+  async getAutoTrades(limit: number = 100): Promise<AutoTrade[]> {
+    return await db.select().from(autoTrades).orderBy(desc(autoTrades.createdAt)).limit(limit);
   }
 }
 

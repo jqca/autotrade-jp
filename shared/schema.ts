@@ -297,3 +297,30 @@ export const kabuOrders = pgTable("kabu_orders", {
 export const insertKabuOrderSchema = createInsertSchema(kabuOrders).omit({ id: true, createdAt: true });
 export type KabuOrder = typeof kabuOrders.$inferSelect;
 export type InsertKabuOrder = z.infer<typeof insertKabuOrderSchema>;
+
+export const autoTrades = pgTable("auto_trades", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  mode: text("mode").notNull(),
+  action: text("action").notNull(),
+  ticker: text("ticker").notNull(),
+  tickerName: text("ticker_name"),
+  price: real("price").notNull(),
+  qty: integer("qty").notNull().default(100),
+  profitLoss: real("profit_loss"),
+  capitalBefore: real("capital_before"),
+  capitalAfter: real("capital_after"),
+  orderId: text("order_id"),
+  status: text("status").notNull().default("executed"),
+  errorMsg: text("error_msg"),
+  macdTrend: text("macd_trend"),
+  rsiTrend: text("rsi_trend"),
+  maTrend: text("ma_trend"),
+  bbTrend: text("bb_trend"),
+  rsiValue: real("rsi_value"),
+  signalLabel: text("signal_label"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAutoTradeSchema = createInsertSchema(autoTrades).omit({ id: true, createdAt: true });
+export type AutoTrade = typeof autoTrades.$inferSelect;
+export type InsertAutoTrade = z.infer<typeof insertAutoTradeSchema>;

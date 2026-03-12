@@ -6,6 +6,7 @@ import { createServer } from "http";
 import { runMigrations } from "stripe-replit-sync";
 import { getStripeSync } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
+import { autoTrader } from "./auto-trader";
 
 const app = express();
 const httpServer = createServer(app);
@@ -131,6 +132,7 @@ app.use((req, res, next) => {
 (async () => {
   setupAuth(app);
   await registerRoutes(httpServer, app);
+  await autoTrader.init();
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

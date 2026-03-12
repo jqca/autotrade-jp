@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { autoTrader } from "./auto-trader";
 import { insertStrategySchema } from "@shared/schema";
 import { requireAuth } from "./auth";
 import { z } from "zod";
@@ -1469,6 +1470,65 @@ export async function registerRoutes(
     try {
       const orders = await storage.getKabuOrders(200);
       res.json(orders);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/auto-trader/status", requireAuth, (_req, res) => {
+    res.json(autoTrader.getStatus());
+  });
+
+  app.post("/api/auto-trader/start", requireAuth, async (req: any, res) => {
+    try {
+      const mode = req.body?.mode === "live" ? "live" : "paper";
+      await autoTrader.start(mode);
+      res.json(autoTrader.getStatus());
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/auto-trader/stop", requireAuth, (_req, res) => {
+    autoTrader.stop();
+    res.json(autoTrader.getStatus());
+  });
+
+  app.post("/api/auto-trader/settings", requireAuth, async (req: any, res) => {
+    try {
+      const s = req.body;
+      const updated = await autoTrader.updateSettings({
+        tickers: Array.isArray(s.tickers) ? s.tickers : undefined,
+        minBuyIndicators: typeof s.minBuyIndicators === "number" ? s.minBuyIndicators : undefined,
+        rsiMin: typeof s.rsiMin === "number" ? s.rsiMin : undefined,
+        rsiMax: typeof s.rsiMax === "number" ? s.rsiMax : undefined,
+        stopLossPercent: typeof s.stopLossPercent === "number" ? s.stopLossPercent : undefined,
+        targetPercent: typeof s.targetPercent === "number" ? s.targetPercent : undefined,
+        maxPositions: typeof s.maxPositions === "number" ? s.maxPositions : undefined,
+        investPerTrade: typeof s.investPerTrade === "number" ? s.investPerTrade : undefined,
+        maxDailyLossYen: typeof s.maxDailyLossYen === "number" ? s.maxDailyLossYen : undefined,
+        intervalSeconds: typeof s.intervalSeconds === "number" ? s.intervalSeconds : undefined,
+      });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/auto-trader/reset-paper", requireAuth, async (req: any, res) => {
+    try {
+      const amount = typeof req.body?.amount === "number" ? req.body.amount : 1_000_000;
+      await autoTrader.resetPaper(amount);
+      res.json(autoTrader.getStatus());
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/auto-trader/trades", requireAuth, async (_req, res) => {
+    try {
+      const trades = await storage.getAutoTrades(200);
+      res.json(trades);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

@@ -10,12 +10,58 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { Separator } from "@/components/ui/separator";
 import {
   Wifi, WifiOff, Settings, RefreshCw, TrendingUp, TrendingDown,
   Send, XCircle, Wallet, List, History, AlertTriangle, ShoppingCart,
-  Loader2, CheckCircle, Clock,
+  Loader2, CheckCircle, Clock, Bot, Play, Square, RotateCcw,
+  Sliders, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight,
+  Activity, Target, ShieldAlert,
 } from "lucide-react";
-import type { KabuOrder } from "@shared/schema";
+import type { KabuOrder, AutoTrade } from "@shared/schema";
+
+interface AutoTraderSettings {
+  tickers: string[];
+  minBuyIndicators: number;
+  rsiMin: number;
+  rsiMax: number;
+  stopLossPercent: number;
+  targetPercent: number;
+  maxPositions: number;
+  investPerTrade: number;
+  maxDailyLossYen: number;
+  intervalSeconds: number;
+}
+
+interface OpenPosition {
+  ticker: string;
+  tickerName: string;
+  buyPrice: number;
+  qty: number;
+  buyDate: string;
+  stopLoss: number;
+  target: number;
+}
+
+interface AutoTraderLogEntry {
+  time: string;
+  msg: string;
+  type: "info" | "buy" | "sell" | "error" | "skip" | "stop";
+}
+
+interface AutoTraderStatus {
+  running: boolean;
+  mode: "paper" | "live";
+  paperBalance: number;
+  paperInitialBalance: number;
+  openPositions: OpenPosition[];
+  todayPnl: number;
+  totalBuys: number;
+  totalSells: number;
+  log: AutoTraderLogEntry[];
+  lastRunAt: string | null;
+  settings: AutoTraderSettings;
+}
 
 interface KabuStatus {
   connected: boolean;
@@ -89,6 +135,18 @@ export default function KabuOrdersPage() {
   const [apiPassword, setApiPassword] = useState("");
   const [accountPassword, setAccountPassword] = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  const [showAtSettings, setShowAtSettings] = useState(false);
+  const [atMode, setAtMode] = useState<"paper" | "live">("paper");
+  const [atTickers, setAtTickers] = useState("7203,6758,9984,4755,8306");
+  const [atMinBuy, setAtMinBuy] = useState(2);
+  const [atRsiMin, setAtRsiMin] = useState(40);
+  const [atRsiMax, setAtRsiMax] = useState(65);
+  const [atStopLoss, setAtStopLoss] = useState(2.0);
+  const [atTarget, setAtTarget] = useState(3.0);
+  const [atMaxPos, setAtMaxPos] = useState(3);
+  const [atInvest, setAtInvest] = useState(100000);
+  const [atMaxLoss, setAtMaxLoss] = useState(50000);
+  const [atInterval, setAtInterval] = useState(60);
 
   const [symbol, setSymbol] = useState("");
   const [symbolName, setSymbolName] = useState("");
@@ -191,6 +249,75 @@ export default function KabuOrdersPage() {
   });
 
   const isConnected = status?.connected;
+
+  const { data: atStatus, refetch: refetchAt } = useQuery<AutoTraderStatus>({
+    queryKey: ["/api/auto-trader/status"],
+    refetchInterval: (query) => (query.state.data?.running ? 5000 : 15000),
+  });
+
+  const { data: atTrades } = useQuery<AutoTrade[]>({
+    queryKey: ["/api/auto-trader/trades"],
+    refetchInterval: 15000,
+  });
+
+  const atStartMutation = useMutation({
+    mutationFn: (mode: "paper" | "live") => apiRequest("POST", "/api/auto-trader/start", { mode }).then(r => r.json()),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/auto-trader/status"] }); },
+    onError: (err: any) => toast({ title: "起動失敗", description: err.message, variant: "destructive" }),
+  });
+
+  const atStopMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/auto-trader/stop").then(r => r.json()),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/auto-trader/status"] }); },
+    onError: (err: any) => toast({ title: "停止失敗", description: err.message, variant: "destructive" }),
+  });
+
+  const atSettingsMutation = useMutation({
+    mutationFn: (settings: Partial<AutoTraderSettings>) => apiRequest("POST", "/api/auto-trader/settings", settings).then(r => r.json()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auto-trader/status"] });
+      toast({ title: "設定保存", description: "自動売買設定を保存しました" });
+      setShowAtSettings(false);
+    },
+    onError: (err: any) => toast({ title: "設定保存失敗", description: err.message, variant: "destructive" }),
+  });
+
+  const atResetMutation = useMutation({
+    mutationFn: (amount: number) => apiRequest("POST", "/api/auto-trader/reset-paper", { amount }).then(r => r.json()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auto-trader/status"] });
+      toast({ title: "リセット完了", description: "ペーパートレード残高をリセットしました" });
+    },
+    onError: (err: any) => toast({ title: "リセット失敗", description: err.message, variant: "destructive" }),
+  });
+
+  const saveAtSettings = () => {
+    atSettingsMutation.mutate({
+      tickers: atTickers.split(",").map(t => t.trim()).filter(Boolean),
+      minBuyIndicators: atMinBuy,
+      rsiMin: atRsiMin,
+      rsiMax: atRsiMax,
+      stopLossPercent: atStopLoss,
+      targetPercent: atTarget,
+      maxPositions: atMaxPos,
+      investPerTrade: atInvest,
+      maxDailyLossYen: atMaxLoss,
+      intervalSeconds: atInterval,
+    });
+  };
+
+  const loadAtSettings = (s: AutoTraderSettings) => {
+    setAtTickers(s.tickers.join(","));
+    setAtMinBuy(s.minBuyIndicators);
+    setAtRsiMin(s.rsiMin);
+    setAtRsiMax(s.rsiMax);
+    setAtStopLoss(s.stopLossPercent);
+    setAtTarget(s.targetPercent);
+    setAtMaxPos(s.maxPositions);
+    setAtInvest(s.investPerTrade);
+    setAtMaxLoss(s.maxDailyLossYen);
+    setAtInterval(s.intervalSeconds);
+  };
 
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-5xl mx-auto">
@@ -299,11 +426,15 @@ export default function KabuOrdersPage() {
       )}
 
       <Tabs defaultValue="order">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="order" data-testid="tab-order"><Send className="h-3.5 w-3.5 mr-1" />発注</TabsTrigger>
           <TabsTrigger value="live" data-testid="tab-live-orders"><List className="h-3.5 w-3.5 mr-1" />注文照会</TabsTrigger>
           <TabsTrigger value="positions" data-testid="tab-positions"><Wallet className="h-3.5 w-3.5 mr-1" />保有株</TabsTrigger>
           <TabsTrigger value="history" data-testid="tab-history"><History className="h-3.5 w-3.5 mr-1" />発注履歴</TabsTrigger>
+          <TabsTrigger value="auto" data-testid="tab-auto-trader" className="relative">
+            <Bot className="h-3.5 w-3.5 mr-1" />自動売買
+            {atStatus?.running && <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />}
+          </TabsTrigger>
         </TabsList>
 
         {/* 発注フォーム */}
@@ -708,6 +839,344 @@ export default function KabuOrdersPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* 自動売買タブ */}
+        <TabsContent value="auto" className="mt-4 space-y-4">
+          {/* モードと制御 */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Bot className="h-4 w-4" />
+                  自動売買エンジン
+                  {atStatus?.running ? (
+                    <Badge className="bg-emerald-500 text-white text-xs">稼働中</Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-xs">停止中</Badge>
+                  )}
+                  {atStatus && (
+                    <Badge variant={atStatus.mode === "live" ? "destructive" : "outline"} className="text-xs">
+                      {atStatus.mode === "live" ? "🔴 本番" : "📄 ペーパー"}
+                    </Badge>
+                  )}
+                </CardTitle>
+                <Button variant="outline" size="sm" onClick={() => refetchAt()} data-testid="button-refresh-at">
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              {atStatus?.lastRunAt && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  最終チェック: {new Date(atStatus.lastRunAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}
+                </p>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* 警告 (本番モード) */}
+              {atMode === "live" && (
+                <div className="flex gap-2 rounded-md bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 p-3 text-sm text-red-800 dark:text-red-300">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <p><strong>本番モード:</strong> 実際の資金で自動発注されます。kabu接続が必要です。十分なリスク管理を確認してから起動してください。</p>
+                </div>
+              )}
+
+              {/* モード選択と起動停止 */}
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm whitespace-nowrap">モード:</Label>
+                  <div className="flex rounded-md border overflow-hidden">
+                    <button
+                      className={`px-3 py-1.5 text-sm font-medium transition-colors ${atMode === "paper" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+                      onClick={() => setAtMode("paper")}
+                      data-testid="button-mode-paper"
+                    >📄 ペーパー</button>
+                    <button
+                      className={`px-3 py-1.5 text-sm font-medium transition-colors ${atMode === "live" ? "bg-red-500 text-white" : "bg-background hover:bg-muted"}`}
+                      onClick={() => setAtMode("live")}
+                      data-testid="button-mode-live"
+                    >🔴 本番</button>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {!atStatus?.running ? (
+                    <Button
+                      onClick={() => atStartMutation.mutate(atMode)}
+                      disabled={atStartMutation.isPending}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      data-testid="button-at-start"
+                    >
+                      {atStartMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Play className="h-4 w-4 mr-1" />}
+                      起動
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => atStopMutation.mutate()}
+                      disabled={atStopMutation.isPending}
+                      variant="destructive"
+                      data-testid="button-at-stop"
+                    >
+                      {atStopMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Square className="h-4 w-4 mr-1" />}
+                      停止
+                    </Button>
+                  )}
+                  {atStatus?.mode === "paper" && (
+                    <Button
+                      variant="outline" size="sm"
+                      onClick={() => atResetMutation.mutate(1_000_000)}
+                      disabled={atResetMutation.isPending || atStatus?.running}
+                      data-testid="button-at-reset"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 mr-1" />リセット
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* 統計カード */}
+              {atStatus && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {atStatus.mode === "paper" && (
+                    <>
+                      <div className="rounded-lg border bg-muted/30 p-3">
+                        <p className="text-xs text-muted-foreground">ペーパー残高</p>
+                        <p className="text-lg font-bold font-mono" data-testid="text-paper-balance">
+                          ¥{atStatus.paperBalance.toLocaleString()}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          初期¥{atStatus.paperInitialBalance.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border bg-muted/30 p-3">
+                        <p className="text-xs text-muted-foreground">本日損益</p>
+                        <p className={`text-lg font-bold font-mono ${atStatus.todayPnl >= 0 ? "text-emerald-600" : "text-red-500"}`}
+                          data-testid="text-today-pnl">
+                          {atStatus.todayPnl >= 0 ? "+" : ""}¥{Math.round(atStatus.todayPnl).toLocaleString()}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          累計P&L: ¥{Math.round(atStatus.paperBalance - atStatus.paperInitialBalance).toLocaleString()}
+                        </p>
+                      </div>
+                    </>
+                  )}
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <p className="text-xs text-muted-foreground">オープンポジション</p>
+                    <p className="text-lg font-bold" data-testid="text-open-positions">
+                      {atStatus.openPositions.length} <span className="text-sm font-normal text-muted-foreground">/ {atStatus.settings.maxPositions}</span>
+                    </p>
+                  </div>
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <p className="text-xs text-muted-foreground">取引回数</p>
+                    <p className="text-lg font-bold" data-testid="text-trade-count">
+                      買{atStatus.totalBuys} 売{atStatus.totalSells}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 設定パネル */}
+          <Card>
+            <CardHeader className="pb-2 cursor-pointer" onClick={() => {
+              if (!showAtSettings && atStatus?.settings) loadAtSettings(atStatus.settings);
+              setShowAtSettings(!showAtSettings);
+            }}>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Sliders className="h-4 w-4" />戦略設定
+                </CardTitle>
+                {showAtSettings ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </div>
+            </CardHeader>
+            {showAtSettings && (
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <Label className="text-xs">監視銘柄コード（カンマ区切り）</Label>
+                    <Input value={atTickers} onChange={e => setAtTickers(e.target.value)}
+                      placeholder="7203,6758,9984" className="mt-1 font-mono text-sm"
+                      data-testid="input-at-tickers" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">最小買いシグナル数 (1-4)</Label>
+                    <Input type="number" min={1} max={4} value={atMinBuy}
+                      onChange={e => setAtMinBuy(Number(e.target.value))} className="mt-1"
+                      data-testid="input-at-min-buy" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">チェック間隔（秒）</Label>
+                    <Input type="number" min={30} value={atInterval}
+                      onChange={e => setAtInterval(Number(e.target.value))} className="mt-1"
+                      data-testid="input-at-interval" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">RSI 下限（買い判定）</Label>
+                    <Input type="number" min={1} max={100} value={atRsiMin}
+                      onChange={e => setAtRsiMin(Number(e.target.value))} className="mt-1"
+                      data-testid="input-at-rsi-min" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">RSI 上限（買い判定）</Label>
+                    <Input type="number" min={1} max={100} value={atRsiMax}
+                      onChange={e => setAtRsiMax(Number(e.target.value))} className="mt-1"
+                      data-testid="input-at-rsi-max" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">ストップロス（%）</Label>
+                    <Input type="number" min={0.1} step={0.1} value={atStopLoss}
+                      onChange={e => setAtStopLoss(Number(e.target.value))} className="mt-1"
+                      data-testid="input-at-stop-loss" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">利確目標（%）</Label>
+                    <Input type="number" min={0.1} step={0.1} value={atTarget}
+                      onChange={e => setAtTarget(Number(e.target.value))} className="mt-1"
+                      data-testid="input-at-target" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">最大ポジション数</Label>
+                    <Input type="number" min={1} max={20} value={atMaxPos}
+                      onChange={e => setAtMaxPos(Number(e.target.value))} className="mt-1"
+                      data-testid="input-at-max-pos" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">1回あたり投資額（円）</Label>
+                    <Input type="number" min={10000} step={10000} value={atInvest}
+                      onChange={e => setAtInvest(Number(e.target.value))} className="mt-1"
+                      data-testid="input-at-invest" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Label className="text-xs">日次最大損失額（円）— これを超えると当日取引停止</Label>
+                    <Input type="number" min={0} step={10000} value={atMaxLoss}
+                      onChange={e => setAtMaxLoss(Number(e.target.value))} className="mt-1"
+                      data-testid="input-at-max-loss" />
+                  </div>
+                </div>
+                <Button onClick={saveAtSettings} disabled={atSettingsMutation.isPending} className="w-full"
+                  data-testid="button-at-save-settings">
+                  {atSettingsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                  設定を保存
+                </Button>
+              </CardContent>
+            )}
+          </Card>
+
+          {/* オープンポジション */}
+          {atStatus && atStatus.openPositions.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Target className="h-4 w-4" />オープンポジション ({atStatus.openPositions.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {atStatus.openPositions.map(pos => (
+                    <div key={pos.ticker} className="flex items-center justify-between rounded-lg border p-3 gap-3 flex-wrap"
+                      data-testid={`card-at-position-${pos.ticker}`}>
+                      <div>
+                        <p className="font-medium text-sm">{pos.ticker} <span className="text-muted-foreground font-normal">{pos.tickerName}</span></p>
+                        <p className="text-xs text-muted-foreground">{pos.qty}株 @¥{pos.buyPrice.toLocaleString()}</p>
+                      </div>
+                      <div className="text-right text-xs text-muted-foreground">
+                        <p className="text-red-500">SL ¥{Math.round(pos.stopLoss).toLocaleString()}</p>
+                        <p className="text-emerald-500">TP ¥{Math.round(pos.target).toLocaleString()}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* 活動ログ */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Activity className="h-4 w-4" />活動ログ
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!atStatus || atStatus.log.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">ログなし（起動後に表示されます）</p>
+              ) : (
+                <div className="space-y-1 max-h-80 overflow-y-auto font-mono text-xs">
+                  {atStatus.log.map((entry, i) => (
+                    <div key={i} className={`flex gap-2 py-0.5 border-b border-border/40 last:border-0 ${
+                      entry.type === "buy" ? "text-emerald-600 dark:text-emerald-400" :
+                      entry.type === "sell" ? "text-blue-600 dark:text-blue-400" :
+                      entry.type === "error" ? "text-red-500" :
+                      entry.type === "stop" ? "text-amber-600 dark:text-amber-400" :
+                      entry.type === "skip" ? "text-muted-foreground/70" :
+                      "text-foreground"
+                    }`} data-testid={`log-at-${i}`}>
+                      <span className="shrink-0 text-muted-foreground/60">
+                        {new Date(entry.time).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                      </span>
+                      <span>{entry.msg}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 取引履歴（DB） */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <History className="h-4 w-4" />自動売買履歴
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!atTrades || atTrades.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">取引履歴なし</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b text-muted-foreground">
+                        <th className="text-left py-1.5 pr-3">日時</th>
+                        <th className="text-left py-1.5 pr-3">モード</th>
+                        <th className="text-left py-1.5 pr-3">種別</th>
+                        <th className="text-left py-1.5 pr-3">銘柄</th>
+                        <th className="text-right py-1.5 pr-3">価格</th>
+                        <th className="text-right py-1.5 pr-3">数量</th>
+                        <th className="text-right py-1.5">損益</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {atTrades.slice(0, 50).map(t => (
+                        <tr key={t.id} className="border-b border-border/40 last:border-0"
+                          data-testid={`row-at-trade-${t.id}`}>
+                          <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap">
+                            {t.createdAt ? new Date(t.createdAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "-"}
+                          </td>
+                          <td className="py-1.5 pr-3">
+                            <Badge variant={t.mode === "live" ? "destructive" : "outline"} className="text-[10px] px-1">
+                              {t.mode === "live" ? "本番" : "ペーパー"}
+                            </Badge>
+                          </td>
+                          <td className="py-1.5 pr-3">
+                            <span className={`font-medium ${t.action === "buy" ? "text-emerald-600" : "text-blue-600"}`}>
+                              {t.action === "buy" ? "買" : t.action === "stop_loss" ? "損切" : t.action === "target" ? "利確" : "売"}
+                            </span>
+                          </td>
+                          <td className="py-1.5 pr-3">{t.ticker}</td>
+                          <td className="py-1.5 pr-3 text-right font-mono">¥{t.price.toLocaleString()}</td>
+                          <td className="py-1.5 pr-3 text-right">{t.qty}</td>
+                          <td className={`py-1.5 text-right font-mono ${t.profitLoss == null ? "" : t.profitLoss >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                            {t.profitLoss != null ? `${t.profitLoss >= 0 ? "+" : ""}¥${Math.round(t.profitLoss).toLocaleString()}` : "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
       </Tabs>
     </div>
   );

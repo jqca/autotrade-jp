@@ -34,7 +34,9 @@ The application features a React + TypeScript frontend built with Vite, styled u
 -   **Scheduler:** A nightly batch scheduler handles price fetching, indicator calculation, and intraday data fetching.
 -   **Quantum Integration:** Python scripts utilizing PennyLane, NumPy, and scikit-learn are orchestrated from the Node.js backend for QML features and AI benchmarks.
 -   **Billing:** Credit-based billing system integrated with Stripe for computation-intensive tasks.
--   **Commission Calculation:** auカブコム証券手数料体系を実装済み。一般コース（5万以下55円、10万以下99円、20万以下115円、50万以下275円、100万以下535円）とゼロコース（0円）の2体系。`backtest_results`テーブルに`commission`カラム追加（real, default 0）。全6バックテストパスで往復手数料を計算し、profitLoss・isWin・simulateCapitalに反映。UIに手数料体系セレクター（対象市場の下）・個別トレードカードへの手数料表示・サマリーカード「手数料合計」を追加。
+-   **Commission Calculation:** auカブコム証券手数料体系を実装済み。一般コース（5万以下55円、10万以下99円、20万以下115円、50万以下275円、100万以下535円）とゼロコース（0円）の2体系。
+-   **kabu注文発注（手動）:** auカブコム証券 kabuステーション® APIを経由した手動注文発注UI。接続設定・発注フォーム・注文照会・保有株・発注履歴タブを実装。`kabu_orders`テーブルで発注記録を管理。
+-   **自動売買エンジン:** `server/auto-trader.ts`にシングルトン`AutoTrader`クラスを実装。kabu注文発注ページの「自動売買」タブから操作。ペーパートレード/本番モード切替、MACD/RSI/MA/BB指標によるシグナル検出、ストップロス・利確目標・日次最大損失管理。`auto_trades`テーブルで全取引履歴を保存。設定はappSettingsテーブルに永続化。
 
 ## External Dependencies
 -   **J-Quants API:** Primary source for official JPX stock data.
