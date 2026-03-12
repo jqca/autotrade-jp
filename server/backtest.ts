@@ -19,6 +19,22 @@ function getTickSize(price: number): number {
   return 50000;
 }
 
+function calcCommission(tradeValue: number, commissionType?: string): number {
+  if (!commissionType || commissionType === "none" || commissionType === "kabu_zero") return 0;
+  if (commissionType === "kabu_general") {
+    if (tradeValue <= 50000) return 55;
+    if (tradeValue <= 100000) return 99;
+    if (tradeValue <= 200000) return 115;
+    if (tradeValue <= 500000) return 275;
+    if (tradeValue <= 1000000) return 535;
+    if (tradeValue <= 1500000) return 640;
+    if (tradeValue <= 2000000) return 800;
+    if (tradeValue <= 3000000) return 1000;
+    return 1000 + Math.ceil((tradeValue - 3000000) / 1000000) * 400;
+  }
+  return 0;
+}
+
 function roundUpToTick(price: number, market?: string): number {
   if (market !== "JP") return Math.round(price * 100) / 100;
   const tick = getTickSize(price);
@@ -89,6 +105,7 @@ export interface BacktestParams {
   entryConfirmBars?: number;
   requireBreakout?: boolean;
   breakoutLookback?: number;
+  commissionType?: string;
 }
 
 const INDICATOR_MAP: Record<string, (ind: ReturnType<typeof computeIndicators>) => boolean> = {
@@ -479,6 +496,7 @@ interface SignalCandidate {
   quantumSelected?: boolean;
   quantumMethod?: string;
   varEstimate?: number | null;
+  commission?: number;
   capitalBefore?: number;
   capitalAfter?: number;
 }
@@ -671,8 +689,11 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
               sellDate = dates[endIdx];
             }
 
-            const profitLoss = Math.round((sellPrice - buyPrice) * 100) / 100;
+            const _unitSharesD = params.market === "US" ? 1 : 100;
+            const _commissionD = calcCommission(buyPrice * _unitSharesD, params.commissionType) + calcCommission(sellPrice * _unitSharesD, params.commissionType);
+            const profitLoss = Math.round(((sellPrice - buyPrice) * _unitSharesD - _commissionD) / _unitSharesD * 100) / 100;
             const profitLossPercent = Math.round((profitLoss / buyPrice) * 10000) / 100;
+            isWin = profitLoss > 0;
             const priceChange = d > 0 ? (closes[d] - closes[d - 1]) / closes[d - 1] : 0;
 
             allSignals.push({
@@ -688,6 +709,7 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
               profitLoss,
               profitLossPercent,
               isWin,
+              commission: _commissionD,
               macdTrend: indicators.macdTrend,
               rsiTrend: indicators.rsiTrend,
               maTrend: indicators.maTrend,
@@ -1084,8 +1106,11 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
                 isWin = sellPrice > buyPrice;
               }
 
-              const profitLoss = Math.round((sellPrice - buyPrice) * 100) / 100;
+              const _unitSharesI1 = params.market === "US" ? 1 : 100;
+              const _commissionI1 = calcCommission(buyPrice * _unitSharesI1, params.commissionType) + calcCommission(sellPrice * _unitSharesI1, params.commissionType);
+              const profitLoss = Math.round(((sellPrice - buyPrice) * _unitSharesI1 - _commissionI1) / _unitSharesI1 * 100) / 100;
               const profitLossPercent = Math.round((profitLoss / buyPrice) * 10000) / 100;
+              isWin = profitLoss > 0;
               const priceChange = globalIdx > 0 ? (closes[globalIdx] - closes[globalIdx - 1]) / closes[globalIdx - 1] : 0;
 
               allSignals.push({
@@ -1101,6 +1126,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
                 profitLoss,
                 profitLossPercent,
                 isWin,
+                commission: _commissionI1,
                 macdTrend: indicators.macdTrend,
                 rsiTrend: indicators.rsiTrend,
                 maTrend: indicators.maTrend,
@@ -1270,7 +1296,8 @@ function simulateCapital(signals: SignalCandidate[], initialCapital: number, mar
       openPositions.splice(idx, 1);
     }
 
-    const buyCost = Math.round(signal.buyPrice * unitShares);
+    const commissionTotal = signal.commission ?? 0;
+    const buyCost = Math.round(signal.buyPrice * unitShares) + Math.round(commissionTotal / 2);
     if (cash < buyCost) {
       skipped++;
       continue;
@@ -1279,7 +1306,7 @@ function simulateCapital(signals: SignalCandidate[], initialCapital: number, mar
     signal.capitalBefore = Math.round(cash);
     cash -= buyCost;
 
-    const sellProceeds = Math.round(signal.sellPrice * unitShares);
+    const sellProceeds = Math.round(signal.sellPrice * unitShares) - Math.round(commissionTotal / 2);
     openPositions.push({
       ticker: signal.ticker,
       buyDate: signal.buyDate,
@@ -1456,8 +1483,11 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
             }
             if (sellPrice === 0) { sellPrice = closes[endIdx]; sellDate = dates[endIdx]; }
 
-            const profitLoss = Math.round((sellPrice - buyPrice) * 100) / 100;
+            const _unitSharesD2 = params.market === "US" ? 1 : 100;
+            const _commissionD2 = calcCommission(buyPrice * _unitSharesD2, params.commissionType) + calcCommission(sellPrice * _unitSharesD2, params.commissionType);
+            const profitLoss = Math.round(((sellPrice - buyPrice) * _unitSharesD2 - _commissionD2) / _unitSharesD2 * 100) / 100;
             const profitLossPercent = Math.round((profitLoss / buyPrice) * 10000) / 100;
+            isWin = profitLoss > 0;
 
             allSignals.push({
               ticker,
@@ -1472,6 +1502,7 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
               profitLoss,
               profitLossPercent,
               isWin,
+              commission: _commissionD2,
               macdTrend: indicators.macdTrend,
               rsiTrend: indicators.rsiTrend,
               maTrend: indicators.maTrend,
@@ -1741,8 +1772,11 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
                 isWin = sellPrice > buyPrice;
               }
 
-              const profitLoss = Math.round((sellPrice - buyPrice) * 100) / 100;
+              const _unitSharesI2 = params.market === "US" ? 1 : 100;
+              const _commissionI2 = calcCommission(buyPrice * _unitSharesI2, params.commissionType) + calcCommission(sellPrice * _unitSharesI2, params.commissionType);
+              const profitLoss = Math.round(((sellPrice - buyPrice) * _unitSharesI2 - _commissionI2) / _unitSharesI2 * 100) / 100;
               const profitLossPercent = Math.round((profitLoss / buyPrice) * 10000) / 100;
+              isWin = profitLoss > 0;
 
               allSignals.push({
                 ticker,
@@ -1756,6 +1790,7 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
                 profitLoss,
                 profitLossPercent,
                 isWin,
+                commission: _commissionI2,
                 macdTrend: indicators.macdTrend,
                 rsiTrend: indicators.rsiTrend,
                 maTrend: indicators.maTrend,
@@ -1896,8 +1931,11 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
             }
             if (sellPrice === 0) { sellPrice = closes[endIdx]; sellDate = dates[endIdx]; }
 
-            const profitLoss = Math.round((sellPrice - buyPrice) * 100) / 100;
+            const _unitSharesD3 = params.market === "US" ? 1 : 100;
+            const _commissionD3 = calcCommission(buyPrice * _unitSharesD3, params.commissionType) + calcCommission(sellPrice * _unitSharesD3, params.commissionType);
+            const profitLoss = Math.round(((sellPrice - buyPrice) * _unitSharesD3 - _commissionD3) / _unitSharesD3 * 100) / 100;
             const profitLossPercent = Math.round((profitLoss / buyPrice) * 10000) / 100;
+            isWin = profitLoss > 0;
 
             const result: InsertBacktestResult = {
               ticker,
@@ -1911,6 +1949,7 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
               profitLoss,
               profitLossPercent,
               isWin,
+              commission: _commissionD3,
               macdTrend: indicators.macdTrend,
               rsiTrend: indicators.rsiTrend,
               maTrend: indicators.maTrend,
@@ -2177,8 +2216,11 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
                 isWin = sellPrice > buyPrice;
               }
 
-              const profitLoss = Math.round((sellPrice - buyPrice) * 100) / 100;
+              const _unitSharesI3 = params.market === "US" ? 1 : 100;
+              const _commissionI3 = calcCommission(buyPrice * _unitSharesI3, params.commissionType) + calcCommission(sellPrice * _unitSharesI3, params.commissionType);
+              const profitLoss = Math.round(((sellPrice - buyPrice) * _unitSharesI3 - _commissionI3) / _unitSharesI3 * 100) / 100;
               const profitLossPercent = Math.round((profitLoss / buyPrice) * 10000) / 100;
+              isWin = profitLoss > 0;
 
               const result: InsertBacktestResult = {
                 ticker,
@@ -2192,6 +2234,7 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
                 profitLoss,
                 profitLossPercent,
                 isWin,
+                commission: _commissionI3,
                 macdTrend: indicators.macdTrend,
                 rsiTrend: indicators.rsiTrend,
                 maTrend: indicators.maTrend,

@@ -152,6 +152,7 @@ export const backtestResults = pgTable("backtest_results", {
   quantumSelected: boolean("quantum_selected"),
   quantumMethod: text("quantum_method"),
   varEstimate: real("var_estimate"),
+  commission: real("commission").default(0),
   capitalBefore: real("capital_before"),
   capitalAfter: real("capital_after"),
   runId: text("run_id").notNull(),

@@ -624,6 +624,7 @@ export async function registerRoutes(
         entryConfirmBars,
         requireBreakout,
         breakoutLookback,
+        commissionType: req.body.commissionType || "kabu_general",
       };
       await startBacktest(params, 3);
       res.json({ message: "バックテストを開始しました", params });

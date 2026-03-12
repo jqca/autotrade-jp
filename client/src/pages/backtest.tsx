@@ -84,6 +84,7 @@ interface BacktestParams {
   dailyMinSignalScore?: number;
   initialCapital?: number;
   market?: string;
+  commissionType?: string;
 }
 
 function TrendBadge({ trend, label, active = true }: { trend: string | null; label: string; active?: boolean }) {
@@ -232,6 +233,7 @@ export default function Backtest() {
   const [dailyMinSignalScore, setDailyMinSignalScore] = useState(0);
   const [initialCapital, setInitialCapital] = useState(1000000);
   const [market, setMarket] = useState<string>("JP");
+  const [commissionType, setCommissionType] = useState<string>("kabu_general");
   const [showAdvanced, setShowAdvanced] = useState(true);
 
   const [now, setNow] = useState(Date.now());
@@ -329,6 +331,7 @@ export default function Backtest() {
       entryConfirmBars,
       requireBreakout,
       breakoutLookback,
+      commissionType,
       rsiExcludeAfterMin: rsiExcludeAfterEnabled ? rsiExcludeAfterMin : 0,
       rsiExcludeAfterMax: rsiExcludeAfterEnabled ? rsiExcludeAfterMax : 0,
       rsiExcludeAfterTime: rsiExcludeAfterEnabled ? rsiExcludeAfterTime : 0,
@@ -387,13 +390,14 @@ export default function Backtest() {
     const avgProfitYen = Math.round(totalProfitYen / results.length);
     const maxWinYen = Math.round(Math.max(...results.map(r => r.profitLoss * UNIT_SHARES)));
     const maxLossYen = Math.round(Math.min(...results.map(r => r.profitLoss * UNIT_SHARES)));
+    const totalCommissionYen = Math.round(results.reduce((sum, r) => sum + (r.commission ?? 0), 0));
     const hasCapitalTracking = results.some(r => r.capitalBefore != null);
     const capitalStart = hasCapitalTracking ? results[0]?.capitalBefore ?? null : null;
     const capitalEnd = hasCapitalTracking ? results[results.length - 1]?.capitalAfter ?? null : null;
     const capitalReturn = capitalStart != null && capitalEnd != null && capitalStart > 0
       ? Math.round(((capitalEnd - capitalStart) / capitalStart) * 10000) / 100
       : null;
-    return { wins, losses, winRate, avgPL, total: results.length, profitFactor, hasAi, hasQuantum, totalProfitYen, totalInvestment, avgProfitYen, maxWinYen, maxLossYen, hasCapitalTracking, capitalStart, capitalEnd, capitalReturn, isUS };
+    return { wins, losses, winRate, avgPL, total: results.length, profitFactor, hasAi, hasQuantum, totalProfitYen, totalInvestment, avgProfitYen, maxWinYen, maxLossYen, totalCommissionYen, hasCapitalTracking, capitalStart, capitalEnd, capitalReturn, isUS };
   }, [results, runs, activeRunId]);
 
   const comparisonData = useMemo(() => {
@@ -747,6 +751,26 @@ export default function Backtest() {
                   {market === "JP"
                     ? "TSE上場の日本株を対象にバックテストを行います（売買単位: 100株）"
                     : "NYSE/NASDAQ上場の米国株を対象にバックテストを行います（売買単位: 1株）"}
+                </p>
+              </div>
+              <div className="space-y-3 pb-2 border-b">
+                <Label className="text-sm font-medium">手数料体系</Label>
+                <Select value={commissionType} onValueChange={setCommissionType}>
+                  <SelectTrigger data-testid="select-commission-type" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="kabu_general">auカブコム証券 一般コース（往復198〜1,070円）</SelectItem>
+                    <SelectItem value="kabu_zero">auカブコム証券 ゼロコース（手数料0円）</SelectItem>
+                    <SelectItem value="none">手数料なし（比較用）</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {commissionType === "kabu_general"
+                    ? "5万以下55円、10万以下99円、20万以下115円、50万以下275円、100万以下535円（税込）"
+                    : commissionType === "kabu_zero"
+                    ? "現物取引手数料0円（プレミアム料が別途かかる場合あり）"
+                    : "手数料を計算に含めません（シミュレーション用）"}
                 </p>
               </div>
               <div className="space-y-3 pb-2 border-b">
@@ -2164,6 +2188,21 @@ export default function Backtest() {
                     </div>
                   </CardContent>
                 </Card>
+                {stats.totalCommissionYen > 0 && (
+                  <Card data-testid="card-total-commission">
+                    <CardContent className="pt-4 pb-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <Banknote className="h-5 w-5 text-amber-500" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">手数料合計（円）</p>
+                          <p className="text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400" data-testid="text-total-commission">
+                            -{stats.totalCommissionYen.toLocaleString("ja-JP")}円
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
                 <Card data-testid="card-capital-return">
                   <CardContent className="pt-4 pb-3 px-4">
                     <div className="flex items-center gap-2">
@@ -2382,6 +2421,9 @@ export default function Backtest() {
                             <p className="text-xs">
                               {r.profitLoss >= 0 ? "+" : ""}{stats?.isUS ? `$${Math.abs(r.profitLoss).toLocaleString("en-US")}` : `${r.profitLoss.toLocaleString("ja-JP")}円`}
                             </p>
+                            {r.commission != null && r.commission > 0 && (
+                              <p className="text-xs text-muted-foreground">手数料 {r.commission.toLocaleString("ja-JP")}円</p>
+                            )}
                           </div>
                         </div>
                       </div>
