@@ -12,11 +12,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+} from "@/components/ui/dialog";
+import {
   Wifi, WifiOff, Settings, RefreshCw, TrendingUp, TrendingDown,
   Send, XCircle, Wallet, List, History, AlertTriangle, ShoppingCart,
   Loader2, CheckCircle, Clock, Bot, Play, Square, RotateCcw,
   Sliders, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight,
-  Activity, Target, ShieldAlert,
+  Activity, Target, ShieldAlert, GitCompare, TriangleAlert,
 } from "lucide-react";
 import type { KabuOrder, AutoTrade } from "@shared/schema";
 
@@ -147,6 +150,22 @@ export default function KabuOrdersPage() {
   const [atInvest, setAtInvest] = useState(100000);
   const [atMaxLoss, setAtMaxLoss] = useState(50000);
   const [atInterval, setAtInterval] = useState(60);
+
+  // 本番確認ダイアログ
+  const [liveConfirmOpen, setLiveConfirmOpen] = useState(false);
+  const [liveConfirmText, setLiveConfirmText] = useState("");
+
+  // 口座照合
+  const [showReconcile, setShowReconcile] = useState(false);
+  const [reconcileResult, setReconcileResult] = useState<{
+    botMode: string;
+    botRunning: boolean;
+    matched: { ticker: string; tickerName: string; qty: number; avgPrice: number }[];
+    onlyBot: { ticker: string; tickerName: string; botQty: number; botBuyPrice: number }[];
+    onlyKabu: { ticker: string; tickerName: string; kabuQty: number; kabuAvgPrice: number; currentPrice: number | null }[];
+    mismatches: { ticker: string; tickerName: string; botQty: number; kabuQty: number; botBuyPrice: number; kabuAvgPrice: number; qtyDiff: number }[];
+    checkedAt: string;
+  } | null>(null);
 
   const [symbol, setSymbol] = useState("");
   const [symbolName, setSymbolName] = useState("");
@@ -289,6 +308,15 @@ export default function KabuOrdersPage() {
       toast({ title: "リセット完了", description: "ペーパートレード残高をリセットしました" });
     },
     onError: (err: any) => toast({ title: "リセット失敗", description: err.message, variant: "destructive" }),
+  });
+
+  const reconcileMutation = useMutation({
+    mutationFn: () => apiRequest("GET", "/api/auto-trader/reconcile").then(r => r.json()),
+    onSuccess: (data) => {
+      setReconcileResult(data);
+      setShowReconcile(true);
+    },
+    onError: (err: any) => toast({ title: "照合失敗", description: err.message, variant: "destructive" }),
   });
 
   const saveAtSettings = () => {
@@ -899,9 +927,16 @@ export default function KabuOrdersPage() {
                 <div className="flex gap-2">
                   {!atStatus?.running ? (
                     <Button
-                      onClick={() => atStartMutation.mutate(atMode)}
+                      onClick={() => {
+                        if (atMode === "live") {
+                          setLiveConfirmText("");
+                          setLiveConfirmOpen(true);
+                        } else {
+                          atStartMutation.mutate(atMode);
+                        }
+                      }}
                       disabled={atStartMutation.isPending}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      className={atMode === "live" ? "bg-red-600 hover:bg-red-700 text-white" : "bg-emerald-600 hover:bg-emerald-700 text-white"}
                       data-testid="button-at-start"
                     >
                       {atStartMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Play className="h-4 w-4 mr-1" />}
@@ -926,6 +961,19 @@ export default function KabuOrdersPage() {
                       data-testid="button-at-reset"
                     >
                       <RotateCcw className="h-3.5 w-3.5 mr-1" />リセット
+                    </Button>
+                  )}
+                  {atStatus?.mode === "live" && (
+                    <Button
+                      variant="outline" size="sm"
+                      onClick={() => reconcileMutation.mutate()}
+                      disabled={reconcileMutation.isPending}
+                      data-testid="button-reconcile"
+                    >
+                      {reconcileMutation.isPending
+                        ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                        : <GitCompare className="h-3.5 w-3.5 mr-1" />}
+                      口座照合
                     </Button>
                   )}
                 </div>
@@ -969,6 +1017,139 @@ export default function KabuOrdersPage() {
                       買{atStatus.totalBuys} 売{atStatus.totalSells}
                     </p>
                   </div>
+                </div>
+              )}
+
+              {/* 口座照合パネル */}
+              {showReconcile && reconcileResult && (
+                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-4 space-y-3" data-testid="panel-reconcile">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-semibold flex items-center gap-2">
+                      <GitCompare className="h-4 w-4" />
+                      口座照合結果
+                      <span className="text-xs text-muted-foreground font-normal">
+                        {new Date(reconcileResult.checkedAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}
+                      </span>
+                    </h4>
+                    <button onClick={() => setShowReconcile(false)} className="text-muted-foreground hover:text-foreground text-xs">✕ 閉じる</button>
+                  </div>
+
+                  {reconcileResult.mismatches.length === 0 && reconcileResult.onlyBot.length === 0 && reconcileResult.onlyKabu.length === 0 ? (
+                    <div className="flex items-center gap-2 text-emerald-600 text-sm">
+                      <CheckCircle className="h-4 w-4" />
+                      <span>完全一致 — ボット内部とkabu口座のポジションは一致しています（{reconcileResult.matched.length}銘柄）</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {reconcileResult.mismatches.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-orange-600 dark:text-orange-400 mb-1 flex items-center gap-1">
+                            <TriangleAlert className="h-3.5 w-3.5" />数量・価格の乖離 ({reconcileResult.mismatches.length}件)
+                          </p>
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="text-muted-foreground border-b">
+                                <th className="text-left pb-1">銘柄</th>
+                                <th className="text-right pb-1">Bot数量</th>
+                                <th className="text-right pb-1">kabu数量</th>
+                                <th className="text-right pb-1">Bot単価</th>
+                                <th className="text-right pb-1">kabu平均</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {reconcileResult.mismatches.map(m => (
+                                <tr key={m.ticker} className="border-b border-dashed" data-testid={`row-mismatch-${m.ticker}`}>
+                                  <td className="py-1 font-mono">{m.ticker} <span className="text-muted-foreground">{m.tickerName}</span></td>
+                                  <td className="text-right py-1 font-mono">{m.botQty}</td>
+                                  <td className="text-right py-1 font-mono text-orange-600">{m.kabuQty}</td>
+                                  <td className="text-right py-1 font-mono">¥{m.botBuyPrice.toLocaleString()}</td>
+                                  <td className="text-right py-1 font-mono text-orange-600">¥{m.kabuAvgPrice.toLocaleString()}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {reconcileResult.onlyBot.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-red-600 dark:text-red-400 mb-1 flex items-center gap-1">
+                            <AlertTriangle className="h-3.5 w-3.5" />Botのみ（kabuに存在しない） ({reconcileResult.onlyBot.length}件)
+                          </p>
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="text-muted-foreground border-b">
+                                <th className="text-left pb-1">銘柄</th>
+                                <th className="text-right pb-1">Bot数量</th>
+                                <th className="text-right pb-1">Bot取得単価</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {reconcileResult.onlyBot.map(p => (
+                                <tr key={p.ticker} className="border-b border-dashed" data-testid={`row-only-bot-${p.ticker}`}>
+                                  <td className="py-1 font-mono">{p.ticker} <span className="text-muted-foreground">{p.tickerName}</span></td>
+                                  <td className="text-right py-1 font-mono">{p.botQty}</td>
+                                  <td className="text-right py-1 font-mono">¥{p.botBuyPrice.toLocaleString()}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {reconcileResult.onlyKabu.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1 flex items-center gap-1">
+                            <AlertTriangle className="h-3.5 w-3.5" />kabuのみ（Botが把握していない） ({reconcileResult.onlyKabu.length}件)
+                          </p>
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="text-muted-foreground border-b">
+                                <th className="text-left pb-1">銘柄</th>
+                                <th className="text-right pb-1">kabu数量</th>
+                                <th className="text-right pb-1">kabu平均</th>
+                                <th className="text-right pb-1">現在値</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {reconcileResult.onlyKabu.map(p => (
+                                <tr key={p.ticker} className="border-b border-dashed" data-testid={`row-only-kabu-${p.ticker}`}>
+                                  <td className="py-1 font-mono">{p.ticker} <span className="text-muted-foreground">{p.tickerName}</span></td>
+                                  <td className="text-right py-1 font-mono">{p.kabuQty}</td>
+                                  <td className="text-right py-1 font-mono">¥{p.kabuAvgPrice.toLocaleString()}</td>
+                                  <td className="text-right py-1 font-mono">{p.currentPrice != null ? `¥${p.currentPrice.toLocaleString()}` : "—"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {reconcileResult.matched.length > 0 && (
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">一致銘柄 {reconcileResult.matched.length}件を表示</summary>
+                      <table className="w-full mt-2">
+                        <thead>
+                          <tr className="text-muted-foreground border-b">
+                            <th className="text-left pb-1">銘柄</th>
+                            <th className="text-right pb-1">数量</th>
+                            <th className="text-right pb-1">平均単価</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reconcileResult.matched.map(m => (
+                            <tr key={m.ticker} className="border-b border-dashed" data-testid={`row-matched-${m.ticker}`}>
+                              <td className="py-1 font-mono">{m.ticker} <span className="text-muted-foreground">{m.tickerName}</span></td>
+                              <td className="text-right py-1 font-mono">{m.qty}</td>
+                              <td className="text-right py-1 font-mono">¥{m.avgPrice.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </details>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -1178,6 +1359,81 @@ export default function KabuOrdersPage() {
         </TabsContent>
 
       </Tabs>
+
+      {/* ===== 本番起動確認ダイアログ ===== */}
+      <Dialog open={liveConfirmOpen} onOpenChange={setLiveConfirmOpen}>
+        <DialogContent className="max-w-md" data-testid="dialog-live-confirm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <ShieldAlert className="h-5 w-5" />本番取引を開始しますか？
+            </DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              実際の資金を使った自動発注が開始されます。以下の設定を確認してください。
+            </DialogDescription>
+          </DialogHeader>
+
+          {atStatus && (
+            <div className="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 p-3 text-sm space-y-1.5">
+              <p className="font-semibold text-red-800 dark:text-red-300 text-xs uppercase tracking-wide mb-2">現在の設定</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                <span className="text-muted-foreground">監視銘柄</span>
+                <span className="font-mono font-medium">{atStatus.settings.tickers.join(", ")}</span>
+                <span className="text-muted-foreground">1回の投資額</span>
+                <span className="font-mono font-medium">¥{atStatus.settings.investPerTrade.toLocaleString()}</span>
+                <span className="text-muted-foreground">最大ポジション数</span>
+                <span className="font-mono font-medium">{atStatus.settings.maxPositions}件</span>
+                <span className="text-muted-foreground">損切りライン</span>
+                <span className="font-mono font-medium text-red-600">-{atStatus.settings.stopLossPercent}%</span>
+                <span className="text-muted-foreground">利確ライン</span>
+                <span className="font-mono font-medium text-emerald-600">+{atStatus.settings.targetPercent}%</span>
+                <span className="text-muted-foreground">日次最大損失</span>
+                <span className="font-mono font-medium text-red-600">¥{atStatus.settings.maxDailyLossYen.toLocaleString()}</span>
+                <span className="text-muted-foreground">チェック間隔</span>
+                <span className="font-mono font-medium">{atStatus.settings.intervalSeconds}秒</span>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">
+              確認のため <span className="font-bold text-red-600 font-mono">本番取引開始</span> と入力してください
+            </Label>
+            <Input
+              value={liveConfirmText}
+              onChange={e => setLiveConfirmText(e.target.value)}
+              placeholder="本番取引開始"
+              className="font-mono"
+              data-testid="input-live-confirm"
+              autoComplete="off"
+            />
+          </div>
+
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setLiveConfirmOpen(false); setLiveConfirmText(""); }}
+              data-testid="button-live-confirm-cancel"
+            >
+              キャンセル
+            </Button>
+            <Button
+              onClick={() => {
+                setLiveConfirmOpen(false);
+                setLiveConfirmText("");
+                atStartMutation.mutate("live");
+              }}
+              disabled={liveConfirmText !== "本番取引開始" || atStartMutation.isPending}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              data-testid="button-live-confirm-ok"
+            >
+              {atStartMutation.isPending
+                ? <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                : <ShieldAlert className="h-4 w-4 mr-1" />}
+              本番起動する
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

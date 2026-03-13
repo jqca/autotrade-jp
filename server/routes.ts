@@ -1525,6 +1525,79 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/auto-trader/reconcile", requireAuth, async (_req, res) => {
+    try {
+      const status = autoTrader.getStatus();
+      const botPositions = status.openPositions;
+
+      let kabuPositions: any[] = [];
+      try {
+        const data = await kabuFetch("GET", "/positions?product=0") as any[];
+        kabuPositions = Array.isArray(data) ? data.filter((p: any) => p.Side === "1") : [];
+      } catch {
+        return res.status(503).json({ message: "kabu station®に接続できません。kabu接続設定を確認してください。" });
+      }
+
+      const botMap = new Map<string, typeof botPositions[0]>();
+      for (const p of botPositions) botMap.set(p.ticker, p);
+
+      const kabuMap = new Map<string, any>();
+      for (const p of kabuPositions) kabuMap.set(String(p.Symbol), p);
+
+      const matched: any[] = [];
+      const onlyBot: any[] = [];
+      const onlyKabu: any[] = [];
+      const mismatches: any[] = [];
+
+      for (const [ticker, bot] of botMap) {
+        const kabu = kabuMap.get(ticker);
+        if (!kabu) {
+          onlyBot.push({ ticker, tickerName: bot.tickerName, botQty: bot.qty, botBuyPrice: bot.buyPrice });
+        } else {
+          const qtyDiff = bot.qty - (kabu.LeavesQty ?? kabu.Qty ?? 0);
+          const priceDiff = Math.abs(bot.buyPrice - (kabu.AvgPrice ?? 0));
+          if (Math.abs(qtyDiff) > 0 || priceDiff > bot.buyPrice * 0.01) {
+            mismatches.push({
+              ticker,
+              tickerName: bot.tickerName,
+              botQty: bot.qty,
+              kabuQty: kabu.LeavesQty ?? kabu.Qty ?? 0,
+              botBuyPrice: bot.buyPrice,
+              kabuAvgPrice: kabu.AvgPrice ?? 0,
+              qtyDiff,
+            });
+          } else {
+            matched.push({ ticker, tickerName: bot.tickerName, qty: bot.qty, avgPrice: kabu.AvgPrice ?? bot.buyPrice });
+          }
+        }
+      }
+
+      for (const [ticker, kabu] of kabuMap) {
+        if (!botMap.has(ticker)) {
+          onlyKabu.push({
+            ticker,
+            tickerName: kabu.SymbolName ?? ticker,
+            kabuQty: kabu.LeavesQty ?? kabu.Qty ?? 0,
+            kabuAvgPrice: kabu.AvgPrice ?? 0,
+            currentPrice: kabu.CurrentPrice ?? null,
+          });
+        }
+      }
+
+      res.json({
+        botMode: status.mode,
+        botRunning: status.running,
+        matched,
+        onlyBot,
+        onlyKabu,
+        mismatches,
+        checkedAt: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/auto-trader/trades", requireAuth, async (_req, res) => {
     try {
       const trades = await storage.getAutoTrades(200);
