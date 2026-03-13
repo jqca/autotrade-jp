@@ -1523,8 +1523,60 @@ export async function registerRoutes(
         investPerTrade: typeof s.investPerTrade === "number" ? s.investPerTrade : undefined,
         maxDailyLossYen: typeof s.maxDailyLossYen === "number" ? s.maxDailyLossYen : undefined,
         intervalSeconds: typeof s.intervalSeconds === "number" ? s.intervalSeconds : undefined,
+        cashMargin: typeof s.cashMargin === "number" ? s.cashMargin : undefined,
+        accountType: typeof s.accountType === "number" ? s.accountType : undefined,
+        delivType: typeof s.delivType === "number" ? s.delivType : undefined,
+        volatilityFilterEnabled: typeof s.volatilityFilterEnabled === "boolean" ? s.volatilityFilterEnabled : undefined,
+        volatilityThresholdPct: typeof s.volatilityThresholdPct === "number" ? s.volatilityThresholdPct : undefined,
       });
       res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Feature 1: 緊急全ポジション清算
+  app.post("/api/auto-trader/emergency-close", requireAuth, async (req: any, res) => {
+    try {
+      const reason = req.body?.reason || "UIから緊急清算";
+      const result = await autoTrader.emergencyCloseAll(reason);
+      res.json({ ...result, status: autoTrader.getStatus() });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Feature 2: LINE Notify設定
+  app.get("/api/auto-trader/line-notify-status", requireAuth, (_req, res) => {
+    res.json({ set: autoTrader.getLineNotifyTokenSet() });
+  });
+
+  app.post("/api/auto-trader/line-notify", requireAuth, async (req: any, res) => {
+    try {
+      const { token } = req.body;
+      if (typeof token !== "string") return res.status(400).json({ message: "tokenは文字列で指定してください" });
+      await autoTrader.setLineNotifyToken(token);
+      res.json({ set: autoTrader.getLineNotifyTokenSet() });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/auto-trader/line-notify/test", requireAuth, async (_req, res) => {
+    try {
+      const result = await autoTrader.sendLineNotify("🔔 テスト通知\nAutoTradeJPからの接続テストです");
+      if (result.ok) res.json({ ok: true });
+      else res.status(400).json({ message: result.error });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Feature 7: 週次レポート（手動トリガー）
+  app.post("/api/auto-trader/weekly-report", requireAuth, async (_req, res) => {
+    try {
+      const result = await autoTrader.sendWeeklyReport();
+      res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

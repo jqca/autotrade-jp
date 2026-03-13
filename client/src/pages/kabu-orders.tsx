@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { apiRequest } from "@/lib/queryClient";
@@ -9,17 +9,22 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
+} from "recharts";
+import {
   Wifi, WifiOff, Settings, RefreshCw, TrendingUp, TrendingDown,
   Send, XCircle, Wallet, List, History, AlertTriangle, ShoppingCart,
   Loader2, CheckCircle, Clock, Bot, Play, Square, RotateCcw,
   Sliders, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight,
   Activity, Target, ShieldAlert, GitCompare, TriangleAlert,
+  BellRing, Siren, BarChart2, FileText, Zap,
 } from "lucide-react";
 import type { KabuOrder, AutoTrade } from "@shared/schema";
 
@@ -34,6 +39,11 @@ interface AutoTraderSettings {
   investPerTrade: number;
   maxDailyLossYen: number;
   intervalSeconds: number;
+  cashMargin: number;
+  accountType: number;
+  delivType: number;
+  volatilityFilterEnabled: boolean;
+  volatilityThresholdPct: number;
 }
 
 interface OpenPosition {
@@ -150,6 +160,11 @@ export default function KabuOrdersPage() {
   const [atInvest, setAtInvest] = useState(100000);
   const [atMaxLoss, setAtMaxLoss] = useState(50000);
   const [atInterval, setAtInterval] = useState(60);
+  const [atCashMargin, setAtCashMargin] = useState(1);
+  const [atAccountType, setAtAccountType] = useState(4);
+  const [atDelivType, setAtDelivType] = useState(0);
+  const [atVolFilterEnabled, setAtVolFilterEnabled] = useState(false);
+  const [atVolThreshold, setAtVolThreshold] = useState(5.0);
 
   // 本番確認ダイアログ
   const [liveConfirmOpen, setLiveConfirmOpen] = useState(false);
@@ -158,6 +173,13 @@ export default function KabuOrdersPage() {
   // 発注パスワード
   const [orderPwInput, setOrderPwInput] = useState("");
   const [showOrderPwForm, setShowOrderPwForm] = useState(false);
+
+  // 緊急清算
+  const [emergencyConfirmOpen, setEmergencyConfirmOpen] = useState(false);
+
+  // LINE Notify
+  const [lineTokenInput, setLineTokenInput] = useState("");
+  const [showLineForm, setShowLineForm] = useState(false);
 
   // 口座照合
   const [showReconcile, setShowReconcile] = useState(false);
@@ -328,6 +350,44 @@ export default function KabuOrdersPage() {
     onError: (err: any) => toast({ title: "照合失敗", description: err.message, variant: "destructive" }),
   });
 
+  const emergencyCloseMutation = useMutation({
+    mutationFn: (reason: string) => apiRequest("POST", "/api/auto-trader/emergency-close", { reason }).then(r => r.json()),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auto-trader/status"] });
+      toast({ title: "緊急清算完了", description: `${data.closed}件清算 / ${data.failed}件失敗` });
+      setEmergencyConfirmOpen(false);
+    },
+    onError: (err: any) => toast({ title: "緊急清算失敗", description: err.message, variant: "destructive" }),
+  });
+
+  const { data: lineNotifyStatus, refetch: refetchLineNotify } = useQuery<{ set: boolean }>({
+    queryKey: ["/api/auto-trader/line-notify-status"],
+    refetchInterval: 60000,
+  });
+
+  const lineNotifyMutation = useMutation({
+    mutationFn: (token: string) => apiRequest("POST", "/api/auto-trader/line-notify", { token }).then(r => r.json()),
+    onSuccess: () => {
+      refetchLineNotify();
+      setLineTokenInput("");
+      setShowLineForm(false);
+      toast({ title: "LINE Notify設定", description: "トークンを保存しました" });
+    },
+    onError: (err: any) => toast({ title: "設定失敗", description: err.message, variant: "destructive" }),
+  });
+
+  const lineNotifyTestMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/auto-trader/line-notify/test").then(r => r.json()),
+    onSuccess: () => toast({ title: "テスト送信完了", description: "LINEにテスト通知を送りました" }),
+    onError: (err: any) => toast({ title: "送信失敗", description: err.message, variant: "destructive" }),
+  });
+
+  const weeklyReportMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/auto-trader/weekly-report").then(r => r.json()),
+    onSuccess: (data: any) => toast({ title: "週次レポート送信", description: data.message }),
+    onError: (err: any) => toast({ title: "送信失敗", description: err.message, variant: "destructive" }),
+  });
+
   const orderPwMutation = useMutation({
     mutationFn: (pw: string) => apiRequest("POST", "/api/auto-trader/order-password", { password: pw }).then(r => r.json()),
     onSuccess: () => {
@@ -351,6 +411,11 @@ export default function KabuOrdersPage() {
       investPerTrade: atInvest,
       maxDailyLossYen: atMaxLoss,
       intervalSeconds: atInterval,
+      cashMargin: atCashMargin,
+      accountType: atAccountType,
+      delivType: atDelivType,
+      volatilityFilterEnabled: atVolFilterEnabled,
+      volatilityThresholdPct: atVolThreshold,
     });
   };
 
@@ -365,10 +430,43 @@ export default function KabuOrdersPage() {
     setAtInvest(s.investPerTrade);
     setAtMaxLoss(s.maxDailyLossYen);
     setAtInterval(s.intervalSeconds);
+    setAtCashMargin(s.cashMargin ?? 1);
+    setAtAccountType(s.accountType ?? 4);
+    setAtDelivType(s.delivType ?? 0);
+    setAtVolFilterEnabled(s.volatilityFilterEnabled ?? false);
+    setAtVolThreshold(s.volatilityThresholdPct ?? 5.0);
   };
+
+  const pnlChartData = useMemo(() => {
+    if (!atTrades) return [];
+    const sells = atTrades
+      .filter(t => t.action !== "buy" && t.profitLoss != null)
+      .slice()
+      .sort((a, b) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime());
+    let cum = 0;
+    return sells.map(t => {
+      cum += t.profitLoss ?? 0;
+      return {
+        date: t.createdAt ? new Date(t.createdAt).toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", month: "2-digit", day: "2-digit" }) : "",
+        pnl: Math.round(cum),
+        trade: Math.round(t.profitLoss ?? 0),
+      };
+    });
+  }, [atTrades]);
+
+  const showGlobalWarning = atStatus?.running && atStatus?.mode === "live" && !orderPwStatus?.set;
 
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-5xl mx-auto">
+      {/* Feature 3: グローバル警告バナー */}
+      {showGlobalWarning && (
+        <div className="sticky top-0 z-50 flex items-center gap-2 rounded-md border border-red-500 bg-red-600 px-4 py-2.5 text-white text-sm shadow-lg animate-pulse"
+          data-testid="banner-global-warning">
+          <Siren className="h-4 w-4 shrink-0" />
+          <strong>本番稼働中 — 発注パスワード未設定!</strong>
+          <span className="ml-1 font-normal">全発注が失敗します。今すぐ発注パスワードを設定してください。</span>
+        </div>
+      )}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-xl font-bold flex items-center gap-2">
           <ShoppingCart className="h-6 w-6" />
@@ -1049,6 +1147,21 @@ export default function KabuOrdersPage() {
                       口座照合
                     </Button>
                   )}
+                  {/* Feature 1: 緊急全清算ボタン */}
+                  {atStatus && atStatus.openPositions.length > 0 && (
+                    <Button
+                      variant="outline" size="sm"
+                      onClick={() => setEmergencyConfirmOpen(true)}
+                      disabled={emergencyCloseMutation.isPending}
+                      className="border-red-400 text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                      data-testid="button-emergency-close"
+                    >
+                      {emergencyCloseMutation.isPending
+                        ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                        : <Zap className="h-3.5 w-3.5 mr-1" />}
+                      全清算
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -1305,6 +1418,75 @@ export default function KabuOrdersPage() {
                       data-testid="input-at-max-loss" />
                   </div>
                 </div>
+
+                {/* Feature 4: 発注パラメータ */}
+                <Separator className="my-1" />
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">発注パラメータ（本番モード）</p>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <Label className="text-xs">取引区分</Label>
+                    <Select value={String(atCashMargin)} onValueChange={v => setAtCashMargin(Number(v))}>
+                      <SelectTrigger className="mt-1" data-testid="select-cash-margin">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">現物</SelectItem>
+                        <SelectItem value="2">信用</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">口座種別</Label>
+                    <Select value={String(atAccountType)} onValueChange={v => setAtAccountType(Number(v))}>
+                      <SelectTrigger className="mt-1" data-testid="select-account-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="4">特定口座</SelectItem>
+                        <SelectItem value="3">一般口座</SelectItem>
+                        <SelectItem value="2">NISA口座</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">受渡区分</Label>
+                    <Select value={String(atDelivType)} onValueChange={v => setAtDelivType(Number(v))}>
+                      <SelectTrigger className="mt-1" data-testid="select-deliv-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">指定なし</SelectItem>
+                        <SelectItem value="2">自動</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Feature 8: ボラティリティフィルター */}
+                <Separator className="my-1" />
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">ボラティリティフィルター</p>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={atVolFilterEnabled}
+                      onCheckedChange={setAtVolFilterEnabled}
+                      data-testid="switch-vol-filter"
+                    />
+                    <Label className="text-sm cursor-pointer" onClick={() => setAtVolFilterEnabled(!atVolFilterEnabled)}>
+                      ATRフィルター有効
+                    </Label>
+                  </div>
+                  {atVolFilterEnabled && (
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs whitespace-nowrap">閾値（ATR%）</Label>
+                      <Input type="number" min={0.5} max={30} step={0.5} value={atVolThreshold}
+                        onChange={e => setAtVolThreshold(Number(e.target.value))} className="w-24"
+                        data-testid="input-vol-threshold" />
+                      <span className="text-xs text-muted-foreground">%以上の銘柄をスキップ</span>
+                    </div>
+                  )}
+                </div>
+
                 <Button onClick={saveAtSettings} disabled={atSettingsMutation.isPending} className="w-full"
                   data-testid="button-at-save-settings">
                   {atSettingsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
@@ -1313,6 +1495,115 @@ export default function KabuOrdersPage() {
               </CardContent>
             )}
           </Card>
+
+          {/* Feature 2: LINE Notify設定 + Feature 7: 週次レポート */}
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <BellRing className="h-4 w-4" />LINE Notify / レポート
+                  {lineNotifyStatus?.set && (
+                    <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400 border-green-300">設定済 ✓</Badge>
+                  )}
+                </CardTitle>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline" size="sm"
+                    onClick={() => weeklyReportMutation.mutate()}
+                    disabled={weeklyReportMutation.isPending || !lineNotifyStatus?.set}
+                    data-testid="button-weekly-report"
+                  >
+                    {weeklyReportMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <FileText className="h-3.5 w-3.5 mr-1" />}
+                    週次レポート送信
+                  </Button>
+                  <button
+                    onClick={() => setShowLineForm(!showLineForm)}
+                    className="text-xs text-muted-foreground hover:text-foreground underline"
+                    data-testid="button-toggle-line-form"
+                  >
+                    {showLineForm ? "閉じる" : lineNotifyStatus?.set ? "トークン変更" : "設定する"}
+                  </button>
+                </div>
+              </div>
+            </CardHeader>
+            {showLineForm && (
+              <CardContent className="space-y-3">
+                <div className="rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-3 text-xs text-blue-800 dark:text-blue-300">
+                  <p className="font-medium mb-1">LINE Notify トークンの取得方法</p>
+                  <ol className="list-decimal ml-4 space-y-0.5">
+                    <li>notify-bot.line.me/ja にアクセス</li>
+                    <li>「トークンを発行する」からトークンを発行</li>
+                    <li>通知先グループまたは「1:1 で LINE Notify から通知を受け取る」を選択</li>
+                    <li>発行されたトークンを以下に入力</li>
+                  </ol>
+                </div>
+                <form
+                  onSubmit={e => { e.preventDefault(); if (lineTokenInput) lineNotifyMutation.mutate(lineTokenInput); }}
+                  className="flex gap-2 items-center"
+                >
+                  <Input
+                    type="password"
+                    value={lineTokenInput}
+                    onChange={e => setLineTokenInput(e.target.value)}
+                    placeholder="LINE Notify アクセストークン"
+                    className="h-8 text-sm flex-1"
+                    data-testid="input-line-token"
+                    autoComplete="new-password"
+                  />
+                  <Button type="submit" size="sm" className="h-8" disabled={!lineTokenInput || lineNotifyMutation.isPending} data-testid="button-save-line-token">
+                    {lineNotifyMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "保存"}
+                  </Button>
+                  {lineNotifyStatus?.set && (
+                    <Button
+                      type="button" size="sm" variant="outline" className="h-8"
+                      onClick={() => lineNotifyTestMutation.mutate()}
+                      disabled={lineNotifyTestMutation.isPending}
+                      data-testid="button-test-line"
+                    >
+                      {lineNotifyTestMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "テスト"}
+                    </Button>
+                  )}
+                </form>
+                <p className="text-xs text-muted-foreground">トークンはDBに暗号化保存されます。買い約定・売り約定・緊急停止・日次損失上限到達時に通知が届きます。</p>
+              </CardContent>
+            )}
+          </Card>
+
+          {/* Feature 5: 損益グラフ */}
+          {pnlChartData.length >= 2 && (
+            <Card data-testid="card-pnl-chart">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <BarChart2 className="h-4 w-4" />累積損益グラフ
+                  <span className={`text-sm font-normal ml-auto ${pnlChartData[pnlChartData.length - 1]?.pnl >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                    {pnlChartData[pnlChartData.length - 1]?.pnl >= 0 ? "+" : ""}
+                    ¥{pnlChartData[pnlChartData.length - 1]?.pnl.toLocaleString()}
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={180}>
+                  <LineChart data={pnlChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+                    <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `¥${(v / 1000).toFixed(0)}k`} width={48} />
+                    <Tooltip
+                      formatter={(value: number, name: string) => [
+                        `¥${value.toLocaleString()}`,
+                        name === "pnl" ? "累積P&L" : "取引P&L"
+                      ]}
+                      labelStyle={{ fontSize: 11 }}
+                      contentStyle={{ fontSize: 11 }}
+                    />
+                    <ReferenceLine y={0} stroke="currentColor" strokeOpacity={0.3} strokeDasharray="3 3" />
+                    <Line
+                      type="monotone" dataKey="pnl"
+                      stroke="hsl(var(--primary))" strokeWidth={2} dot={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
 
           {/* オープンポジション */}
           {atStatus && atStatus.openPositions.length > 0 && (
@@ -1432,6 +1723,46 @@ export default function KabuOrdersPage() {
         </TabsContent>
 
       </Tabs>
+
+      {/* ===== 緊急全清算確認ダイアログ ===== */}
+      <Dialog open={emergencyConfirmOpen} onOpenChange={setEmergencyConfirmOpen}>
+        <DialogContent className="max-w-sm" data-testid="dialog-emergency-close">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Zap className="h-5 w-5" />全ポジション緊急清算
+            </DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              現在オープン中の全ポジション（{atStatus?.openPositions.length ?? 0}件）を成行売りで即時清算します。この操作は取り消せません。
+            </DialogDescription>
+          </DialogHeader>
+          {atStatus?.openPositions && atStatus.openPositions.length > 0 && (
+            <div className="rounded-md border p-3 space-y-1">
+              {atStatus.openPositions.map(pos => (
+                <div key={pos.ticker} className="flex justify-between text-sm">
+                  <span className="font-mono font-medium">{pos.ticker}</span>
+                  <span className="text-muted-foreground">{pos.qty}株 @¥{pos.buyPrice.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setEmergencyConfirmOpen(false)} data-testid="button-emergency-cancel">
+              キャンセル
+            </Button>
+            <Button
+              onClick={() => emergencyCloseMutation.mutate("UIから緊急清算")}
+              disabled={emergencyCloseMutation.isPending}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              data-testid="button-emergency-confirm"
+            >
+              {emergencyCloseMutation.isPending
+                ? <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                : <Zap className="h-4 w-4 mr-1" />}
+              全清算する
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ===== 本番起動確認ダイアログ ===== */}
       <Dialog open={liveConfirmOpen} onOpenChange={setLiveConfirmOpen}>

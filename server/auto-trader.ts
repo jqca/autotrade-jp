@@ -3,6 +3,8 @@ import { computeIndicatorsAtIndex } from "./backtest";
 import { kabuFetch, waitForFill } from "./kabuClient";
 import { isJpTradingHours } from "./jp-holidays";
 import type { InsertAutoTrade } from "@shared/schema";
+import https from "https";
+import querystring from "querystring";
 
 export interface AutoTraderSettings {
   tickers: string[];
@@ -15,6 +17,13 @@ export interface AutoTraderSettings {
   investPerTrade: number;
   maxDailyLossYen: number;
   intervalSeconds: number;
+  // Feature 4: 発注パラメータ
+  cashMargin: number;    // 1=現物 2=信用
+  accountType: number;   // 2=NISA 4=特定 3=一般
+  delivType: number;     // 0=指定なし 2=自動
+  // Feature 8: ボラティリティフィルター
+  volatilityFilterEnabled: boolean;
+  volatilityThresholdPct: number; // ATR/価格 % 超で取引停止
 }
 
 export interface OpenPosition {
@@ -58,6 +67,11 @@ const DEFAULT_SETTINGS: AutoTraderSettings = {
   investPerTrade: 100000,
   maxDailyLossYen: 50000,
   intervalSeconds: 60,
+  cashMargin: 1,
+  accountType: 4,
+  delivType: 2,
+  volatilityFilterEnabled: false,
+  volatilityThresholdPct: 3.0,
 };
 
 const DEFAULT_PAPER_BALANCE = 1_000_000;
@@ -79,6 +93,9 @@ class AutoTrader {
 
   // 発注パスワード（セキュリティのためDBに保存しない・メモリのみ）
   private orderPassword = "";
+
+  // LINE Notifyトークン（DBのapp_settingsに保存）
+  private lineNotifyToken = "";
 
   // 5分足バーをライブモードで蓄積するキャッシュ
   private liveIntradayCache = new Map<string, IntradayBar[]>();
@@ -103,6 +120,8 @@ class AutoTrader {
       if (settingsVal) {
         try { this.settings = { ...DEFAULT_SETTINGS, ...JSON.parse(settingsVal) }; } catch {}
       }
+      const lineToken = await storage.getSetting("line_notify_token");
+      if (lineToken) this.lineNotifyToken = lineToken;
 
       await this.restorePositions();
       this.addLog("info", `自動売買エンジン初期化完了。オープンポジション: ${this.openPositions.size}件`);
@@ -307,8 +326,14 @@ class AutoTrader {
     const today = new Date().toISOString().slice(0, 10);
     if (today !== this.todayDate) { this.todayDate = today; this.todayPnl = 0; }
 
+    // Feature 6: 日次損失上限 → 全ポジション清算
     if (this.todayPnl < -this.settings.maxDailyLossYen) {
-      this.addLog("stop", `日次損失上限 ¥${this.settings.maxDailyLossYen.toLocaleString()} 到達。本日取引停止`);
+      const msg = `日次損失上限 ¥${this.settings.maxDailyLossYen.toLocaleString()} 到達。全ポジション清算します`;
+      this.addLog("stop", msg);
+      await this.sendLineNotify(`🛑 ${msg}`);
+      if (this.openPositions.size > 0) {
+        await this.emergencyCloseAll("日次損失上限到達");
+      }
       return;
     }
     if (!this.isTradingHours()) {
@@ -333,6 +358,15 @@ class AutoTrader {
     const data = await this.fetchPriceData(ticker);
     if (!data) return;
     const { closes, currentPrice, tickerName, dataSource } = data;
+
+    // Feature 8: ボラティリティフィルター
+    if (this.settings.volatilityFilterEnabled) {
+      const atrPct = this.calcATRPercent(closes);
+      if (atrPct > this.settings.volatilityThresholdPct) {
+        this.addLog("skip", `${ticker}: ボラ高 ATR=${atrPct.toFixed(2)}% > ${this.settings.volatilityThresholdPct}% → スキップ`);
+        return;
+      }
+    }
 
     const ind = computeIndicatorsAtIndex(closes, closes.length - 1, INTRADAY_MIN_BARS);
     if (!ind) { this.addLog("skip", `${ticker}: 指標計算不可 [${dataSource}]`); return; }
@@ -425,7 +459,10 @@ class AutoTrader {
         }
         const res = await kabuFetch("POST", "/sendorder", {
           Password: this.orderPassword, Symbol: ticker, Exchange: 1, SecurityType: 1,
-          Side: "2", CashMargin: 1, DelivType: 2, AccountType: 4,
+          Side: "2",
+          CashMargin: this.settings.cashMargin,
+          DelivType: this.settings.delivType,
+          AccountType: this.settings.accountType,
           Qty: qty, FrontOrderType: 10, Price: 0, ExpireDay: 0,
         }) as any;
         if (!res?.OrderId) {
@@ -475,6 +512,7 @@ class AutoTrader {
         this.totalBuys++;
         this.addLog("buy",
           `✅ 約定確認 ${ticker} ${actualQty}株 @¥${actualPrice.toLocaleString()} 合計¥${actualCost.toLocaleString()}${fill.partialFilled ? " [部分約定]" : ""}`);
+        await this.sendLineNotify(`📈 買い約定\n${ticker}(${tickerName}) ${actualQty}株\n@¥${actualPrice.toLocaleString()}(合計¥${actualCost.toLocaleString()})\nSL:¥${stopLoss.toFixed(0)} TP:¥${target.toFixed(0)}${fill.partialFilled ? "\n⚠️ 部分約定" : ""}`);
       } else if (fill.cancelled) {
         await storage.updateAutoTrade(saved.id, {
           status: "cancelled",
@@ -528,7 +566,10 @@ class AutoTrader {
         }
         const res = await kabuFetch("POST", "/sendorder", {
           Password: this.orderPassword, Symbol: pos.ticker, Exchange: 1, SecurityType: 1,
-          Side: "1", CashMargin: 1, DelivType: 2, AccountType: 4,
+          Side: "1",
+          CashMargin: this.settings.cashMargin,
+          DelivType: this.settings.delivType,
+          AccountType: this.settings.accountType,
           Qty: pos.qty, FrontOrderType: 10, Price: 0, ExpireDay: 0,
         }) as any;
         if (!res?.OrderId) {
@@ -575,6 +616,8 @@ class AutoTrader {
         this.totalSells++;
         this.addLog("sell",
           `✅ 売り約定確認 ${pos.ticker} ${actualQty}株 @¥${actualPrice.toLocaleString()} P&L¥${Math.round(actualPnl).toLocaleString()}${fill.partialFilled ? " [部分約定]" : ""}`);
+        const pnlSign = actualPnl >= 0 ? "+" : "";
+        await this.sendLineNotify(`${actualPnl >= 0 ? "💰" : "📉"} 売り約定\n${pos.ticker} ${actualQty}株\n@¥${actualPrice.toLocaleString()}\nP&L: ${pnlSign}¥${Math.round(actualPnl).toLocaleString()}${fill.partialFilled ? "\n⚠️ 部分約定" : ""}`);
 
         // 部分約定の場合は残数をポジションとして戻す
         if (fill.partialFilled && fill.fillQty < pos.qty) {
@@ -640,6 +683,113 @@ class AutoTrader {
 
   getOrderPasswordSet(): boolean {
     return this.orderPassword.length > 0;
+  }
+
+  // ── Feature 2: LINE Notify ──────────────────────────────────────────────
+  async setLineNotifyToken(token: string) {
+    this.lineNotifyToken = token;
+    await storage.setSetting("line_notify_token", token, "LINE Notifyトークン");
+  }
+
+  getLineNotifyTokenSet(): boolean {
+    return this.lineNotifyToken.length > 0;
+  }
+
+  async sendLineNotify(message: string): Promise<{ ok: boolean; error?: string }> {
+    if (!this.lineNotifyToken) return { ok: false, error: "トークン未設定" };
+    return new Promise((resolve) => {
+      const body = querystring.stringify({ message: `\n[AutoTradeJP] ${message}` });
+      const req = https.request({
+        hostname: "notify-api.line.me",
+        path: "/api/notify",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Authorization": `Bearer ${this.lineNotifyToken}`,
+          "Content-Length": Buffer.byteLength(body),
+        },
+      }, (res) => {
+        let data = "";
+        res.on("data", (chunk) => data += chunk);
+        res.on("end", () => {
+          if (res.statusCode === 200) resolve({ ok: true });
+          else resolve({ ok: false, error: `HTTP ${res.statusCode}: ${data}` });
+        });
+      });
+      req.on("error", (err) => resolve({ ok: false, error: err.message }));
+      req.write(body);
+      req.end();
+    });
+  }
+
+  // ── Feature 8: ボラティリティ判定 ────────────────────────────────────────
+  private calcATRPercent(closes: number[]): number {
+    if (closes.length < 5) return 0;
+    const recent = closes.slice(-14);
+    let atrSum = 0;
+    for (let i = 1; i < recent.length; i++) {
+      atrSum += Math.abs(recent[i] - recent[i - 1]);
+    }
+    const atr = atrSum / (recent.length - 1);
+    return (atr / recent[recent.length - 1]) * 100;
+  }
+
+  // ── Feature 1: 緊急全ポジション清算 ────────────────────────────────────
+  async emergencyCloseAll(reason = "緊急清算"): Promise<{ closed: number; failed: number }> {
+    const positions = Array.from(this.openPositions.values());
+    if (positions.length === 0) return { closed: 0, failed: 0 };
+    this.addLog("stop", `緊急清算開始: ${positions.length}件のポジションを全決済します`);
+    await this.sendLineNotify(`🚨 緊急清算開始\n${positions.length}件のポジションを全決済します\n理由: ${reason}`);
+
+    let closed = 0, failed = 0;
+    for (const pos of positions) {
+      try {
+        await this.executeSell(pos, pos.buyPrice, "sell", reason);
+        closed++;
+      } catch (err) {
+        failed++;
+        this.addLog("error", `${pos.ticker} 緊急清算失敗: ${(err as Error).message}`);
+      }
+    }
+    this.addLog("stop", `緊急清算完了: 成功${closed}件 失敗${failed}件`);
+    await this.sendLineNotify(`🚨 緊急清算完了\n成功: ${closed}件 / 失敗: ${failed}件`);
+    return { closed, failed };
+  }
+
+  // ── Feature 7: 週次レポート ──────────────────────────────────────────────
+  async sendWeeklyReport(): Promise<{ ok: boolean; message: string }> {
+    const trades = await storage.getAutoTrades(500);
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const weekTrades = trades.filter(t => t.createdAt != null && new Date(t.createdAt) > oneWeekAgo && t.status === "executed");
+
+    const buys = weekTrades.filter(t => t.action === "buy");
+    const sells = weekTrades.filter(t => ["sell", "stop_loss", "target"].includes(t.action));
+
+    let totalPnl = 0;
+    let wins = 0, losses = 0;
+    for (const s of sells) {
+      const fillP = s.fillPrice ?? s.price;
+      const matchBuy = buys.find(b => b.ticker === s.ticker);
+      if (matchBuy) {
+        const buyP = matchBuy.fillPrice ?? matchBuy.price;
+        const qty = s.fillQty ?? s.qty ?? 0;
+        const pnl = (fillP - buyP) * qty;
+        totalPnl += pnl;
+        if (pnl >= 0) wins++; else losses++;
+      }
+    }
+
+    const winRate = (wins + losses) > 0 ? Math.round(wins / (wins + losses) * 100) : 0;
+    const msg = `📊 週次パフォーマンスレポート\n` +
+      `期間: 直近7日間\n` +
+      `取引回数: 買${buys.length}回 / 売${sells.length}回\n` +
+      `勝率: ${winRate}% (${wins}勝 ${losses}敗)\n` +
+      `合計損益: ${totalPnl >= 0 ? "+" : ""}¥${Math.round(totalPnl).toLocaleString()}\n` +
+      `本番/ペーパー: ${this.mode}モード`;
+
+    const result = await this.sendLineNotify(msg);
+    if (!result.ok) return { ok: false, message: result.error ?? "LINE送信失敗" };
+    return { ok: true, message: msg };
   }
 
   async updateSettings(patch: Partial<AutoTraderSettings>) {
