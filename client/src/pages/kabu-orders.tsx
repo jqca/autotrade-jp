@@ -155,6 +155,10 @@ export default function KabuOrdersPage() {
   const [liveConfirmOpen, setLiveConfirmOpen] = useState(false);
   const [liveConfirmText, setLiveConfirmText] = useState("");
 
+  // 発注パスワード
+  const [orderPwInput, setOrderPwInput] = useState("");
+  const [showOrderPwForm, setShowOrderPwForm] = useState(false);
+
   // 口座照合
   const [showReconcile, setShowReconcile] = useState(false);
   const [reconcileResult, setReconcileResult] = useState<{
@@ -274,6 +278,11 @@ export default function KabuOrdersPage() {
     refetchInterval: (query) => (query.state.data?.running ? 5000 : 15000),
   });
 
+  const { data: orderPwStatus, refetch: refetchOrderPwStatus } = useQuery<{ set: boolean }>({
+    queryKey: ["/api/auto-trader/order-password-status"],
+    refetchInterval: 30000,
+  });
+
   const { data: atTrades } = useQuery<AutoTrade[]>({
     queryKey: ["/api/auto-trader/trades"],
     refetchInterval: 15000,
@@ -317,6 +326,17 @@ export default function KabuOrdersPage() {
       setShowReconcile(true);
     },
     onError: (err: any) => toast({ title: "照合失敗", description: err.message, variant: "destructive" }),
+  });
+
+  const orderPwMutation = useMutation({
+    mutationFn: (pw: string) => apiRequest("POST", "/api/auto-trader/order-password", { password: pw }).then(r => r.json()),
+    onSuccess: () => {
+      refetchOrderPwStatus();
+      setOrderPwInput("");
+      setShowOrderPwForm(false);
+      toast({ title: "発注パスワード設定", description: "発注パスワードをサーバーに設定しました（メモリのみ保持）" });
+    },
+    onError: (err: any) => toast({ title: "設定失敗", description: err.message, variant: "destructive" }),
   });
 
   const saveAtSettings = () => {
@@ -907,6 +927,59 @@ export default function KabuOrdersPage() {
                 </div>
               )}
 
+              {/* 発注パスワード設定 (本番モード) */}
+              {atMode === "live" && (
+                <div className={`rounded-md border p-3 text-sm space-y-2 ${orderPwStatus?.set ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950" : "border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950"}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {orderPwStatus?.set ? (
+                        <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <AlertTriangle className="h-4 w-4 text-orange-600 shrink-0" />
+                      )}
+                      <span className={`font-medium text-xs ${orderPwStatus?.set ? "text-emerald-800 dark:text-emerald-300" : "text-orange-800 dark:text-orange-300"}`}>
+                        発注パスワード: {orderPwStatus?.set ? "設定済み ✓" : "未設定（本番発注には必須）"}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setShowOrderPwForm(!showOrderPwForm)}
+                      className="text-xs text-muted-foreground hover:text-foreground underline"
+                      data-testid="button-toggle-order-pw"
+                    >
+                      {showOrderPwForm ? "閉じる" : orderPwStatus?.set ? "変更" : "設定する"}
+                    </button>
+                  </div>
+                  {showOrderPwForm && (
+                    <form
+                      onSubmit={e => { e.preventDefault(); if (orderPwInput) orderPwMutation.mutate(orderPwInput); }}
+                      className="flex gap-2 items-center"
+                    >
+                      <Input
+                        type="password"
+                        value={orderPwInput}
+                        onChange={e => setOrderPwInput(e.target.value)}
+                        placeholder="証券口座のパスワード"
+                        className="h-8 text-sm flex-1"
+                        data-testid="input-order-password"
+                        autoComplete="new-password"
+                      />
+                      <Button
+                        type="submit"
+                        size="sm"
+                        className="h-8"
+                        disabled={!orderPwInput || orderPwMutation.isPending}
+                        data-testid="button-set-order-password"
+                      >
+                        {orderPwMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "設定"}
+                      </Button>
+                    </form>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    ※ パスワードはサーバーメモリのみに保持されます。DBには保存されません。サーバー再起動後は再設定が必要です。
+                  </p>
+                </div>
+              )}
+
               {/* モード選択と起動停止 */}
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
@@ -1394,6 +1467,17 @@ export default function KabuOrdersPage() {
             </div>
           )}
 
+          {/* パスワード未設定の場合は警告 */}
+          {!orderPwStatus?.set && (
+            <div className="flex gap-2 rounded-md border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950 p-3 text-xs text-orange-800 dark:text-orange-300">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">発注パスワードが未設定です</p>
+                <p>本番起動する前に、エンジンカード内の「発注パスワード」を設定してください。未設定のまま起動した場合、全発注が「発注パスワード未設定」エラーで失敗します。</p>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label className="text-sm font-medium">
               確認のため <span className="font-bold text-red-600 font-mono">本番取引開始</span> と入力してください
@@ -1422,7 +1506,7 @@ export default function KabuOrdersPage() {
                 setLiveConfirmText("");
                 atStartMutation.mutate("live");
               }}
-              disabled={liveConfirmText !== "本番取引開始" || atStartMutation.isPending}
+              disabled={liveConfirmText !== "本番取引開始" || !orderPwStatus?.set || atStartMutation.isPending}
               className="bg-red-600 hover:bg-red-700 text-white"
               data-testid="button-live-confirm-ok"
             >

@@ -1479,6 +1479,21 @@ export async function registerRoutes(
     res.json(autoTrader.getStatus());
   });
 
+  // パスワード設定済み確認（値は返さない・真偽値のみ）
+  app.get("/api/auto-trader/order-password-status", requireAuth, (_req, res) => {
+    res.json({ set: autoTrader.getOrderPasswordSet() });
+  });
+
+  // 発注パスワード設定（メモリのみ保持・DBには保存しない）
+  app.post("/api/auto-trader/order-password", requireAuth, (req: any, res) => {
+    const pw = req.body?.password;
+    if (typeof pw !== "string") {
+      return res.status(400).json({ message: "パスワードは文字列で指定してください" });
+    }
+    autoTrader.setOrderPassword(pw);
+    res.json({ set: autoTrader.getOrderPasswordSet() });
+  });
+
   app.post("/api/auto-trader/start", requireAuth, async (req: any, res) => {
     try {
       const mode = req.body?.mode === "live" ? "live" : "paper";

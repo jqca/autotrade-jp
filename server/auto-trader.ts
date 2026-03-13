@@ -77,6 +77,9 @@ class AutoTrader {
   private settings: AutoTraderSettings = { ...DEFAULT_SETTINGS };
   private intervalId: NodeJS.Timeout | null = null;
 
+  // 発注パスワード（セキュリティのためDBに保存しない・メモリのみ）
+  private orderPassword = "";
+
   // 5分足バーをライブモードで蓄積するキャッシュ
   private liveIntradayCache = new Map<string, IntradayBar[]>();
   private liveCacheDate = "";
@@ -413,8 +416,15 @@ class AutoTrader {
       // ① 発注送信
       let orderId: string;
       try {
+        if (!this.orderPassword) {
+          trade.status = "failed";
+          trade.errorMsg = "発注パスワード未設定";
+          this.addLog("error", `${ticker} 買い発注スキップ: 発注パスワードが設定されていません`);
+          await storage.insertAutoTrade(trade);
+          return;
+        }
         const res = await kabuFetch("POST", "/sendorder", {
-          Password: "", Symbol: ticker, Exchange: 1, SecurityType: 1,
+          Password: this.orderPassword, Symbol: ticker, Exchange: 1, SecurityType: 1,
           Side: "2", CashMargin: 1, DelivType: 2, AccountType: 4,
           Qty: qty, FrontOrderType: 10, Price: 0, ExpireDay: 0,
         }) as any;
@@ -509,8 +519,15 @@ class AutoTrader {
       // ① 発注送信
       let orderId: string;
       try {
+        if (!this.orderPassword) {
+          trade.status = "failed";
+          trade.errorMsg = "発注パスワード未設定";
+          this.addLog("error", `${pos.ticker} 売り発注スキップ: 発注パスワードが設定されていません`);
+          await storage.insertAutoTrade(trade);
+          return;
+        }
         const res = await kabuFetch("POST", "/sendorder", {
-          Password: "", Symbol: pos.ticker, Exchange: 1, SecurityType: 1,
+          Password: this.orderPassword, Symbol: pos.ticker, Exchange: 1, SecurityType: 1,
           Side: "1", CashMargin: 1, DelivType: 2, AccountType: 4,
           Qty: pos.qty, FrontOrderType: 10, Price: 0, ExpireDay: 0,
         }) as any;
@@ -614,6 +631,15 @@ class AutoTrader {
       settings: this.settings,
       barCounts,
     };
+  }
+
+  setOrderPassword(pw: string) {
+    this.orderPassword = pw;
+    this.addLog("info", pw ? "発注パスワードを設定しました" : "発注パスワードをクリアしました");
+  }
+
+  getOrderPasswordSet(): boolean {
+    return this.orderPassword.length > 0;
   }
 
   async updateSettings(patch: Partial<AutoTraderSettings>) {
