@@ -100,6 +100,7 @@ export interface IStorage {
   getKabuOrders(limit?: number): Promise<KabuOrder[]>;
   updateKabuOrder(id: string, updates: Partial<InsertKabuOrder>): Promise<KabuOrder | undefined>;
   insertAutoTrade(trade: InsertAutoTrade): Promise<AutoTrade>;
+  updateAutoTrade(id: string, updates: Partial<InsertAutoTrade>): Promise<AutoTrade | undefined>;
   getAutoTrades(limit?: number): Promise<AutoTrade[]>;
 }
 
@@ -629,6 +630,11 @@ export class DatabaseStorage implements IStorage {
 
   async insertAutoTrade(trade: InsertAutoTrade): Promise<AutoTrade> {
     const [row] = await db.insert(autoTrades).values(trade).returning();
+    return row;
+  }
+
+  async updateAutoTrade(id: string, updates: Partial<InsertAutoTrade>): Promise<AutoTrade | undefined> {
+    const [row] = await db.update(autoTrades).set(updates).where(eq(autoTrades.id, id)).returning();
     return row;
   }
 

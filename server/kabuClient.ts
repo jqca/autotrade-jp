@@ -111,3 +111,110 @@ export function parseKabuExchange(exchange: number): string {
   const map: Record<number, string> = { 1: "東証", 3: "名証", 5: "福証", 6: "札証" };
   return map[exchange] ?? String(exchange);
 }
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export interface FillResult {
+  filled: boolean;
+  partialFilled: boolean;
+  fillPrice: number | null;
+  fillQty: number;
+  orderQty: number;
+  state: number;
+  stateLabel: string;
+  timedOut: boolean;
+  cancelled: boolean;
+}
+
+/**
+ * 発注後に約定を確認するポーリングループ
+ * kabu station® GET /orders?product=0 を定期的に照会し、
+ * 約定完了・失効・取消・タイムアウトのいずれかになるまで待機する
+ *
+ * State:
+ *   1=待機中, 2=処理中, 3=処理済(全数約定),
+ *   4=訂正取消送信済, 5=受付済, 6=失効, 7=取消済,
+ *   8=未送信, 9=部分約定
+ */
+export async function waitForFill(
+  orderId: string,
+  options: { timeoutMs?: number; pollIntervalMs?: number } = {}
+): Promise<FillResult> {
+  const timeoutMs = options.timeoutMs ?? 60_000;
+  const pollIntervalMs = options.pollIntervalMs ?? 3_000;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    try {
+      const orders = await kabuFetch("GET", "/orders?product=0") as any[];
+      const order = Array.isArray(orders) ? orders.find((o: any) => o.ID === orderId) : null;
+
+      if (order) {
+        const state: number = order.State ?? 0;
+        const orderQty: number = order.OrderQty ?? 0;
+        const cumQty: number = order.CumQty ?? 0;
+
+        // Detailsから加重平均約定価格を計算
+        let totalValue = 0;
+        let totalQty = 0;
+        if (Array.isArray(order.Details)) {
+          for (const d of order.Details) {
+            if (d.ExecType === "Filled" && typeof d.Price === "number" && d.Price > 0 && d.Qty > 0) {
+              totalValue += d.Price * d.Qty;
+              totalQty += d.Qty;
+            }
+          }
+        }
+        // フォールバック: Detailsがない場合はOrderのPrice（成行では0のことが多い）
+        const fillPrice = totalQty > 0
+          ? Math.round((totalValue / totalQty) * 100) / 100
+          : (typeof order.Price === "number" && order.Price > 0 ? order.Price : null);
+
+        // 全数約定 (state=3=処理済, または CumQty >= OrderQty)
+        if (state === 3 || (cumQty > 0 && orderQty > 0 && cumQty >= orderQty)) {
+          return {
+            filled: true, partialFilled: false,
+            fillPrice, fillQty: cumQty || totalQty, orderQty,
+            state, stateLabel: parseKabuOrderStatus(state),
+            timedOut: false, cancelled: false,
+          };
+        }
+
+        // 失効・取消
+        if (state === 6 || state === 7) {
+          return {
+            filled: false, partialFilled: cumQty > 0,
+            fillPrice: cumQty > 0 ? fillPrice : null,
+            fillQty: cumQty, orderQty,
+            state, stateLabel: parseKabuOrderStatus(state),
+            timedOut: false, cancelled: true,
+          };
+        }
+
+        // 部分約定中：デッドライン間際なら部分約定として返す
+        if (state === 9 && cumQty > 0 && Date.now() + pollIntervalMs > deadline) {
+          return {
+            filled: false, partialFilled: true,
+            fillPrice, fillQty: cumQty, orderQty,
+            state, stateLabel: parseKabuOrderStatus(state),
+            timedOut: false, cancelled: false,
+          };
+        }
+      }
+    } catch {
+      // 一時的なエラーはスキップしてリトライ
+    }
+
+    await sleep(pollIntervalMs);
+  }
+
+  // タイムアウト
+  return {
+    filled: false, partialFilled: false,
+    fillPrice: null, fillQty: 0, orderQty: 0,
+    state: 0, stateLabel: "タイムアウト",
+    timedOut: true, cancelled: false,
+  };
+}

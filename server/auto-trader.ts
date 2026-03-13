@@ -1,6 +1,6 @@
 import { storage } from "./storage";
 import { computeIndicatorsAtIndex } from "./backtest";
-import { kabuFetch } from "./kabuClient";
+import { kabuFetch, waitForFill } from "./kabuClient";
 import { isJpTradingHours } from "./jp-holidays";
 import type { InsertAutoTrade } from "@shared/schema";
 
@@ -398,8 +398,6 @@ class AutoTrader {
 
     const label = ["MACD", "RSI", "MA", "BB"]
       .filter((_, i) => [ind?.macdTrend, ind?.rsiTrend, ind?.maTrend, ind?.bbTrend][i] === "buy").join("+");
-    const stopLoss = price * (1 - this.settings.stopLossPercent / 100);
-    const target = price * (1 + this.settings.targetPercent / 100);
 
     const trade: InsertAutoTrade = {
       mode: this.mode, action: "buy", ticker, tickerName, price, qty,
@@ -412,13 +410,14 @@ class AutoTrader {
     };
 
     if (this.mode === "live") {
+      // ① 発注送信
+      let orderId: string;
       try {
         const res = await kabuFetch("POST", "/sendorder", {
           Password: "", Symbol: ticker, Exchange: 1, SecurityType: 1,
           Side: "2", CashMargin: 1, DelivType: 2, AccountType: 4,
           Qty: qty, FrontOrderType: 10, Price: 0, ExpireDay: 0,
         }) as any;
-        trade.orderId = res?.OrderId ?? null;
         if (!res?.OrderId) {
           trade.status = "failed";
           trade.errorMsg = JSON.stringify(res);
@@ -426,6 +425,7 @@ class AutoTrader {
           await storage.insertAutoTrade(trade);
           return;
         }
+        orderId = res.OrderId;
       } catch (err) {
         trade.status = "failed";
         trade.errorMsg = (err as Error).message;
@@ -433,14 +433,64 @@ class AutoTrader {
         await storage.insertAutoTrade(trade);
         return;
       }
+
+      // ② pending_fill でDB保存（受付済み・未確認）
+      trade.status = "pending_fill";
+      trade.orderId = orderId;
+      const saved = await storage.insertAutoTrade(trade);
+      this.addLog("info", `${ticker} 発注受付 OrderId=${orderId} 約定確認中... (最大60秒)`);
+
+      // ③ 約定確認ループ
+      const fill = await waitForFill(orderId, { timeoutMs: 60_000, pollIntervalMs: 3_000 });
+
+      if (fill.filled || fill.partialFilled) {
+        const actualPrice = fill.fillPrice ?? price;
+        const actualQty = fill.fillQty > 0 ? fill.fillQty : qty;
+        const actualCost = actualPrice * actualQty;
+        const stopLoss = actualPrice * (1 - this.settings.stopLossPercent / 100);
+        const target = actualPrice * (1 + this.settings.targetPercent / 100);
+
+        await storage.updateAutoTrade(saved.id, {
+          status: "executed",
+          price: actualPrice,
+          qty: actualQty,
+          fillPrice: fill.fillPrice ?? undefined,
+          fillQty: fill.fillQty > 0 ? fill.fillQty : undefined,
+          signalLabel: `${label}${fill.partialFilled ? " [部分約定]" : ""}`,
+        });
+        this.openPositions.set(ticker, {
+          ticker, tickerName, buyPrice: actualPrice, qty: actualQty,
+          buyDate: new Date().toISOString(), stopLoss, target, entryId: saved.id,
+        });
+        this.totalBuys++;
+        this.addLog("buy",
+          `✅ 約定確認 ${ticker} ${actualQty}株 @¥${actualPrice.toLocaleString()} 合計¥${actualCost.toLocaleString()}${fill.partialFilled ? " [部分約定]" : ""}`);
+      } else if (fill.cancelled) {
+        await storage.updateAutoTrade(saved.id, {
+          status: "cancelled",
+          errorMsg: `注文${fill.stateLabel}: OrderId=${orderId}`,
+        });
+        this.addLog("error", `${ticker} 注文${fill.stateLabel} OrderId=${orderId}`);
+      } else {
+        // タイムアウト（注文は生きているかもしれない）
+        await storage.updateAutoTrade(saved.id, {
+          status: "fill_timeout",
+          errorMsg: `約定確認タイムアウト(60秒): OrderId=${orderId}`,
+        });
+        this.addLog("error", `${ticker} 約定確認タイムアウト OrderId=${orderId} — 手動で確認してください`);
+      }
+      return;
     }
 
-    if (this.mode === "paper") this.paperBalance -= totalCost;
+    // ペーパーモード: 即時約定
+    this.paperBalance -= totalCost;
+    const stopLoss = price * (1 - this.settings.stopLossPercent / 100);
+    const target = price * (1 + this.settings.targetPercent / 100);
     const saved = await storage.insertAutoTrade(trade);
     this.openPositions.set(ticker, { ticker, tickerName, buyPrice: price, qty, buyDate: new Date().toISOString(), stopLoss, target, entryId: saved.id });
     this.totalBuys++;
     this.addLog("buy", `買い執行 ${ticker} ${qty}株 @¥${price.toLocaleString()} 合計¥${totalCost.toLocaleString()}`);
-    if (this.mode === "paper") await storage.setSetting("auto_trader_paper_balance", String(this.paperBalance), "ペーパートレード残高");
+    await storage.setSetting("auto_trader_paper_balance", String(this.paperBalance), "ペーパートレード残高");
   }
 
   private async executeSell(pos: OpenPosition, price: number, action: "sell" | "stop_loss" | "target", reason: string) {
@@ -456,34 +506,93 @@ class AutoTrader {
     };
 
     if (this.mode === "live") {
+      // ① 発注送信
+      let orderId: string;
       try {
         const res = await kabuFetch("POST", "/sendorder", {
           Password: "", Symbol: pos.ticker, Exchange: 1, SecurityType: 1,
           Side: "1", CashMargin: 1, DelivType: 2, AccountType: 4,
           Qty: pos.qty, FrontOrderType: 10, Price: 0, ExpireDay: 0,
         }) as any;
-        trade.orderId = res?.OrderId ?? null;
         if (!res?.OrderId) {
           trade.status = "failed"; trade.errorMsg = JSON.stringify(res);
           this.addLog("error", `${pos.ticker} 売り失敗: ${JSON.stringify(res)}`);
           await storage.insertAutoTrade(trade);
           return;
         }
+        orderId = res.OrderId;
       } catch (err) {
         trade.status = "failed"; trade.errorMsg = (err as Error).message;
         this.addLog("error", `${pos.ticker} 売りエラー: ${(err as Error).message}`);
         await storage.insertAutoTrade(trade);
         return;
       }
+
+      // ② pending_fill でDB保存
+      trade.status = "pending_fill";
+      trade.orderId = orderId;
+      const saved = await storage.insertAutoTrade(trade);
+      this.addLog("info", `${pos.ticker} 売り発注受付 OrderId=${orderId} 約定確認中... (最大60秒)`);
+
+      // ③ ポジションを一旦削除（再エントリー防止）
+      this.openPositions.delete(pos.ticker);
+
+      // ④ 約定確認ループ
+      const fill = await waitForFill(orderId, { timeoutMs: 60_000, pollIntervalMs: 3_000 });
+
+      if (fill.filled || fill.partialFilled) {
+        const actualPrice = fill.fillPrice ?? price;
+        const actualQty = fill.fillQty > 0 ? fill.fillQty : pos.qty;
+        const actualPnl = (actualPrice - pos.buyPrice) * actualQty;
+
+        await storage.updateAutoTrade(saved.id, {
+          status: "executed",
+          price: actualPrice,
+          qty: actualQty,
+          fillPrice: fill.fillPrice ?? undefined,
+          fillQty: fill.fillQty > 0 ? fill.fillQty : undefined,
+          profitLoss: actualPnl,
+          signalLabel: `${reason}${fill.partialFilled ? " [部分約定]" : ""}`,
+        });
+        this.todayPnl += actualPnl;
+        this.totalSells++;
+        this.addLog("sell",
+          `✅ 売り約定確認 ${pos.ticker} ${actualQty}株 @¥${actualPrice.toLocaleString()} P&L¥${Math.round(actualPnl).toLocaleString()}${fill.partialFilled ? " [部分約定]" : ""}`);
+
+        // 部分約定の場合は残数をポジションとして戻す
+        if (fill.partialFilled && fill.fillQty < pos.qty) {
+          const remainQty = pos.qty - fill.fillQty;
+          this.openPositions.set(pos.ticker, { ...pos, qty: remainQty });
+          this.addLog("info", `${pos.ticker} 部分約定: 残${remainQty}株はポジション継続`);
+        }
+      } else if (fill.cancelled) {
+        // 失効・取消: ポジションを戻す
+        await storage.updateAutoTrade(saved.id, {
+          status: "cancelled",
+          errorMsg: `売り注文${fill.stateLabel}: OrderId=${orderId}`,
+        });
+        this.openPositions.set(pos.ticker, pos);
+        this.addLog("error", `${pos.ticker} 売り注文${fill.stateLabel} — ポジション継続 OrderId=${orderId}`);
+      } else {
+        // タイムアウト: ポジションを戻す
+        await storage.updateAutoTrade(saved.id, {
+          status: "fill_timeout",
+          errorMsg: `売り約定確認タイムアウト(60秒): OrderId=${orderId}`,
+        });
+        this.openPositions.set(pos.ticker, pos);
+        this.addLog("error", `${pos.ticker} 売り約定確認タイムアウト — ポジション継続 手動確認要 OrderId=${orderId}`);
+      }
+      return;
     }
 
-    if (this.mode === "paper") this.paperBalance += proceeds;
+    // ペーパーモード: 即時約定
+    this.paperBalance += proceeds;
     await storage.insertAutoTrade(trade);
     this.openPositions.delete(pos.ticker);
     this.todayPnl += pnl;
     this.totalSells++;
     this.addLog("sell", `売り執行 ${pos.ticker} ${pos.qty}株 @¥${price.toLocaleString()} P&L¥${Math.round(pnl).toLocaleString()}`);
-    if (this.mode === "paper") await storage.setSetting("auto_trader_paper_balance", String(this.paperBalance), "ペーパートレード残高");
+    await storage.setSetting("auto_trader_paper_balance", String(this.paperBalance), "ペーパートレード残高");
   }
 
   getStatus() {

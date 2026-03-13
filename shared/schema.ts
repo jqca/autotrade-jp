@@ -311,6 +311,8 @@ export const autoTrades = pgTable("auto_trades", {
   capitalAfter: real("capital_after"),
   orderId: text("order_id"),
   status: text("status").notNull().default("executed"),
+  fillPrice: real("fill_price"),
+  fillQty: integer("fill_qty"),
   errorMsg: text("error_msg"),
   macdTrend: text("macd_trend"),
   rsiTrend: text("rsi_trend"),
