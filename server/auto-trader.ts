@@ -24,6 +24,8 @@ export interface AutoTraderSettings {
   // Feature 8: ボラティリティフィルター
   volatilityFilterEnabled: boolean;
   volatilityThresholdPct: number; // ATR/価格 % 超で取引停止
+  // Feature 9: 日経平均トレンドフィルター
+  nikkeiFilterEnabled: boolean; // true=日経下降トレンド時は買い停止
 }
 
 export interface OpenPosition {
@@ -72,6 +74,7 @@ const DEFAULT_SETTINGS: AutoTraderSettings = {
   delivType: 2,
   volatilityFilterEnabled: false,
   volatilityThresholdPct: 3.0,
+  nikkeiFilterEnabled: false,
 };
 
 const DEFAULT_PAPER_BALANCE = 1_000_000;
@@ -321,6 +324,30 @@ class AutoTrader {
     }
   }
 
+  // Feature 9: 日経平均トレンド判定（DBからMA25/MA75計算）
+  private async getNikkeiTrend(): Promise<{ trend: "up" | "down" | "neutral"; ma25: number; ma75: number; close: number } | null> {
+    try {
+      const fromDate = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      const bars = await storage.getIntradayPrices("^N225", fromDate, undefined, "1d");
+      if (bars.length < 25) return null;
+      const closes = bars.map(b => b.close);
+      const latest = closes[closes.length - 1];
+      const ma25 = closes.slice(-25).reduce((s, v) => s + v, 0) / 25;
+      const ma75 = closes.length >= 75 ? closes.slice(-75).reduce((s, v) => s + v, 0) / 75 : closes.reduce((s, v) => s + v, 0) / closes.length;
+      let trend: "up" | "down" | "neutral";
+      if (latest > ma25 && ma25 > ma75) {
+        trend = "up";
+      } else if (latest < ma25 && ma25 < ma75) {
+        trend = "down";
+      } else {
+        trend = "neutral";
+      }
+      return { trend, ma25, ma75, close: latest };
+    } catch {
+      return null;
+    }
+  }
+
   private async runCycle() {
     this.lastRunAt = new Date().toISOString();
     const today = new Date().toISOString().slice(0, 10);
@@ -341,12 +368,28 @@ class AutoTrader {
       return;
     }
 
+    // Feature 9: 日経平均トレンドフィルター
+    let nikkeiFilterBlocked = false;
+    if (this.settings.nikkeiFilterEnabled) {
+      const nk = await this.getNikkeiTrend();
+      if (nk) {
+        if (nk.trend === "down") {
+          nikkeiFilterBlocked = true;
+          this.addLog("skip", `日経フィルター: 下降トレンド (N225=${nk.close.toFixed(0)} MA25=${nk.ma25.toFixed(0)} MA75=${nk.ma75.toFixed(0)}) → 買い停止`);
+        } else {
+          this.addLog("info", `日経フィルター: ${nk.trend === "up" ? "上昇" : "中立"}トレンド (N225=${nk.close.toFixed(0)}) → 買い許可`);
+        }
+      } else {
+        this.addLog("info", "日経フィルター: データ不足のためスキップ");
+      }
+    }
+
     this.addLog("info", `チェック開始 (${this.settings.tickers.length}銘柄 / ポジション ${this.openPositions.size}/${this.settings.maxPositions})`);
 
     for (const pos of this.openPositions.values()) {
       await this.checkPosition(pos);
     }
-    if (this.openPositions.size < this.settings.maxPositions) {
+    if (!nikkeiFilterBlocked && this.openPositions.size < this.settings.maxPositions) {
       for (const ticker of this.settings.tickers) {
         if (this.openPositions.has(ticker)) continue;
         await this.checkBuySignal(ticker);

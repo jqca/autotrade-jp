@@ -2,11 +2,46 @@ import cron from "node-cron";
 import { startFetchAllPrices, getFetchAllProgress } from "./import-stocks";
 import { startIndicatorBatch, getIndicatorBatchProgress, startIntradayIndicatorBatch, getIntradayIndicatorBatchProgress } from "./technical-batch";
 import { startIntradayFetch, getIntradayFetchProgress } from "./intraday-batch";
+import { fetchHistoricalPrices } from "./yahoo-finance";
+import { storage } from "./storage";
+import type { InsertIntradayPrice } from "@shared/schema";
 
 let scheduledTask: cron.ScheduledTask | null = null;
 let lastRunAt: string | null = null;
 let nextRunAt: string | null = null;
 let isEnabled = true;
+let nikkeiStatus: "idle" | "running" | "done" | "error" = "idle";
+let nikkeiLastFetchedAt: string | null = null;
+
+async function fetchAndStoreNikkeiDaily(): Promise<void> {
+  nikkeiStatus = "running";
+  console.log("[Scheduler] 日経平均日足データ取得を開始します...");
+  try {
+    const prices = await fetchHistoricalPrices("^N225", "2y", "1d");
+    if (prices.length === 0) {
+      console.warn("[Scheduler] 日経平均日足データが空でした");
+      nikkeiStatus = "error";
+      return;
+    }
+    const bars: InsertIntradayPrice[] = prices.map(p => ({
+      ticker: "^N225",
+      datetime: p.date.split("T")[0],
+      open: p.open,
+      high: p.high,
+      low: p.low,
+      close: p.close,
+      volume: p.volume ?? 0,
+      interval: "1d",
+    }));
+    const inserted = await storage.bulkInsertIntradayPrices(bars);
+    nikkeiLastFetchedAt = new Date().toISOString();
+    nikkeiStatus = "done";
+    console.log(`[Scheduler] 日経平均日足データ取得完了: ${prices.length}件取得 (新規${inserted}件保存)`);
+  } catch (err: any) {
+    nikkeiStatus = "error";
+    console.error("[Scheduler] 日経平均日足取得エラー:", err.message);
+  }
+}
 
 function getNextRunTime(): string {
   const now = new Date();
@@ -59,8 +94,12 @@ export function startScheduler() {
           console.log("[Scheduler] テクニカル指標計算完了。5分足データ取得を開始します...");
           startIntradayFetch("daily", 3, () => {
             console.log("[Scheduler] 5分足データ取得完了。5分足テクニカル指標計算を開始します...");
-            startIntradayIndicatorBatch(3).catch((err: any) => {
+            startIntradayIndicatorBatch(3).then(() => {
+              console.log("[Scheduler] 5分足テクニカル指標計算完了。日経平均日足データを取得します...");
+              fetchAndStoreNikkeiDaily();
+            }).catch((err: any) => {
               console.error("[Scheduler] 5分足テクニカル指標バッチエラー:", err.message);
+              fetchAndStoreNikkeiDaily();
             });
           }).catch((err: any) => {
             console.error("[Scheduler] 5分足データ取得エラー:", err.message);
@@ -109,6 +148,8 @@ export function getSchedulerStatus() {
     intradayProgress: intradayProg.status !== "idle" ? intradayProg : null,
     intradayIndicatorStatus: intradayIndicatorProg.status,
     intradayIndicatorProgress: intradayIndicatorProg.status !== "idle" ? intradayIndicatorProg : null,
+    nikkeiStatus,
+    nikkeiLastFetchedAt,
   };
 }
 

@@ -44,6 +44,7 @@ interface AutoTraderSettings {
   delivType: number;
   volatilityFilterEnabled: boolean;
   volatilityThresholdPct: number;
+  nikkeiFilterEnabled: boolean;
 }
 
 interface OpenPosition {
@@ -165,6 +166,7 @@ export default function KabuOrdersPage() {
   const [atDelivType, setAtDelivType] = useState(0);
   const [atVolFilterEnabled, setAtVolFilterEnabled] = useState(false);
   const [atVolThreshold, setAtVolThreshold] = useState(5.0);
+  const [atNikkeiFilterEnabled, setAtNikkeiFilterEnabled] = useState(false);
 
   // 本番確認ダイアログ
   const [liveConfirmOpen, setLiveConfirmOpen] = useState(false);
@@ -416,6 +418,7 @@ export default function KabuOrdersPage() {
       delivType: atDelivType,
       volatilityFilterEnabled: atVolFilterEnabled,
       volatilityThresholdPct: atVolThreshold,
+      nikkeiFilterEnabled: atNikkeiFilterEnabled,
     });
   };
 
@@ -435,6 +438,7 @@ export default function KabuOrdersPage() {
     setAtDelivType(s.delivType ?? 0);
     setAtVolFilterEnabled(s.volatilityFilterEnabled ?? false);
     setAtVolThreshold(s.volatilityThresholdPct ?? 5.0);
+    setAtNikkeiFilterEnabled(s.nikkeiFilterEnabled ?? false);
   };
 
   const pnlChartData = useMemo(() => {
@@ -1486,6 +1490,28 @@ export default function KabuOrdersPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Feature 9: 日経平均トレンドフィルター */}
+                <Separator className="my-1" />
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">日経平均トレンドフィルター</p>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={atNikkeiFilterEnabled}
+                      onCheckedChange={setAtNikkeiFilterEnabled}
+                      data-testid="switch-nikkei-filter"
+                    />
+                    <Label className="text-sm cursor-pointer" onClick={() => setAtNikkeiFilterEnabled(!atNikkeiFilterEnabled)}>
+                      日経フィルター有効
+                    </Label>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    N225が下降トレンド（終値 &lt; MA25 &lt; MA75）の場合、新規買いを停止
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  ※ 夜間バッチで取得した日経平均日足データ（DBのMA25/MA75）を参照します
+                </p>
 
                 <Button onClick={saveAtSettings} disabled={atSettingsMutation.isPending} className="w-full"
                   data-testid="button-at-save-settings">

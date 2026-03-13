@@ -1528,6 +1528,7 @@ export async function registerRoutes(
         delivType: typeof s.delivType === "number" ? s.delivType : undefined,
         volatilityFilterEnabled: typeof s.volatilityFilterEnabled === "boolean" ? s.volatilityFilterEnabled : undefined,
         volatilityThresholdPct: typeof s.volatilityThresholdPct === "number" ? s.volatilityThresholdPct : undefined,
+        nikkeiFilterEnabled: typeof s.nikkeiFilterEnabled === "boolean" ? s.nikkeiFilterEnabled : undefined,
       });
       res.json(updated);
     } catch (err: any) {

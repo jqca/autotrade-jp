@@ -50,6 +50,8 @@ interface SchedulerStatus {
   intradayProgress: IntradayFetchProgress | null;
   intradayIndicatorStatus: string;
   intradayIndicatorProgress: BatchProgress | null;
+  nikkeiStatus: string;
+  nikkeiLastFetchedAt: string | null;
 }
 
 function StatCard({ title, value, change, icon: Icon, trend }: {
@@ -512,6 +514,15 @@ export default function Dashboard() {
                   <Badge variant={scheduler.intradayIndicatorStatus === "running" ? "default" : scheduler.intradayIndicatorStatus === "completed" ? "secondary" : "outline"} className="text-xs" data-testid="badge-intraday-indicator-status">
                     {scheduler.intradayIndicatorStatus === "idle" ? "待機中" : scheduler.intradayIndicatorStatus === "running" ? "実行中" : scheduler.intradayIndicatorStatus === "completed" ? "完了" : "エラー"}
                   </Badge>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">日経平均:</span>
+                  <Badge variant={scheduler.nikkeiStatus === "running" ? "default" : scheduler.nikkeiStatus === "done" ? "secondary" : scheduler.nikkeiStatus === "error" ? "destructive" : "outline"} className="text-xs" data-testid="badge-nikkei-status">
+                    {scheduler.nikkeiStatus === "idle" ? "未取得" : scheduler.nikkeiStatus === "running" ? "取得中" : scheduler.nikkeiStatus === "done" ? "取得済" : "エラー"}
+                  </Badge>
+                  {scheduler.nikkeiLastFetchedAt && (
+                    <span className="text-xs text-muted-foreground">{new Date(scheduler.nikkeiLastFetchedAt).toLocaleDateString("ja-JP")}</span>
+                  )}
                 </div>
               </div>
               {scheduler.indicatorProgress && scheduler.indicatorProgress.status === "running" && (
