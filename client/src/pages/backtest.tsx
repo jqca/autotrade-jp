@@ -237,6 +237,7 @@ export default function Backtest() {
   const [slippagePct, setSlippagePct] = useState<number>(0.05);
   const [creditRateAnnual, setCreditRateAnnual] = useState<number>(0);
   const [rrRatio, setRrRatio] = useState<number>(2.0);
+  const [positionSizePct, setPositionSizePct] = useState<number>(10);
   const [showAdvanced, setShowAdvanced] = useState(true);
 
   const [now, setNow] = useState(Date.now());
@@ -338,6 +339,7 @@ export default function Backtest() {
       slippagePct,
       creditRateAnnual,
       rrRatio,
+      positionSizePct,
       rsiExcludeAfterMin: rsiExcludeAfterEnabled ? rsiExcludeAfterMin : 0,
       rsiExcludeAfterMax: rsiExcludeAfterEnabled ? rsiExcludeAfterMax : 0,
       rsiExcludeAfterTime: rsiExcludeAfterEnabled ? rsiExcludeAfterTime : 0,
@@ -855,6 +857,35 @@ export default function Backtest() {
                   {rrRatio <= 1
                     ? "無効（利確目標は上のパーセント設定をそのまま使用します）"
                     : `利確目標 = max(設定値, ストップ幅 × ${rrRatio}) に自動調整。ストップ${stopLossPercent}% → 最低目標 ${(stopLossPercent * rrRatio).toFixed(2)}%`}
+                </p>
+              </div>
+
+              {/* ポジションサイジング */}
+              <div className="space-y-3 pb-2 border-b">
+                <Label className="text-sm font-medium">1トレードの資金割合</Label>
+                <div className="flex gap-2 flex-wrap">
+                  {[
+                    { label: "固定1ロット", value: 0 },
+                    { label: "5%", value: 5 },
+                    { label: "10% ★推奨", value: 10 },
+                    { label: "20%", value: 20 },
+                    { label: "30%", value: 30 },
+                  ].map(opt => (
+                    <Button
+                      key={opt.value}
+                      variant={positionSizePct === opt.value ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setPositionSizePct(opt.value)}
+                      data-testid={`button-position-size-${opt.value}`}
+                    >
+                      {opt.label}
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {positionSizePct === 0
+                    ? "固定100株（デフォルト）。低価格株は投資額が小さくなります。"
+                    : `総資産の${positionSizePct}%を1トレードに投入。100万円なら1トレードあたり${(1000000 * positionSizePct / 100).toLocaleString()}円。資金が増えれば投入額も増加（複利効果）。`}
                 </p>
               </div>
 

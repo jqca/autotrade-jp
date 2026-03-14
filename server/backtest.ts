@@ -132,6 +132,7 @@ export interface BacktestParams {
   slippagePct?: number;      // 成行スリッページ（%）。デフォルト0
   creditRateAnnual?: number; // 信用取引年利（%）。デフォルト0（現物は0）
   rrRatio?: number;          // リスクリワード比。目標 = max(targetPercent, stopLoss × rrRatio)。1.0=無効
+  positionSizePct?: number;  // 1トレードに使う資金割合（%）。0=固定1ロット
 }
 
 const INDICATOR_MAP: Record<string, (ind: ReturnType<typeof computeIndicators>) => boolean> = {
@@ -1311,8 +1312,15 @@ async function runAiQuantumPipeline(signals: SignalCandidate[], params: Backtest
 const UNIT_SHARES_JP = 100;
 const UNIT_SHARES_US = 1;
 
-function simulateCapital(signals: SignalCandidate[], initialCapital: number, market?: string): { executed: SignalCandidate[]; skipped: number; finalCapital: number } {
+function simulateCapital(
+  signals: SignalCandidate[],
+  initialCapital: number,
+  market?: string,
+  params?: { positionSizePct?: number; commissionType?: string }
+): { executed: SignalCandidate[]; skipped: number; finalCapital: number } {
   const unitShares = market === "US" ? UNIT_SHARES_US : UNIT_SHARES_JP;
+  const positionSizePct = params?.positionSizePct ?? 0;
+
   if (initialCapital <= 0) {
     for (const s of signals) {
       s.capitalBefore = undefined;
@@ -1341,8 +1349,22 @@ function simulateCapital(signals: SignalCandidate[], initialCapital: number, mar
       openPositions.splice(idx, 1);
     }
 
-    const commissionTotal = signal.commission ?? 0;
-    const buyCost = Math.round(signal.buyPrice * unitShares) + Math.round(commissionTotal / 2);
+    // ポジションサイジング: 資金割合に基づくロット数計算
+    let lots = 1;
+    if (positionSizePct > 0 && market !== "US") {
+      const totalAssets = cash + openPositions.reduce((sum, p) => sum + p.sellProceeds, 0);
+      const targetAmount = totalAssets * positionSizePct / 100;
+      lots = Math.max(1, Math.floor(targetAmount / (signal.buyPrice * unitShares)));
+    }
+    const shares = lots * unitShares;
+
+    // 実際のポジションサイズで手数料再計算
+    const buyValue  = signal.buyPrice  * shares;
+    const sellValue = signal.sellPrice * shares;
+    const commBuy  = calcCommission(buyValue,  params?.commissionType);
+    const commSell = calcCommission(sellValue, params?.commissionType);
+
+    const buyCost = Math.round(buyValue) + commBuy;
     if (cash < buyCost) {
       skipped++;
       continue;
@@ -1351,7 +1373,7 @@ function simulateCapital(signals: SignalCandidate[], initialCapital: number, mar
     signal.capitalBefore = Math.round(cash);
     cash -= buyCost;
 
-    const sellProceeds = Math.round(signal.sellPrice * unitShares) - Math.round(commissionTotal / 2);
+    const sellProceeds = Math.round(sellValue) - commSell;
     openPositions.push({
       ticker: signal.ticker,
       buyDate: signal.buyDate,
@@ -2477,7 +2499,7 @@ export async function startBacktest(params: BacktestParams = DEFAULT_PARAMS, con
         progress.phase = "capital";
         progress.message = `資金シミュレーション中 (${allSignals.length}件, 初期${currencyUnit === "USD" ? `$${initialCapital.toLocaleString()}` : `${(initialCapital / 10000).toFixed(0)}万円`})...`;
 
-        const { executed, skipped, finalCapital } = simulateCapital(allSignals, initialCapital, params.market);
+        const { executed, skipped, finalCapital } = simulateCapital(allSignals, initialCapital, params.market, { positionSizePct: params.positionSizePct, commissionType: params.commissionType });
         allSignals = executed;
         progress.skippedByCapital = skipped;
         progress.capitalRemaining = finalCapital;
