@@ -234,6 +234,8 @@ export default function Backtest() {
   const [initialCapital, setInitialCapital] = useState(1000000);
   const [market, setMarket] = useState<string>("JP");
   const [commissionType, setCommissionType] = useState<string>("kabu_general");
+  const [slippagePct, setSlippagePct] = useState<number>(0.05);
+  const [creditRateAnnual, setCreditRateAnnual] = useState<number>(0);
   const [showAdvanced, setShowAdvanced] = useState(true);
 
   const [now, setNow] = useState(Date.now());
@@ -332,6 +334,8 @@ export default function Backtest() {
       requireBreakout,
       breakoutLookback,
       commissionType,
+      slippagePct,
+      creditRateAnnual,
       rsiExcludeAfterMin: rsiExcludeAfterEnabled ? rsiExcludeAfterMin : 0,
       rsiExcludeAfterMax: rsiExcludeAfterEnabled ? rsiExcludeAfterMax : 0,
       rsiExcludeAfterTime: rsiExcludeAfterEnabled ? rsiExcludeAfterTime : 0,
@@ -760,17 +764,67 @@ export default function Backtest() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="kabu_general">auカブコム証券 一般コース（往復198〜1,070円）</SelectItem>
+                    <SelectItem value="kabu_general">auカブコム証券 現物（往復110〜2,026円・上限2,026円）</SelectItem>
+                    <SelectItem value="kabu_credit">auカブコム証券 信用（往復198〜396円）</SelectItem>
                     <SelectItem value="kabu_zero">auカブコム証券 ゼロコース（手数料0円）</SelectItem>
                     <SelectItem value="none">手数料なし（比較用）</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
                   {commissionType === "kabu_general"
-                    ? "5万以下55円、10万以下99円、20万以下115円、50万以下275円、100万以下535円（税込）"
+                    ? "5万以下55円、10万以下99円、20万以下115円、50万以下275円、100万以下535円（税込・上限1,013円）"
                     : commissionType === "kabu_zero"
                     ? "現物取引手数料0円（プレミアム料が別途かかる場合あり）"
+                    : commissionType === "kabu_credit"
+                    ? "信用取引: 10万以下99円、10万超198円（上限）"
                     : "手数料を計算に含めません（シミュレーション用）"}
+                </p>
+              </div>
+
+              {/* スリッページ */}
+              <div className="space-y-2 pb-2 border-b">
+                <Label className="text-sm font-medium">スリッページ（約定滑り）</Label>
+                <div className="flex items-center gap-3">
+                  <select
+                    className="border rounded px-2 py-1 text-sm bg-background"
+                    value={slippagePct}
+                    onChange={e => setSlippagePct(parseFloat(e.target.value))}
+                    data-testid="select-slippage"
+                  >
+                    <option value={0}>0%（なし）</option>
+                    <option value={0.02}>0.02%</option>
+                    <option value={0.05}>0.05%（デフォルト）</option>
+                    <option value={0.1}>0.1%</option>
+                    <option value={0.2}>0.2%</option>
+                    <option value={0.5}>0.5%（悲観シナリオ）</option>
+                  </select>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  成行注文の約定価格ずれ。買い: +{slippagePct}%、売り: -{slippagePct}%。実運用に近い損益評価になります。
+                </p>
+              </div>
+
+              {/* 信用金利 */}
+              <div className="space-y-2 pb-2 border-b">
+                <Label className="text-sm font-medium">信用取引 年利コスト</Label>
+                <div className="flex items-center gap-2">
+                  <select
+                    className="border rounded px-2 py-1 text-sm bg-background"
+                    value={creditRateAnnual}
+                    onChange={e => setCreditRateAnnual(parseFloat(e.target.value))}
+                    data-testid="select-credit-rate"
+                  >
+                    <option value={0}>0%（現物取引）</option>
+                    <option value={1.5}>1.5%</option>
+                    <option value={2.5}>2.5%（制度信用 標準）</option>
+                    <option value={3.0}>3.0%</option>
+                    <option value={3.9}>3.9%（一般信用）</option>
+                  </select>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {creditRateAnnual > 0
+                    ? `年利${creditRateAnnual}% → 10日保有・100万円ポジションあたり約¥${Math.round(1000000 * creditRateAnnual / 100 / 365 * 10).toLocaleString()}の金利コスト`
+                    : "現物取引では0%のまま。信用取引を想定する場合は年利を設定してください。"}
                 </p>
               </div>
               <div className="space-y-3 pb-2 border-b">

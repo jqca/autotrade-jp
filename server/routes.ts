@@ -626,6 +626,8 @@ export async function registerRoutes(
         requireBreakout,
         breakoutLookback,
         commissionType: req.body.commissionType || "kabu_general",
+        slippagePct: typeof req.body.slippagePct === "number" ? req.body.slippagePct : 0,
+        creditRateAnnual: typeof req.body.creditRateAnnual === "number" ? req.body.creditRateAnnual : 0,
       };
       await startBacktest(params, 3);
       res.json({ message: "バックテストを開始しました", params });
