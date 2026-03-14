@@ -131,6 +131,7 @@ export interface BacktestParams {
   commissionType?: string;
   slippagePct?: number;      // 成行スリッページ（%）。デフォルト0
   creditRateAnnual?: number; // 信用取引年利（%）。デフォルト0（現物は0）
+  rrRatio?: number;          // リスクリワード比。目標 = max(targetPercent, stopLoss × rrRatio)。1.0=無効
 }
 
 const INDICATOR_MAP: Record<string, (ind: ReturnType<typeof computeIndicators>) => boolean> = {
@@ -656,6 +657,10 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
               const minTarget = stopLoss > 0 ? stopLoss * 1.5 : 0.5;
               effectiveTarget = Math.max(minTarget, Math.min(5.0, volPercent * 1.2));
             }
+            // R/R比: 目標を stopLoss × rrRatio 以上に強制（指値でより大きな利益を狙う）
+            if ((params.rrRatio ?? 1) > 1 && stopLoss > 0) {
+              effectiveTarget = Math.max(effectiveTarget, stopLoss * (params.rrRatio ?? 1));
+            }
 
             const targetMultiplier = 1 + effectiveTarget / 100;
             const targetPrice = roundUpToTick(buyPrice * targetMultiplier, params.market);
@@ -1077,6 +1082,10 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
                 const volPercent = volatility * 100;
                 effectiveTarget = Math.max(0.2, Math.min(2.0, volPercent * 0.6));
               }
+              // R/R比: 目標を stopLoss × rrRatio 以上に強制
+              if ((params.rrRatio ?? 1) > 1 && stopLoss > 0) {
+                effectiveTarget = Math.max(effectiveTarget, stopLoss * (params.rrRatio ?? 1));
+              }
 
               const targetMultiplier = 1 + effectiveTarget / 100;
               const targetPrice = roundUpToTick(buyPrice * targetMultiplier, params.market);
@@ -1490,6 +1499,10 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
               const volPercent = volatility * 100;
               const minTarget = stopLoss > 0 ? stopLoss * 1.5 : 0.5;
               effectiveTarget = Math.max(minTarget, Math.min(5.0, volPercent * 1.2));
+            }
+            // R/R比: 目標を stopLoss × rrRatio 以上に強制（指値でより大きな利益を狙う）
+            if ((params.rrRatio ?? 1) > 1 && stopLoss > 0) {
+              effectiveTarget = Math.max(effectiveTarget, stopLoss * (params.rrRatio ?? 1));
             }
 
             const targetMultiplier = 1 + effectiveTarget / 100;
@@ -1948,6 +1961,10 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
               const volPercent = volatility * 100;
               const minTarget = stopLoss > 0 ? stopLoss * 1.5 : 0.5;
               effectiveTarget = Math.max(minTarget, Math.min(5.0, volPercent * 1.2));
+            }
+            // R/R比: 目標を stopLoss × rrRatio 以上に強制（指値でより大きな利益を狙う）
+            if ((params.rrRatio ?? 1) > 1 && stopLoss > 0) {
+              effectiveTarget = Math.max(effectiveTarget, stopLoss * (params.rrRatio ?? 1));
             }
 
             const targetMultiplier = 1 + effectiveTarget / 100;

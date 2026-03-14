@@ -236,6 +236,7 @@ export default function Backtest() {
   const [commissionType, setCommissionType] = useState<string>("kabu_general");
   const [slippagePct, setSlippagePct] = useState<number>(0.05);
   const [creditRateAnnual, setCreditRateAnnual] = useState<number>(0);
+  const [rrRatio, setRrRatio] = useState<number>(1.0);
   const [showAdvanced, setShowAdvanced] = useState(true);
 
   const [now, setNow] = useState(Date.now());
@@ -336,6 +337,7 @@ export default function Backtest() {
       commissionType,
       slippagePct,
       creditRateAnnual,
+      rrRatio,
       rsiExcludeAfterMin: rsiExcludeAfterEnabled ? rsiExcludeAfterMin : 0,
       rsiExcludeAfterMax: rsiExcludeAfterEnabled ? rsiExcludeAfterMax : 0,
       rsiExcludeAfterTime: rsiExcludeAfterEnabled ? rsiExcludeAfterTime : 0,
@@ -827,6 +829,35 @@ export default function Backtest() {
                     : "現物取引では0%のまま。信用取引を想定する場合は年利を設定してください。"}
                 </p>
               </div>
+
+              {/* R/R比（リスクリワード比） */}
+              <div className="space-y-3 pb-2 border-b">
+                <Label className="text-sm font-medium">リスクリワード比 (R/R)</Label>
+                <div className="flex gap-2 flex-wrap">
+                  {[
+                    { label: "なし (1:1)", value: 1.0 },
+                    { label: "1:1.5", value: 1.5 },
+                    { label: "1:2 ★推奨", value: 2.0 },
+                    { label: "1:3", value: 3.0 },
+                  ].map(opt => (
+                    <Button
+                      key={opt.value}
+                      variant={rrRatio === opt.value ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setRrRatio(opt.value)}
+                      data-testid={`button-rr-${opt.value}`}
+                    >
+                      {opt.label}
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {rrRatio <= 1
+                    ? "無効（利確目標は上のパーセント設定をそのまま使用します）"
+                    : `利確目標 = max(設定値, ストップ幅 × ${rrRatio}) に自動調整。ストップ${stopLossPercent}% → 最低目標 ${(stopLossPercent * rrRatio).toFixed(2)}%`}
+                </p>
+              </div>
+
               <div className="space-y-3 pb-2 border-b">
                 <Label className="text-sm font-medium">時間足</Label>
                 <div className="flex gap-2 flex-wrap">
