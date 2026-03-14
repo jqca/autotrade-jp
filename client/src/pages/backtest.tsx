@@ -236,7 +236,7 @@ export default function Backtest() {
   const [commissionType, setCommissionType] = useState<string>("kabu_general");
   const [slippagePct, setSlippagePct] = useState<number>(0.05);
   const [creditRateAnnual, setCreditRateAnnual] = useState<number>(0);
-  const [rrRatio, setRrRatio] = useState<number>(1.0);
+  const [rrRatio, setRrRatio] = useState<number>(2.0);
   const [showAdvanced, setShowAdvanced] = useState(true);
 
   const [now, setNow] = useState(Date.now());
