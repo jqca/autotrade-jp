@@ -313,9 +313,22 @@ export default function KabuOrdersPage() {
   });
 
   const atStartMutation = useMutation({
-    mutationFn: (mode: "paper" | "live") => apiRequest("POST", "/api/auto-trader/start", { mode }).then(r => r.json()),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/auto-trader/status"] }); },
-    onError: (err: any) => toast({ title: "起動失敗", description: err.message, variant: "destructive" }),
+    mutationFn: async (mode: "paper" | "live") => {
+      const res = await apiRequest("POST", "/api/auto-trader/start", { mode });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auto-trader/status"] });
+      if (data?.message) {
+        toast({ title: "本番起動失敗", description: data.message, variant: "destructive" });
+      }
+    },
+    onError: (err: any) => {
+      const msg = err.message?.replace(/^400: /, "").replace(/^\d{3}: /, "");
+      let parsed = msg;
+      try { parsed = JSON.parse(msg)?.message ?? msg; } catch {}
+      toast({ title: "起動失敗", description: parsed, variant: "destructive" });
+    },
   });
 
   const atStopMutation = useMutation({

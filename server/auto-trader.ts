@@ -1,6 +1,6 @@
 import { storage } from "./storage";
 import { computeIndicatorsAtIndex } from "./backtest";
-import { kabuFetch, waitForFill } from "./kabuClient";
+import { kabuFetch, waitForFill, checkKabuConnection } from "./kabuClient";
 import { isJpTradingHours } from "./jp-holidays";
 import type { InsertAutoTrade } from "@shared/schema";
 import https from "https";
@@ -164,12 +164,29 @@ class AutoTrader {
     console.log(`[AutoTrader][${type.toUpperCase()}] ${msg}`);
   }
 
-  async start(mode?: "paper" | "live") {
+  async start(mode?: "paper" | "live"): Promise<{ ok: boolean; error?: string }> {
     if (this.running) {
       this.addLog("info", "すでに稼働中です");
-      return;
+      return { ok: true };
     }
     if (mode) this.mode = mode;
+
+    // 本番モード: プリフライトチェック
+    if (this.mode === "live") {
+      if (!this.orderPassword) {
+        const msg = "発注パスワードが未設定です。本番取引を開始できません。";
+        this.addLog("error", msg);
+        return { ok: false, error: msg };
+      }
+      const conn = await checkKabuConnection();
+      if (!conn.connected) {
+        const msg = `kabuステーション® に接続できません: ${conn.error ?? "不明なエラー"} (URL: ${conn.baseUrl})`;
+        this.addLog("error", msg);
+        return { ok: false, error: msg };
+      }
+      this.addLog("info", `kabuステーション® 接続確認OK (${conn.baseUrl})`);
+    }
+
     this.running = true;
     this.todayDate = new Date().toISOString().slice(0, 10);
     this.todayPnl = 0;
@@ -178,6 +195,7 @@ class AutoTrader {
     this.addLog("info", `シグナル計算: 5分足リアルタイム（50本以上で自動切替、不足時は日足へフォールバック）`);
     await this.runCycle();
     this.intervalId = setInterval(() => this.runCycle(), this.settings.intervalSeconds * 1000);
+    return { ok: true };
   }
 
   stop() {
@@ -563,12 +581,18 @@ class AutoTrader {
         });
         this.addLog("error", `${ticker} 注文${fill.stateLabel} OrderId=${orderId}`);
       } else {
-        // タイムアウト（注文は生きているかもしれない）
+        // タイムアウト → 安全のため注文を自動キャンセル
+        this.addLog("error", `${ticker} 買い約定確認タイムアウト(60秒) OrderId=${orderId} — 注文キャンセルを試みます`);
+        try {
+          await kabuFetch("PUT", "/cancelorder", { OrderId: orderId, Password: this.orderPassword });
+          this.addLog("info", `${ticker} 買い注文キャンセル完了 OrderId=${orderId}`);
+        } catch (cancelErr: any) {
+          this.addLog("error", `${ticker} 買い注文キャンセル失敗: ${cancelErr.message} — 手動で確認してください`);
+        }
         await storage.updateAutoTrade(saved.id, {
           status: "fill_timeout",
-          errorMsg: `約定確認タイムアウト(60秒): OrderId=${orderId}`,
+          errorMsg: `約定確認タイムアウト(60秒)・自動キャンセル済: OrderId=${orderId}`,
         });
-        this.addLog("error", `${ticker} 約定確認タイムアウト OrderId=${orderId} — 手動で確認してください`);
       }
       return;
     }
@@ -677,13 +701,19 @@ class AutoTrader {
         this.openPositions.set(pos.ticker, pos);
         this.addLog("error", `${pos.ticker} 売り注文${fill.stateLabel} — ポジション継続 OrderId=${orderId}`);
       } else {
-        // タイムアウト: ポジションを戻す
+        // タイムアウト → 安全のため注文を自動キャンセルし、ポジションを戻す
+        this.addLog("error", `${pos.ticker} 売り約定確認タイムアウト(60秒) OrderId=${orderId} — 注文キャンセルを試みます`);
+        try {
+          await kabuFetch("PUT", "/cancelorder", { OrderId: orderId, Password: this.orderPassword });
+          this.addLog("info", `${pos.ticker} 売り注文キャンセル完了 OrderId=${orderId} — ポジション継続`);
+        } catch (cancelErr: any) {
+          this.addLog("error", `${pos.ticker} 売り注文キャンセル失敗: ${cancelErr.message} — 手動で確認してください`);
+        }
         await storage.updateAutoTrade(saved.id, {
           status: "fill_timeout",
-          errorMsg: `売り約定確認タイムアウト(60秒): OrderId=${orderId}`,
+          errorMsg: `売り約定確認タイムアウト(60秒)・自動キャンセル済: OrderId=${orderId}`,
         });
         this.openPositions.set(pos.ticker, pos);
-        this.addLog("error", `${pos.ticker} 売り約定確認タイムアウト — ポジション継続 手動確認要 OrderId=${orderId}`);
       }
       return;
     }

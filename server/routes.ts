@@ -1497,7 +1497,10 @@ export async function registerRoutes(
   app.post("/api/auto-trader/start", requireAuth, async (req: any, res) => {
     try {
       const mode = req.body?.mode === "live" ? "live" : "paper";
-      await autoTrader.start(mode);
+      const result = await autoTrader.start(mode);
+      if (!result.ok) {
+        return res.status(400).json({ message: result.error, status: autoTrader.getStatus() });
+      }
       res.json(autoTrader.getStatus());
     } catch (err: any) {
       res.status(500).json({ message: err.message });
