@@ -666,6 +666,7 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
 
             let isWin = false;
             let sellPrice = 0;
+            let sellIsLimitFillD = false; // 利確指値約定フラグ（スリッページ不要）
             let maxHigh = buyPrice;
             let maxHighDate = dates[buyDayIdx];
             let sellDate = dates[buyDayIdx];
@@ -676,6 +677,7 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
               if (highs[k] >= targetPrice) {
                 isWin = true;
                 sellPrice = targetPrice;
+                sellIsLimitFillD = true; // 指値注文：スリッページなし
                 sellDate = dates[k];
                 break;
               }
@@ -715,7 +717,8 @@ async function collectDailySignals(params: BacktestParams, tickers: string[], co
             }
 
             const _abpD = applySlippage(buyPrice, "buy", params.slippagePct ?? 0, params.market);
-            const _aspD = applySlippage(sellPrice, "sell", params.slippagePct ?? 0, params.market);
+            // 指値約定（利確）はスリッページなし。成行（ストップ・期間終了）はスリッページあり
+            const _aspD = sellIsLimitFillD ? sellPrice : applySlippage(sellPrice, "sell", params.slippagePct ?? 0, params.market);
             const _unitSharesD = params.market === "US" ? 1 : 100;
             const _commissionD = calcCommission(_abpD * _unitSharesD, params.commissionType) + calcCommission(_aspD * _unitSharesD, params.commissionType);
             const _interestD = calcCreditInterest(_abpD * _unitSharesD, dates[buyDayIdx], sellDate, params.creditRateAnnual ?? 0);
@@ -1084,6 +1087,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
 
               let isWin = false;
               let sellPrice = 0;
+              let sellIsLimitFillI1 = false; // 利確指値約定フラグ
               let maxHigh = entryBar.high;
               let maxHighDate = entryBar.date;
               let sellDate = entryBar.date;
@@ -1122,6 +1126,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
                 if (bars[k].high >= targetPrice) {
                   isWin = true;
                   sellPrice = targetPrice;
+                  sellIsLimitFillI1 = true; // 指値注文：スリッページなし
                   sellDate = bars[k].date;
                   break;
                 }
@@ -1135,7 +1140,7 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               }
 
               const _abpI1 = applySlippage(buyPrice, "buy", params.slippagePct ?? 0, params.market);
-              const _aspI1 = applySlippage(sellPrice, "sell", params.slippagePct ?? 0, params.market);
+              const _aspI1 = sellIsLimitFillI1 ? sellPrice : applySlippage(sellPrice, "sell", params.slippagePct ?? 0, params.market);
               const _unitSharesI1 = params.market === "US" ? 1 : 100;
               const _commissionI1 = calcCommission(_abpI1 * _unitSharesI1, params.commissionType) + calcCommission(_aspI1 * _unitSharesI1, params.commissionType);
               const _interestI1 = calcCreditInterest(_abpI1 * _unitSharesI1, entryBar.date, sellDate, params.creditRateAnnual ?? 0);
@@ -1493,6 +1498,7 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
 
             let isWin = false;
             let sellPrice = 0;
+            let sellIsLimitFillD2 = false;
             let maxHigh = buyPrice;
             let maxHighDate = dates[buyDayIdx];
             let sellDate = dates[buyDayIdx];
@@ -1500,7 +1506,7 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
 
             const endIdx = Math.min(buyDayIdx + holdDays - 1, closes.length - 1);
             for (let k = buyDayIdx; k <= endIdx; k++) {
-              if (highs[k] >= targetPrice) { isWin = true; sellPrice = targetPrice; sellDate = dates[k]; break; }
+              if (highs[k] >= targetPrice) { isWin = true; sellPrice = targetPrice; sellIsLimitFillD2 = true; sellDate = dates[k]; break; }
               if (highs[k] > maxHigh) {
                 maxHigh = highs[k];
                 maxHighDate = dates[k];
@@ -1515,7 +1521,7 @@ async function collectDailySignalsDirect(params: BacktestParams, tickers: string
             if (sellPrice === 0) { sellPrice = closes[endIdx]; sellDate = dates[endIdx]; }
 
             const _abpD2 = applySlippage(buyPrice, "buy", params.slippagePct ?? 0, params.market);
-            const _aspD2 = applySlippage(sellPrice, "sell", params.slippagePct ?? 0, params.market);
+            const _aspD2 = sellIsLimitFillD2 ? sellPrice : applySlippage(sellPrice, "sell", params.slippagePct ?? 0, params.market);
             const _unitSharesD2 = params.market === "US" ? 1 : 100;
             const _commissionD2 = calcCommission(_abpD2 * _unitSharesD2, params.commissionType) + calcCommission(_aspD2 * _unitSharesD2, params.commissionType);
             const _interestD2 = calcCreditInterest(_abpD2 * _unitSharesD2, dates[buyDayIdx], sellDate, params.creditRateAnnual ?? 0);
@@ -1787,8 +1793,9 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
 
               const maxHoldBars = params.timeframe === "5m" ? 3 : params.timeframe === "15m" ? 1 : 999;
               const holdLimit = Math.min(entryBarGlobal + maxHoldBars, entryDayInfo.endIdx);
+              let sellIsLimitFillI2 = false;
               for (let k = entryBarGlobal; k <= holdLimit; k++) {
-                if (bars[k].high >= targetPrice) { isWin = true; sellPrice = targetPrice; sellDate = bars[k].date; break; }
+                if (bars[k].high >= targetPrice) { isWin = true; sellPrice = targetPrice; sellIsLimitFillI2 = true; sellDate = bars[k].date; break; }
                 if (bars[k].high > maxHigh) {
                   maxHigh = bars[k].high;
                   if (useTrailingStop2) {
@@ -1807,7 +1814,7 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               }
 
               const _abpI2 = applySlippage(buyPrice, "buy", params.slippagePct ?? 0, params.market);
-              const _aspI2 = applySlippage(sellPrice, "sell", params.slippagePct ?? 0, params.market);
+              const _aspI2 = sellIsLimitFillI2 ? sellPrice : applySlippage(sellPrice, "sell", params.slippagePct ?? 0, params.market);
               const _unitSharesI2 = params.market === "US" ? 1 : 100;
               const _commissionI2 = calcCommission(_abpI2 * _unitSharesI2, params.commissionType) + calcCommission(_aspI2 * _unitSharesI2, params.commissionType);
               const _interestI2 = calcCreditInterest(_abpI2 * _unitSharesI2, entryBar.date, sellDate, params.creditRateAnnual ?? 0);
@@ -1949,13 +1956,14 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
 
             let isWin = false;
             let sellPrice = 0;
+            let sellIsLimitFillD3 = false;
             let maxHigh = buyPrice;
             let sellDate = dates[buyDayIdx];
             let trailingStopPrice2 = 0;
 
             const endIdx = Math.min(buyDayIdx + holdDays - 1, closes.length - 1);
             for (let k = buyDayIdx; k <= endIdx; k++) {
-              if (highs[k] >= targetPrice) { isWin = true; sellPrice = targetPrice; sellDate = dates[k]; break; }
+              if (highs[k] >= targetPrice) { isWin = true; sellPrice = targetPrice; sellIsLimitFillD3 = true; sellDate = dates[k]; break; }
               if (highs[k] > maxHigh) {
                 maxHigh = highs[k];
                 if (useTrailingStop) {
@@ -1969,7 +1977,7 @@ async function _unused_runDailyBacktest(params: BacktestParams, runId: string, t
             if (sellPrice === 0) { sellPrice = closes[endIdx]; sellDate = dates[endIdx]; }
 
             const _abpD3 = applySlippage(buyPrice, "buy", params.slippagePct ?? 0, params.market);
-            const _aspD3 = applySlippage(sellPrice, "sell", params.slippagePct ?? 0, params.market);
+            const _aspD3 = sellIsLimitFillD3 ? sellPrice : applySlippage(sellPrice, "sell", params.slippagePct ?? 0, params.market);
             const _unitSharesD3 = params.market === "US" ? 1 : 100;
             const _commissionD3 = calcCommission(_abpD3 * _unitSharesD3, params.commissionType) + calcCommission(_aspD3 * _unitSharesD3, params.commissionType);
             const _interestD3 = calcCreditInterest(_abpD3 * _unitSharesD3, dates[buyDayIdx], sellDate, params.creditRateAnnual ?? 0);
@@ -2237,8 +2245,9 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
 
               const maxHoldBars = params.timeframe === "5m" ? 3 : params.timeframe === "15m" ? 1 : 999;
               const holdLimit = Math.min(entryBarGlobal + maxHoldBars, entryDayInfo.endIdx);
+              let sellIsLimitFillI3 = false;
               for (let k = entryBarGlobal; k <= holdLimit; k++) {
-                if (bars[k].high >= targetPrice) { isWin = true; sellPrice = targetPrice; sellDate = bars[k].date; break; }
+                if (bars[k].high >= targetPrice) { isWin = true; sellPrice = targetPrice; sellIsLimitFillI3 = true; sellDate = bars[k].date; break; }
                 if (bars[k].high > maxHigh) {
                   maxHigh = bars[k].high;
                   if (useTrailingStop2) {
@@ -2257,7 +2266,7 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               }
 
               const _abpI3 = applySlippage(buyPrice, "buy", params.slippagePct ?? 0, params.market);
-              const _aspI3 = applySlippage(sellPrice, "sell", params.slippagePct ?? 0, params.market);
+              const _aspI3 = sellIsLimitFillI3 ? sellPrice : applySlippage(sellPrice, "sell", params.slippagePct ?? 0, params.market);
               const _unitSharesI3 = params.market === "US" ? 1 : 100;
               const _commissionI3 = calcCommission(_abpI3 * _unitSharesI3, params.commissionType) + calcCommission(_aspI3 * _unitSharesI3, params.commissionType);
               const _interestI3 = calcCreditInterest(_abpI3 * _unitSharesI3, entryBar.date, sellDate, params.creditRateAnnual ?? 0);
