@@ -320,6 +320,7 @@ export const autoTrades = pgTable("auto_trades", {
   bbTrend: text("bb_trend"),
   rsiValue: real("rsi_value"),
   signalLabel: text("signal_label"),
+  commission: real("commission").default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

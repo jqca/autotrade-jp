@@ -2,6 +2,7 @@ import { storage } from "./storage";
 import { computeIndicatorsAtIndex } from "./backtest";
 import { kabuFetch, waitForFill, checkKabuConnection } from "./kabuClient";
 import { isJpTradingHours } from "./jp-holidays";
+import { calcAuKabuCommission, calcRoundTripCommission } from "./commission";
 import type { InsertAutoTrade } from "@shared/schema";
 import https from "https";
 import querystring from "querystring";
@@ -488,23 +489,26 @@ class AutoTrader {
     ind: ReturnType<typeof computeIndicatorsAtIndex>) {
     const qty = this.calcQty(price);
     const totalCost = price * qty;
-
-    if (this.mode === "paper" && totalCost > this.paperBalance) {
-      this.addLog("skip", `${ticker} 残高不足 (必要¥${totalCost.toLocaleString()} / 残高¥${this.paperBalance.toLocaleString()})`);
-      return;
-    }
-
     const label = ["MACD", "RSI", "MA", "BB"]
       .filter((_, i) => [ind?.macdTrend, ind?.rsiTrend, ind?.maTrend, ind?.bbTrend][i] === "buy").join("+");
+
+    const buyComm = calcAuKabuCommission(totalCost, this.settings.cashMargin);
+    const totalCostWithComm = totalCost + buyComm;
+
+    if (this.mode === "paper" && totalCostWithComm > this.paperBalance) {
+      this.addLog("skip", `${ticker} 残高不足 (必要¥${totalCostWithComm.toLocaleString()} / 残高¥${this.paperBalance.toLocaleString()})`);
+      return;
+    }
 
     const trade: InsertAutoTrade = {
       mode: this.mode, action: "buy", ticker, tickerName, price, qty,
       capitalBefore: this.mode === "paper" ? this.paperBalance : null,
-      capitalAfter: this.mode === "paper" ? this.paperBalance - totalCost : null,
+      capitalAfter: this.mode === "paper" ? this.paperBalance - totalCostWithComm : null,
       status: "executed",
       macdTrend: ind?.macdTrend ?? null, rsiTrend: ind?.rsiTrend ?? null,
       maTrend: ind?.maTrend ?? null, bbTrend: ind?.bbTrend ?? null,
       rsiValue: ind?.rsiValue ?? null, signalLabel: label,
+      commission: buyComm,
     };
 
     if (this.mode === "live") {
@@ -597,26 +601,31 @@ class AutoTrader {
       return;
     }
 
-    // ペーパーモード: 即時約定
-    this.paperBalance -= totalCost;
+    // ペーパーモード: 即時約定（手数料込みで残高を減算）
+    this.paperBalance -= totalCostWithComm;
     const stopLoss = price * (1 - this.settings.stopLossPercent / 100);
     const target = price * (1 + this.settings.targetPercent / 100);
     const saved = await storage.insertAutoTrade(trade);
     this.openPositions.set(ticker, { ticker, tickerName, buyPrice: price, qty, buyDate: new Date().toISOString(), stopLoss, target, entryId: saved.id });
     this.totalBuys++;
-    this.addLog("buy", `買い執行 ${ticker} ${qty}株 @¥${price.toLocaleString()} 合計¥${totalCost.toLocaleString()}`);
+    this.addLog("buy", `買い執行 ${ticker} ${qty}株 @¥${price.toLocaleString()} 株代¥${totalCost.toLocaleString()} 手数料¥${buyComm} 合計¥${totalCostWithComm.toLocaleString()}`);
     await storage.setSetting("auto_trader_paper_balance", String(this.paperBalance), "ペーパートレード残高");
   }
 
   private async executeSell(pos: OpenPosition, price: number, action: "sell" | "stop_loss" | "target", reason: string) {
-    const pnl = (price - pos.buyPrice) * pos.qty;
+    const grossPnl = (price - pos.buyPrice) * pos.qty;
     const proceeds = price * pos.qty;
+    // ラウンドトリップ手数料（買い手数料 + 売り手数料）
+    const totalComm = calcRoundTripCommission(pos.buyPrice * pos.qty, proceeds, this.settings.cashMargin);
+    const pnl = grossPnl - totalComm; // 手数料控除後のネットP&L
+    const netProceeds = proceeds - calcAuKabuCommission(proceeds, this.settings.cashMargin);
 
     const trade: InsertAutoTrade = {
       mode: this.mode, action, ticker: pos.ticker, tickerName: pos.tickerName, price, qty: pos.qty,
       profitLoss: pnl,
+      commission: totalComm,
       capitalBefore: this.mode === "paper" ? this.paperBalance : null,
-      capitalAfter: this.mode === "paper" ? this.paperBalance + proceeds : null,
+      capitalAfter: this.mode === "paper" ? this.paperBalance + netProceeds : null,
       status: "executed", signalLabel: reason,
     };
 
@@ -668,7 +677,9 @@ class AutoTrader {
       if (fill.filled || fill.partialFilled) {
         const actualPrice = fill.fillPrice ?? price;
         const actualQty = fill.fillQty > 0 ? fill.fillQty : pos.qty;
-        const actualPnl = (actualPrice - pos.buyPrice) * actualQty;
+        const grossPnlActual = (actualPrice - pos.buyPrice) * actualQty;
+        const actualComm = calcRoundTripCommission(pos.buyPrice * actualQty, actualPrice * actualQty, this.settings.cashMargin);
+        const actualPnl = grossPnlActual - actualComm;
 
         await storage.updateAutoTrade(saved.id, {
           status: "executed",
@@ -677,14 +688,15 @@ class AutoTrader {
           fillPrice: fill.fillPrice ?? undefined,
           fillQty: fill.fillQty > 0 ? fill.fillQty : undefined,
           profitLoss: actualPnl,
+          commission: actualComm,
           signalLabel: `${reason}${fill.partialFilled ? " [部分約定]" : ""}`,
         });
         this.todayPnl += actualPnl;
         this.totalSells++;
         this.addLog("sell",
-          `✅ 売り約定確認 ${pos.ticker} ${actualQty}株 @¥${actualPrice.toLocaleString()} P&L¥${Math.round(actualPnl).toLocaleString()}${fill.partialFilled ? " [部分約定]" : ""}`);
+          `✅ 売り約定確認 ${pos.ticker} ${actualQty}株 @¥${actualPrice.toLocaleString()} P&L¥${Math.round(actualPnl).toLocaleString()} (手数料¥${actualComm})${fill.partialFilled ? " [部分約定]" : ""}`);
         const pnlSign = actualPnl >= 0 ? "+" : "";
-        await this.sendLineNotify(`${actualPnl >= 0 ? "💰" : "📉"} 売り約定\n${pos.ticker} ${actualQty}株\n@¥${actualPrice.toLocaleString()}\nP&L: ${pnlSign}¥${Math.round(actualPnl).toLocaleString()}${fill.partialFilled ? "\n⚠️ 部分約定" : ""}`);
+        await this.sendLineNotify(`${actualPnl >= 0 ? "💰" : "📉"} 売り約定\n${pos.ticker} ${actualQty}株\n@¥${actualPrice.toLocaleString()}\nP&L: ${pnlSign}¥${Math.round(actualPnl).toLocaleString()}\n手数料: ¥${actualComm}${fill.partialFilled ? "\n⚠️ 部分約定" : ""}`);
 
         // 部分約定の場合は残数をポジションとして戻す
         if (fill.partialFilled && fill.fillQty < pos.qty) {
@@ -718,13 +730,14 @@ class AutoTrader {
       return;
     }
 
-    // ペーパーモード: 即時約定
-    this.paperBalance += proceeds;
+    // ペーパーモード: 即時約定（手数料控除後の純受取額で残高を加算）
+    this.paperBalance += netProceeds;
     await storage.insertAutoTrade(trade);
     this.openPositions.delete(pos.ticker);
     this.todayPnl += pnl;
     this.totalSells++;
-    this.addLog("sell", `売り執行 ${pos.ticker} ${pos.qty}株 @¥${price.toLocaleString()} P&L¥${Math.round(pnl).toLocaleString()}`);
+    const pnlSign = pnl >= 0 ? "+" : "";
+    this.addLog("sell", `売り執行 ${pos.ticker} ${pos.qty}株 @¥${price.toLocaleString()} P&L${pnlSign}¥${Math.round(pnl).toLocaleString()} (手数料¥${totalComm})`);
     await storage.setSetting("auto_trader_paper_balance", String(this.paperBalance), "ペーパートレード残高");
   }
 
@@ -838,17 +851,15 @@ class AutoTrader {
     const buys = weekTrades.filter(t => t.action === "buy");
     const sells = weekTrades.filter(t => ["sell", "stop_loss", "target"].includes(t.action));
 
+    // profitLossはDB保存時に手数料控除済みなのでそのまま集計
     let totalPnl = 0;
+    let totalComm = 0;
     let wins = 0, losses = 0;
     for (const s of sells) {
-      const fillP = s.fillPrice ?? s.price;
-      const matchBuy = buys.find(b => b.ticker === s.ticker);
-      if (matchBuy) {
-        const buyP = matchBuy.fillPrice ?? matchBuy.price;
-        const qty = s.fillQty ?? s.qty ?? 0;
-        const pnl = (fillP - buyP) * qty;
-        totalPnl += pnl;
-        if (pnl >= 0) wins++; else losses++;
+      if (s.profitLoss != null) {
+        totalPnl += s.profitLoss;
+        totalComm += s.commission ?? 0;
+        if (s.profitLoss >= 0) wins++; else losses++;
       }
     }
 
@@ -857,7 +868,8 @@ class AutoTrader {
       `期間: 直近7日間\n` +
       `取引回数: 買${buys.length}回 / 売${sells.length}回\n` +
       `勝率: ${winRate}% (${wins}勝 ${losses}敗)\n` +
-      `合計損益: ${totalPnl >= 0 ? "+" : ""}¥${Math.round(totalPnl).toLocaleString()}\n` +
+      `合計損益(手数料込): ${totalPnl >= 0 ? "+" : ""}¥${Math.round(totalPnl).toLocaleString()}\n` +
+      `手数料合計: ¥${Math.round(totalComm).toLocaleString()}\n` +
       `本番/ペーパー: ${this.mode}モード`;
 
     const result = await this.sendLineNotify(msg);

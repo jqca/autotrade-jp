@@ -1725,7 +1725,8 @@ export default function KabuOrdersPage() {
                         <th className="text-left py-1.5 pr-3">銘柄</th>
                         <th className="text-right py-1.5 pr-3">価格</th>
                         <th className="text-right py-1.5 pr-3">数量</th>
-                        <th className="text-right py-1.5">損益</th>
+                        <th className="text-right py-1.5 pr-3">手数料</th>
+                        <th className="text-right py-1.5">損益(手数料込)</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1748,6 +1749,9 @@ export default function KabuOrdersPage() {
                           <td className="py-1.5 pr-3">{t.ticker}</td>
                           <td className="py-1.5 pr-3 text-right font-mono">¥{t.price.toLocaleString()}</td>
                           <td className="py-1.5 pr-3 text-right">{t.qty}</td>
+                          <td className="py-1.5 pr-3 text-right font-mono text-muted-foreground text-xs">
+                            {t.commission != null && t.commission > 0 ? `¥${Math.round(t.commission).toLocaleString()}` : "-"}
+                          </td>
                           <td className={`py-1.5 text-right font-mono ${t.profitLoss == null ? "" : t.profitLoss >= 0 ? "text-emerald-600" : "text-red-500"}`}>
                             {t.profitLoss != null ? `${t.profitLoss >= 0 ? "+" : ""}¥${Math.round(t.profitLoss).toLocaleString()}` : "-"}
                           </td>
