@@ -85,6 +85,7 @@ interface BacktestParams {
   initialCapital?: number;
   market?: string;
   commissionType?: string;
+  requireMaBuyHour10?: boolean;
 }
 
 function TrendBadge({ trend, label, active = true }: { trend: string | null; label: string; active?: boolean }) {
@@ -238,6 +239,7 @@ export default function Backtest() {
   const [creditRateAnnual, setCreditRateAnnual] = useState<number>(0);
   const [rrRatio, setRrRatio] = useState<number>(2.0);
   const [positionSizePct, setPositionSizePct] = useState<number>(10);
+  const [requireMaBuyHour10, setRequireMaBuyHour10] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(true);
 
   const [now, setNow] = useState(Date.now());
@@ -343,6 +345,7 @@ export default function Backtest() {
       rsiExcludeAfterMin: rsiExcludeAfterEnabled ? rsiExcludeAfterMin : 0,
       rsiExcludeAfterMax: rsiExcludeAfterEnabled ? rsiExcludeAfterMax : 0,
       rsiExcludeAfterTime: rsiExcludeAfterEnabled ? rsiExcludeAfterTime : 0,
+      requireMaBuyHour10,
       excludeCombos: [
         ...(excludeComboNBN ? ["neutral/buy/neutral"] : []),
         ...(excludeComboNNN ? ["neutral/neutral/neutral"] : []),
@@ -1482,6 +1485,21 @@ export default function Backtest() {
 
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">
+                          10時台 MA=buy必須
+                          <Badge variant="secondary" className="ml-2 text-xs">推奨</Badge>
+                        </Label>
+                        <Switch
+                          checked={requireMaBuyHour10}
+                          onCheckedChange={setRequireMaBuyHour10}
+                          data-testid="switch-require-ma-buy-hour10"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">10:00〜10:59 のエントリーをMA=buy（移動平均が上昇トレンド）の時のみ許可します。バックテスト分析から、10時台はMA=neutralの場合の勝率が45.6%と低く、MA=buy絞り込みで64.6%に改善します。</p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
                         <Label className="text-sm font-medium">BB=sell除外（過熱圏フィルター）</Label>
                         <Switch
                           checked={excludeBBSell}
@@ -1845,6 +1863,7 @@ export default function Backtest() {
                   {excludeComboNBN && <Badge variant="outline" className="border-rose-300 text-rose-700 dark:text-rose-400">N/B/N除外</Badge>}
                   {excludeComboNNN && <Badge variant="outline" className="border-rose-300 text-rose-700 dark:text-rose-400">N/N/N除外</Badge>}
                   {excludeComboNSN && <Badge variant="outline" className="border-rose-300 text-rose-700 dark:text-rose-400">N/S/N除外</Badge>}
+                  {requireMaBuyHour10 && <Badge variant="outline" className="border-blue-300 text-blue-700 dark:text-blue-400">10時台MA=buy必須</Badge>}
                   {excludeBBSell && <Badge variant="outline" className="border-amber-300 text-amber-700 dark:text-amber-400">BB=sell除外</Badge>}
                   {excludeMaBuyAfter > 0 && <Badge variant="outline" className="border-rose-300 text-rose-700 dark:text-rose-400">MA=buy除外{Math.floor(excludeMaBuyAfter/60)}:{String(excludeMaBuyAfter%60).padStart(2,'0')}~</Badge>}
                   {rsiExcludeAfterEnabled && <Badge variant="outline" className="border-orange-300 text-orange-700 dark:text-orange-400">RSI{rsiExcludeAfterMin}-{rsiExcludeAfterMax}除外{Math.floor(rsiExcludeAfterTime/60)}:{String(rsiExcludeAfterTime%60).padStart(2,'0')}~</Badge>}

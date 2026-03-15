@@ -128,6 +128,7 @@ export interface BacktestParams {
   entryConfirmBars?: number;
   requireBreakout?: boolean;
   breakoutLookback?: number;
+  requireMaBuyHour10?: boolean;
   commissionType?: string;
   slippagePct?: number;      // 成行スリッページ（%）。デフォルト0
   creditRateAnnual?: number; // 信用取引年利（%）。デフォルト0（現物は0）
@@ -201,6 +202,7 @@ export const DEFAULT_PARAMS: BacktestParams = {
   rsiExcludeAfterMax: 50,
   rsiExcludeAfterTime: 0,
   minIntradayRange: 0.5,
+  requireMaBuyHour10: true,
 };
 
 export interface BacktestProgress {
@@ -987,6 +989,11 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               if (indicators.overallSignal === "neutral") { _fc["j_neutral"] = (_fc["j_neutral"] ?? 0) + 1; continue; }
               if (params.excludeBBSell && indicators.bbTrend === "sell") { _fc["k_bbSell"] = (_fc["k_bbSell"] ?? 0) + 1; continue; }
               if (params.requireMaBuy && indicators.maTrend !== "buy") { _fc["l_maBuy"] = (_fc["l_maBuy"] ?? 0) + 1; continue; }
+              if (params.requireMaBuyHour10 !== false) {
+                const _barDateForH10 = bars[globalIdx].date;
+                const _h10match = _barDateForH10.match(/T(\d{2}):/);
+                if (_h10match && parseInt(_h10match[1], 10) === 10 && indicators.maTrend !== "buy") { _fc["l2_maBuyH10"] = (_fc["l2_maBuyH10"] ?? 0) + 1; continue; }
+              }
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) { _fc["m_rsiRange"] = (_fc["m_rsiRange"] ?? 0) + 1; continue; }
                 if ((params.rsiExcludeMax ?? 0) > 0 && indicators.rsiValue >= (params.rsiExcludeMin ?? 0) && indicators.rsiValue <= params.rsiExcludeMax!) { _fc["n_rsiExcl"] = (_fc["n_rsiExcl"] ?? 0) + 1; continue; }
