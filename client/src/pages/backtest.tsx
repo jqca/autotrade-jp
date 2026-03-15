@@ -161,7 +161,7 @@ export default function Backtest() {
   const [breakoutLookback, setBreakoutLookback] = useState(3);
   const [maxHoldDays, setMaxHoldDays] = useState(1);
   const [minVolume, setMinVolume] = useState(50);
-  const [minVolatility, setMinVolatility] = useState(0.5);
+  const [minVolatility, setMinVolatility] = useState(0.3);
   const [minIntradayRange, setMinIntradayRange] = useState(0.5);
   const [excludePriceMin, setExcludePriceMin] = useState(500);
   const [excludePriceMax, setExcludePriceMax] = useState(1000);
