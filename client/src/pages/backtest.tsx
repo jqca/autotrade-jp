@@ -163,9 +163,9 @@ export default function Backtest() {
   const [minVolume, setMinVolume] = useState(50);
   const [minVolatility, setMinVolatility] = useState(0.5);
   const [minIntradayRange, setMinIntradayRange] = useState(0.5);
-  const [excludePriceMin, setExcludePriceMin] = useState(0);
+  const [excludePriceMin, setExcludePriceMin] = useState(500);
   const [excludePriceMax, setExcludePriceMax] = useState(1000);
-  const [excludePriceEnabled, setExcludePriceEnabled] = useState(false);
+  const [excludePriceEnabled, setExcludePriceEnabled] = useState(true);
   const [rsiExcludeMin, setRsiExcludeMin] = useState(50);
   const [rsiExcludeMax, setRsiExcludeMax] = useState(60);
   const [rsiExcludeEnabled, setRsiExcludeEnabled] = useState(true);
