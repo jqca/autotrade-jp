@@ -224,7 +224,7 @@ export default function Backtest() {
   const [requireVolumeSurge, setRequireVolumeSurge] = useState(false);
   const [volumeSurgeRatio, setVolumeSurgeRatio] = useState(1.5);
   const [maxGapPercent, setMaxGapPercent] = useState(1.5);
-  const [trailingStop, setTrailingStop] = useState(true);
+  const [trailingStop, setTrailingStop] = useState(false);
   const [trailingStopPercent, setTrailingStopPercent] = useState(1.5);
   const [confirmDays, setConfirmDays] = useState(1);
   const [minSignalScore, setMinSignalScore] = useState(0);
