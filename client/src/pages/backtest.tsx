@@ -134,6 +134,26 @@ interface AppSetting {
   value: string;
 }
 
+function getPrevBusinessDay(): string {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  do { d.setDate(d.getDate() - 1); } while (d.getDay() === 0 || d.getDay() === 6);
+  return d.toISOString().split("T")[0];
+}
+
+function subtractBusinessDays(fromDateStr: string, days: number): string {
+  const d = new Date(fromDateStr + "T00:00:00");
+  let count = 0;
+  while (count < days) {
+    d.setDate(d.getDate() - 1);
+    if (d.getDay() !== 0 && d.getDay() !== 6) count++;
+  }
+  return d.toISOString().split("T")[0];
+}
+
+const _prevBizDay = getPrevBusinessDay();
+const _defaultStartDate = subtractBusinessDays(_prevBizDay, 120);
+
 export default function Backtest() {
   const [selectedRun, setSelectedRun] = useState<string>("latest");
   const [polling, setPolling] = useState(false);
@@ -149,9 +169,9 @@ export default function Backtest() {
   const [rsiMin, setRsiMin] = useState(40);
   const [rsiMax, setRsiMax] = useState(65);
   const [simDays, setSimDays] = useState(120);
-  const [timeframe, setTimeframe] = useState("1d");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [timeframe, setTimeframe] = useState("5m");
+  const [startDate, setStartDate] = useState(_defaultStartDate);
+  const [endDate, setEndDate] = useState(_prevBizDay);
   const [useAi, setUseAi] = useState(false);
   const [useQuantum, setUseQuantum] = useState(false);
   const [aiThreshold, setAiThreshold] = useState(0.5);
