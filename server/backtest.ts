@@ -990,8 +990,9 @@ async function collectIntradaySignals(params: BacktestParams, tickers: string[],
               if (params.excludeBBSell && indicators.bbTrend === "sell") { _fc["k_bbSell"] = (_fc["k_bbSell"] ?? 0) + 1; continue; }
               if (params.requireMaBuy && indicators.maTrend !== "buy") { _fc["l_maBuy"] = (_fc["l_maBuy"] ?? 0) + 1; continue; }
               if (params.requireMaBuyHour10 !== false) {
-                const _barDateForH10 = bars[globalIdx].date;
-                const _h10match = _barDateForH10.match(/T(\d{2}):/);
+                const _nextIdx = Math.min(globalIdx + 1, bars.length - 1);
+                const _buyBarDate = bars[_nextIdx].date;
+                const _h10match = _buyBarDate.match(/T(\d{2}):/);
                 if (_h10match && parseInt(_h10match[1], 10) === 10 && indicators.maTrend !== "buy") { _fc["l2_maBuyH10"] = (_fc["l2_maBuyH10"] ?? 0) + 1; continue; }
               }
               if (indicators.rsiValue != null) {
