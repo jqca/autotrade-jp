@@ -1722,6 +1722,12 @@ async function collectIntradaySignalsDirect(params: BacktestParams, tickers: str
               if (indicators.overallSignal === "neutral") continue;
               if (params.excludeBBSell && indicators.bbTrend === "sell") continue;
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
+              if (params.requireMaBuyHour10 !== false) {
+                const _nextIdxD = Math.min(globalIdx + 1, bars.length - 1);
+                const _buyBarDateD = bars[_nextIdxD].date;
+                const _h10matchD = _buyBarDateD.match(/T(\d{2}):/);
+                if (_h10matchD && parseInt(_h10matchD[1], 10) === 10 && indicators.maTrend !== "buy") continue;
+              }
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
                 if ((params.rsiExcludeMax ?? 0) > 0 && indicators.rsiValue >= (params.rsiExcludeMin ?? 0) && indicators.rsiValue <= params.rsiExcludeMax!) continue;
@@ -2178,6 +2184,12 @@ async function runIntradayBacktest(params: BacktestParams, runId: string, ticker
               if (indicators.overallSignal === "neutral") continue;
               if (params.excludeBBSell && indicators.bbTrend === "sell") continue;
               if (params.requireMaBuy && indicators.maTrend !== "buy") continue;
+              if (params.requireMaBuyHour10 !== false) {
+                const _nextIdxD = Math.min(globalIdx + 1, bars.length - 1);
+                const _buyBarDateD = bars[_nextIdxD].date;
+                const _h10matchD = _buyBarDateD.match(/T(\d{2}):/);
+                if (_h10matchD && parseInt(_h10matchD[1], 10) === 10 && indicators.maTrend !== "buy") continue;
+              }
               if (indicators.rsiValue != null) {
                 if (indicators.rsiValue < params.rsiMin || indicators.rsiValue > params.rsiMax) continue;
                 if ((params.rsiExcludeMax ?? 0) > 0 && indicators.rsiValue >= (params.rsiExcludeMin ?? 0) && indicators.rsiValue <= params.rsiExcludeMax!) continue;
