@@ -134,11 +134,18 @@ interface AppSetting {
   value: string;
 }
 
+function formatLocalDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function getPrevBusinessDay(): string {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   do { d.setDate(d.getDate() - 1); } while (d.getDay() === 0 || d.getDay() === 6);
-  return d.toISOString().split("T")[0];
+  return formatLocalDate(d);
 }
 
 function subtractBusinessDays(fromDateStr: string, days: number): string {
@@ -148,7 +155,7 @@ function subtractBusinessDays(fromDateStr: string, days: number): string {
     d.setDate(d.getDate() - 1);
     if (d.getDay() !== 0 && d.getDay() !== 6) count++;
   }
-  return d.toISOString().split("T")[0];
+  return formatLocalDate(d);
 }
 
 const _prevBizDay = getPrevBusinessDay();
