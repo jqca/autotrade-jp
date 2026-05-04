@@ -54,7 +54,7 @@ async function initStripe() {
   }
 }
 
-await initStripe();
+// initStripe() は起動時 IIFE の中で呼び出す（top-level await を回避）
 
 app.post(
   '/api/stripe/webhook',
@@ -130,6 +130,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  await initStripe();
   setupAuth(app);
   await registerRoutes(httpServer, app);
   await autoTrader.init();
