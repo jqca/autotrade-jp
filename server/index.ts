@@ -11,6 +11,9 @@ import { autoTrader } from "./auto-trader";
 const app = express();
 const httpServer = createServer(app);
 
+// Railway / Fastly リバースプロキシを信頼（secure cookie が正常に動作するために必要）
+app.set("trust proxy", 1);
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
