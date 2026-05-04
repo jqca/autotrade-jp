@@ -7,7 +7,7 @@ import { rm, readFile } from "fs/promises";
 const allowlist = [
   "@google/generative-ai",
   "axios",
-  "connect-pg-simple",
+  // "connect-pg-simple" は外部化する（バンドルするとtable.sqlのパスが壊れる）
   "cors",
   "date-fns",
   "drizzle-orm",
